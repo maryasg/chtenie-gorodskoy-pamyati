@@ -1,0 +1,22 @@
+version: "1.0"
+date: "2026-05-24"
+title: "Чтение городской памяти через фасад"
+region: "Москва, исторический центр"
+buildings:
+  - id: MOSCOW_001_kumaninykh
+    card_id: MOSCOW_001
+    file: buildings/MOSCOW_001_kumaninykh.yaml
+  - id: MOSCOW_002_turgenev_library
+    card_id: MOSCOW_002
+    file: buildings/MOSCOW_002_turgenev_library.yaml
+  - id: MOSCOW_003_dom_so_zveryami
+    card_id: MOSCOW_003
+    file: buildings/MOSCOW_003_dom_so_zveryami.yaml
+  - id: MOSCOW_004_krivokolenny
+    card_id: MOSCOW_004
+    file: buildings/MOSCOW_004_krivokolenny.yaml
+tour_order:
+  - MOSCOW_003_dom_so_zveryami
+  - MOSCOW_001_kumaninykh
+  - MOSCOW_002_turgenev_library
+  - MOSCOW_004_krivokolenny
