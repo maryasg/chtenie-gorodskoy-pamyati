@@ -23,6 +23,11 @@ if exist "%RESULT%\annotations\manual_annotations.json" (
     echo OK: annotations.json
 )
 
+if exist "%RESULT%\project_v8.json" (
+    powershell -NoProfile -Command "$p=Get-Content '%RESULT%\project_v8.json' -Raw | ConvertFrom-Json; @{H_rect_to_modern=$p.H_rect_to_modern} | ConvertTo-Json -Depth 5 | Set-Content '%WEB%\facade-project.json' -Encoding UTF8"
+    echo OK: facade-project.json
+)
+
 echo.
 echo Дальше: GitHub Desktop - Commit - Push для репозитория chtenie-gorodskoy-pamyati
 pause

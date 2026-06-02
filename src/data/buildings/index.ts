@@ -10,5 +10,5 @@ export function getBuildingById(id: string): Building | undefined {
   return BUILDINGS.find((b) => b.id === id)
 }
 
-export const MAP_CENTER: [number, number] = [55.752, 37.633]
-export const MAP_ZOOM = 14
+export const MAP_CENTER: [number, number] = [55.7575, 37.6354]
+export const MAP_ZOOM = 15

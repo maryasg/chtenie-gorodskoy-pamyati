@@ -1,12 +1,15 @@
 import { Link, useParams } from 'react-router-dom'
 import { getBuildingById } from '../data/buildings'
 import { ConfidenceBadge } from '../components/ConfidenceBadge'
+import { ArchiviewFacadePanel } from '../components/ArchiviewFacadePanel'
 import { FacadeHotspotViewer } from '../components/FacadeHotspotViewer'
 import { TransformationTimeline } from '../components/TransformationTimeline'
+import { getArchiviewAssets } from '../data/explorer/archiviewAssets'
 
 export function BuildingPage() {
   const { id } = useParams<{ id: string }>()
   const building = id ? getBuildingById(id) : undefined
+  const archiview = building ? getArchiviewAssets(building.id) : undefined
 
   if (!building) {
     return (
@@ -50,16 +53,29 @@ export function BuildingPage() {
         <p className="text-sm leading-relaxed text-stone-700">{building.summary}</p>
       </section>
 
-      <section>
-        <h2 className="mb-3 text-lg font-semibold">Фасад и подсветка</h2>
-        <FacadeHotspotViewer building={building} />
-        <Link
-          to={`/building/${building.id}/ar`}
-          className="mt-3 inline-block text-sm font-medium text-stone-800 underline"
-        >
-          Симуляция AR-preview →
-        </Link>
-      </section>
+      {archiview ? (
+        <section>
+          <h2 className="mb-3 text-lg font-semibold">Фасад и подсветка (Archiview)</h2>
+          <ArchiviewFacadePanel assets={archiview} />
+          <Link
+            to={`/building/${building.id}/ar`}
+            className="mt-3 inline-block text-sm font-medium text-stone-800 underline"
+          >
+            Симуляция AR-preview →
+          </Link>
+        </section>
+      ) : (
+        <section>
+          <h2 className="mb-3 text-lg font-semibold">Фасад и подсветка</h2>
+          <FacadeHotspotViewer building={building} />
+          <Link
+            to={`/building/${building.id}/ar`}
+            className="mt-3 inline-block text-sm font-medium text-stone-800 underline"
+          >
+            Симуляция AR-preview →
+          </Link>
+        </section>
+      )}
 
       <section>
         <h2 className="mb-3 text-lg font-semibold">Этапы трансформации</h2>
