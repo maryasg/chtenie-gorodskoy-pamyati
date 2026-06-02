@@ -40,8 +40,10 @@ export function MapView() {
     if (!containerRef.current || mapRef.current) return
 
     const map = L.map(containerRef.current).setView(MAP_CENTER, MAP_ZOOM)
+    map.attributionControl.setPrefix(false)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap',
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright" rel="noopener noreferrer">OpenStreetMap</a>',
     }).addTo(map)
 
     BUILDINGS.forEach((b) => {
