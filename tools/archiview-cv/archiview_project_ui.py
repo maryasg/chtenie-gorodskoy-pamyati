@@ -62,7 +62,6 @@ class ProjectsOverviewPanel(ttk.LabelFrame):
         ttk.Button(btm, text="Открыть выбранный дом", command=self.open_selected).pack(side="left")
 
         self._summaries: List[ProjectSummary] = []
-        self.refresh()
 
     def _open_root(self) -> None:
         self.project_root.mkdir(parents=True, exist_ok=True)

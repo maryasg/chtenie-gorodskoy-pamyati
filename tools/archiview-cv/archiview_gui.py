@@ -2571,9 +2571,15 @@ class App(tk.Tk):
             )
 
     def _log(self, text: str) -> None:
-        self.log.insert("end", text)
-        self.log.see("end")
-        self.update_idletasks()
+        log = getattr(self, "log", None)
+        if log is None:
+            return
+        try:
+            log.insert("end", text)
+            log.see("end")
+            self.update_idletasks()
+        except tk.TclError:
+            pass
 
     def _run_bg(self, title: str, func: Callable[[], object], on_done: Callable[[object], None]) -> None:
         self._log(f"\n{title}…\n")
@@ -2582,14 +2588,18 @@ class App(tk.Tk):
             try:
                 result = func()
             except Exception as exc:
-                def show() -> None:
-                    self._log(f"Ошибка: {exc}\n")
-                    messagebox.showerror("Не получилось", str(exc))
+                err = str(exc)
+
+                def show(msg: str = err) -> None:
+                    self._log(f"Ошибка: {msg}\n")
+                    messagebox.showerror("Не получилось", msg)
+
                 self.after(0, show)
                 return
 
             def done() -> None:
                 on_done(result)
+
             self.after(0, done)
 
         threading.Thread(target=worker, daemon=True).start()
@@ -3289,7 +3299,8 @@ map.on('click',e=>{{last=e.latlng; marker.setLatLng(e.latlng); sendCoords();}});
                     self.after(0, self._log, line)
                 code = proc.wait()
             except Exception as exc:
-                self.after(0, lambda: messagebox.showerror("Ошибка", str(exc)))
+                err = str(exc)
+                self.after(0, lambda msg=err: messagebox.showerror("Ошибка", msg))
                 return
             def finish() -> None:
                 if code == 0:
@@ -4563,6 +4574,7 @@ class AppV13(AppV12):
         self._log(
             "v15: проект дома — много фото и сравнений; legacy result/ не перезаписывается автоматически.\n"
         )
+        self.after(0, self._refresh_project_tabs)
 
     # ---------------- first tab ----------------
 
