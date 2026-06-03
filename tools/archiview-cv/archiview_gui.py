@@ -64,7 +64,17 @@ except Exception:
     HouseRecord = None  # type: ignore[assignment,misc]
     create_house_project = None  # type: ignore[assignment,misc]
 
-APP_VERSION = "v15 hand cursor + delete any region"
+try:
+    from archiview_project_model import ComparisonSession, ProjectStore
+    from archiview_project_ui import CombinedHousesTab, ComparisonsTabFrame, PhotosTabFrame
+except Exception:
+    ComparisonSession = None  # type: ignore[assignment,misc]
+    ProjectStore = None  # type: ignore[assignment,misc]
+    CombinedHousesTab = None  # type: ignore[assignment,misc]
+    PhotosTabFrame = None  # type: ignore[assignment,misc]
+    ComparisonsTabFrame = None  # type: ignore[assignment,misc]
+
+APP_VERSION = "v15 projects + hand cursor + delete any region"
 APP_DIR = Path(__file__).resolve().parent
 SCRIPT = APP_DIR / "archiview_cv.py"
 USER_AGENT = "ArchiviewCV-v13/0.1 desktop research tool"
@@ -1967,6 +1977,7 @@ class App(tk.Tk):
         self.outdir = tk.StringVar(value=str(Path(self.project_dir.get()) / "result"))
         self.current_house_record = None
         self.current_house_paths = None
+        self.project_store = None
         self.historical_img = tk.StringVar(value="")
         self.modern_img = tk.StringVar(value="")
         self.selected_source_label = tk.StringVar(value="Историческое фото ещё не выбрано.")
@@ -2329,25 +2340,133 @@ class App(tk.Tk):
             self.outdir.set(path)
 
     def _build_houses_tab(self, parent: ttk.Frame) -> None:
-        if HouseDatabaseFrame is None:
+        if CombinedHousesTab is None:
             ttk.Label(
                 parent,
                 text=(
-                    "Модуль базы домов не найден.\n\n"
-                    "Проверьте, что файл archiview_house_db.py лежит рядом с archiview_gui.py."
+                    "Модули базы домов не найдены.\n\n"
+                    "Нужны archiview_house_db.py и archiview_project_ui.py рядом с archiview_gui.py."
                 ),
                 foreground="red",
                 justify="left",
             ).pack(anchor="nw", padx=12, pady=12)
             return
 
-        self.house_db_frame = HouseDatabaseFrame(
+        self.houses_tab_frame = CombinedHousesTab(
             parent,
             project_root=APP_DIR / "archiview_projects",
-            on_house_selected=self._use_house_from_db,
+            on_house_from_db=self._use_house_from_db,
+            on_open_project_dir=lambda p: self._open_project_dir(p, go_tab="photos"),
             on_log=self._log,
         )
-        self.house_db_frame.pack(fill="both", expand=True)
+        self.houses_tab_frame.pack(fill="both", expand=True)
+
+    def _build_photos_tab(self, parent: ttk.Frame) -> None:
+        if PhotosTabFrame is None:
+            ttk.Label(parent, text="Модуль archiview_project_ui.py не найден.", foreground="red").pack(
+                anchor="nw", padx=12, pady=12
+            )
+            return
+        self.photos_tab_frame = PhotosTabFrame(parent, get_store=self._get_project_store, on_log=self._log)
+        self.photos_tab_frame.pack(fill="both", expand=True)
+
+    def _build_comparisons_tab(self, parent: ttk.Frame) -> None:
+        if ComparisonsTabFrame is None:
+            ttk.Label(parent, text="Модуль archiview_project_ui.py не найден.", foreground="red").pack(
+                anchor="nw", padx=12, pady=12
+            )
+            return
+        self.comparisons_tab_frame = ComparisonsTabFrame(
+            parent,
+            get_store=self._get_project_store,
+            on_open_comparison=self._open_comparison_session,
+            on_log=self._log,
+        )
+        self.comparisons_tab_frame.pack(fill="both", expand=True)
+
+    def _get_project_store(self):
+        return self.project_store
+
+    def _refresh_project_tabs(self) -> None:
+        if hasattr(self, "houses_tab_frame") and hasattr(self.houses_tab_frame, "refresh_overview"):
+            self.houses_tab_frame.refresh_overview()
+        if hasattr(self, "photos_tab_frame"):
+            self.photos_tab_frame.refresh()
+        if hasattr(self, "comparisons_tab_frame"):
+            self.comparisons_tab_frame.refresh()
+
+    def _attach_project_store(self, project_dir: str | Path) -> None:
+        if ProjectStore is None:
+            return
+        self.project_store = ProjectStore.load(project_dir)
+        work = self.project_store.work_dir_for_active()
+        self.project_dir.set(str(self.project_store.project_dir))
+        self.outdir.set(str(work))
+        if self.project_store.house.address:
+            self.address.set(self.project_store.house.address)
+        if self.project_store.house.lat is not None:
+            self.lat.set(str(self.project_store.house.lat))
+        if self.project_store.house.lon is not None:
+            self.lon.set(str(self.project_store.house.lon))
+        self._apply_active_comparison_photos()
+        self._ensure_project_dirs()
+        self._refresh_project_tabs()
+
+    def _open_project_dir(self, project_dir: str | Path, go_tab: str = "photos") -> None:
+        try:
+            self._attach_project_store(project_dir)
+            self._log(f"Открыт проект: {project_dir}\n")
+            if hasattr(self, "geocode_result"):
+                self.geocode_result.set(f"Открыт проект: {self.project_store.house.address or project_dir}")
+            if hasattr(self, "notebook"):
+                if go_tab == "sources" and hasattr(self, "tab_select"):
+                    self.notebook.select(self.tab_select)
+                elif go_tab == "comparisons" and hasattr(self, "tab_comparisons"):
+                    self.notebook.select(self.tab_comparisons)
+                elif hasattr(self, "tab_photos"):
+                    self.notebook.select(self.tab_photos)
+        except Exception as exc:
+            messagebox.showerror("Ошибка открытия проекта", str(exc))
+
+    def _apply_active_comparison_photos(self) -> None:
+        if not self.project_store:
+            return
+        cmp = self.project_store.get_active_comparison()
+        if not cmp:
+            return
+        if cmp.modern_photo_id:
+            photo = self.project_store.photos.get(cmp.modern_photo_id)
+            if photo:
+                path = self.project_store.resolve_photo_path(photo)
+                if path:
+                    self.modern_img.set(str(path))
+        active_hist = cmp.active_historical_photo_id or (
+            cmp.historical_photo_ids[0] if cmp.historical_photo_ids else ""
+        )
+        if active_hist:
+            photo = self.project_store.photos.get(active_hist)
+            if photo:
+                path = self.project_store.resolve_photo_path(photo)
+                if path:
+                    self.historical_img.set(str(path))
+
+    def _open_comparison_session(self, comparison) -> None:
+        if not self.project_store:
+            return
+        try:
+            self.project_store.set_active_comparison(comparison.comparison_id)
+            work = self.project_store.work_dir_for_active()
+            self.outdir.set(str(work))
+            self._apply_active_comparison_photos()
+            self._ensure_project_dirs()
+            self._log(f"Активно сравнение: {comparison.comparison_id} → {work}\n")
+            if comparison.is_legacy:
+                self._log("Legacy-сравнение использует папку result/ — существующая разметка сохранена.\n")
+            if hasattr(self, "notebook") and hasattr(self, "tab_select"):
+                self.notebook.select(self.tab_select)
+            self._refresh_project_tabs()
+        except Exception as exc:
+            messagebox.showerror("Ошибка открытия сравнения", str(exc))
 
     def _use_house_from_db(self, record, paths) -> None:
         """Получает дом из вкладки «База домов» и подставляет его в основной workflow."""
@@ -2367,11 +2486,14 @@ class App(tk.Tk):
             self.current_house_record = record
             self.current_house_paths = paths
             self._ensure_project_dirs()
+            self._attach_project_store(paths["project_dir"])
 
             self._log(f"Выбран дом из базы: {record.address}\n")
             self._log(f"Папка проекта: {paths['project_dir']}\n")
 
-            if hasattr(self, "notebook") and hasattr(self, "tab_select"):
+            if hasattr(self, "notebook") and hasattr(self, "tab_photos"):
+                self.notebook.select(self.tab_photos)
+            elif hasattr(self, "notebook") and hasattr(self, "tab_select"):
                 self.notebook.select(self.tab_select)
 
         except Exception as exc:
@@ -4313,7 +4435,13 @@ class AppV12(AppV11):
     def _on_tab_changed(self, _event: tk.Event) -> None:
         try:
             current = self.notebook.select()
-            if current == str(self.tab_compare):
+            if hasattr(self, "tab_photos") and current == str(self.tab_photos):
+                if hasattr(self, "photos_tab_frame"):
+                    self.photos_tab_frame.refresh()
+            elif hasattr(self, "tab_comparisons") and current == str(self.tab_comparisons):
+                if hasattr(self, "comparisons_tab_frame"):
+                    self.comparisons_tab_frame.refresh()
+            elif current == str(self.tab_compare):
                 self._schedule_compare_refresh(save=False, delay=60)
             elif current == str(self.tab_markup):
                 self.markup_background_mode.set(self.compare_mode.get())
@@ -4387,7 +4515,7 @@ class AppV13(AppV12):
 
         title = ttk.Label(
             self,
-            text="Archiview CV v13: источники → выпрямление → сравнение → разметка → чистый результат",
+            text="Archiview CV v15: база домов → фото → сравнения → выпрямление → разметка",
             font=("TkDefaultFont", 12, "bold"),
         )
         title.pack(anchor="w", padx=12, pady=(10, 4))
@@ -4395,6 +4523,8 @@ class AppV13(AppV12):
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True, padx=12, pady=6)
         self.tab_houses = ttk.Frame(self.notebook)
+        self.tab_photos = ttk.Frame(self.notebook)
+        self.tab_comparisons = ttk.Frame(self.notebook)
         self.tab_select = ttk.Frame(self.notebook)
         self.tab_rectify = ttk.Frame(self.notebook)
         self.tab_compare = ttk.Frame(self.notebook)
@@ -4402,13 +4532,17 @@ class AppV13(AppV12):
         self.tab_result = ttk.Frame(self.notebook)
         self.tab_straight = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_houses, text="0. База домов")
-        self.notebook.add(self.tab_select, text="1. Источники")
-        self.notebook.add(self.tab_rectify, text="2. Выпрямление")
-        self.notebook.add(self.tab_compare, text="3. Сравнение")
-        self.notebook.add(self.tab_markup, text="4. Разметка")
-        self.notebook.add(self.tab_result, text="5. Результат")
-        self.notebook.add(self.tab_straight, text="6. Отдельно выпрямить фасад")
+        self.notebook.add(self.tab_photos, text="1. Фото")
+        self.notebook.add(self.tab_comparisons, text="2. Сравнения")
+        self.notebook.add(self.tab_select, text="3. Источники")
+        self.notebook.add(self.tab_rectify, text="4. Выпрямление")
+        self.notebook.add(self.tab_compare, text="5. Сравнение")
+        self.notebook.add(self.tab_markup, text="6. Разметка")
+        self.notebook.add(self.tab_result, text="7. Результат")
+        self.notebook.add(self.tab_straight, text="8. Отдельно выпрямить фасад")
         self._build_houses_tab(self.tab_houses)
+        self._build_photos_tab(self.tab_photos)
+        self._build_comparisons_tab(self.tab_comparisons)
         self._build_select_tab(self.tab_select)
         self._build_rectify_tab(self.tab_rectify)
         self._build_compare_tab(self.tab_compare)
@@ -4427,7 +4561,7 @@ class AppV13(AppV12):
         self.markup_canvas.bind("<Configure>", lambda _e: self._schedule_markup_refresh(delay=120))
         self.result_canvas.bind("<Configure>", lambda _e: self._schedule_result_refresh(delay=120))
         self._log(
-            "v13: вкладка «0. База домов» → выбор дома из Excel/CSV; далее источники, выпрямление, разметка.\n"
+            "v15: проект дома — много фото и сравнений; legacy result/ не перезаписывается автоматически.\n"
         )
 
     # ---------------- first tab ----------------
