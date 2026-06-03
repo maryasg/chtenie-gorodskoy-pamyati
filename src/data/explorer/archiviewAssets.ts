@@ -15,6 +15,10 @@ export interface ArchiviewBuildingAssets {
   cardId: string
   markedFacadeUrl: string
   labeledFacadeUrl: string
+  /** 03_historical_rectified.png — для ползунка до/после */
+  historicalRectifiedUrl: string
+  /** 04_modern_rectified.png */
+  modernRectifiedUrl: string
   annotationsUrl: string
   facadeProjectUrl: string
 }
@@ -25,6 +29,8 @@ export const ARCHIVIEW_ASSETS: Record<string, ArchiviewBuildingAssets> = {
     cardId: 'MOSCOW_003',
     markedFacadeUrl: `${base}explorer/MOSCOW_003/marked-facade.png`,
     labeledFacadeUrl: `${base}explorer/MOSCOW_003/marked-facade-labeled.png`,
+    historicalRectifiedUrl: `${base}explorer/MOSCOW_003/historical-rectified.png`,
+    modernRectifiedUrl: `${base}explorer/MOSCOW_003/modern-rectified.png`,
     annotationsUrl: `${base}explorer/MOSCOW_003/annotations.json`,
     facadeProjectUrl: `${base}explorer/MOSCOW_003/facade-project.json`,
   },

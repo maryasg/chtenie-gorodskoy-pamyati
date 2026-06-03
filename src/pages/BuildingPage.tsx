@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom'
 import { getBuildingById } from '../data/buildings'
 import { ConfidenceBadge } from '../components/ConfidenceBadge'
 import { ArchiviewFacadePanel } from '../components/ArchiviewFacadePanel'
+import { FacadeBeforeAfterSlider } from '../components/FacadeBeforeAfterSlider'
 import { FacadeHotspotViewer } from '../components/FacadeHotspotViewer'
 import { TransformationTimeline } from '../components/TransformationTimeline'
 import { getArchiviewAssets } from '../data/explorer/archiviewAssets'
@@ -54,9 +55,18 @@ export function BuildingPage() {
       </section>
 
       {archiview ? (
-        <section>
-          <h2 className="mb-3 text-lg font-semibold">Фасад и подсветка (Archiview)</h2>
-          <ArchiviewFacadePanel assets={archiview} />
+        <section className="space-y-8">
+          <div>
+            <h2 className="mb-3 text-lg font-semibold">Две реальности (история ↔ сегодня)</h2>
+            <FacadeBeforeAfterSlider
+              historicalUrl={archiview.historicalRectifiedUrl}
+              modernUrl={archiview.modernRectifiedUrl}
+            />
+          </div>
+          <div>
+            <h2 className="mb-3 text-lg font-semibold">Фасад и подсветка (Archiview)</h2>
+            <ArchiviewFacadePanel assets={archiview} />
+          </div>
           <Link
             to={`/building/${building.id}/ar`}
             className="mt-3 inline-block text-sm font-medium text-stone-800 underline"
@@ -84,6 +94,14 @@ export function BuildingPage() {
 
       <section>
         <h2 className="mb-3 text-lg font-semibold">Следы памяти</h2>
+        <p className="mb-3 text-sm text-stone-600">
+          Тексты и уровень уверенности («Вероятно», «Подтверждено») редактируются в файле{' '}
+          <code className="rounded bg-stone-100 px-1">
+            src/data/buildings/{building.cardId.toLowerCase().replace('moscow_', 'moscow')}.ts
+          </code>{' '}
+          — блок <code className="rounded bg-stone-100 px-1">memoryTraces</code>. После правки —
+          Commit и Push.
+        </p>
         <ul className="space-y-4">
           {building.memoryTraces.map((t) => (
             <li key={t.id} className="rounded-lg border border-stone-200 bg-white p-4">
