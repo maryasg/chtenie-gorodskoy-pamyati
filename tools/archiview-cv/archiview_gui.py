@@ -57,6 +57,13 @@ except Exception:  # pragma: no cover - GUI message shown at runtime
     ImageEnhance = None  # type: ignore[assignment]
     ImageOps = None  # type: ignore[assignment]
 
+try:
+    from archiview_house_db import HouseDatabaseFrame, HouseRecord, create_house_project
+except Exception:
+    HouseDatabaseFrame = None  # type: ignore[assignment,misc]
+    HouseRecord = None  # type: ignore[assignment,misc]
+    create_house_project = None  # type: ignore[assignment,misc]
+
 APP_VERSION = "v15 hand cursor + delete any region"
 APP_DIR = Path(__file__).resolve().parent
 SCRIPT = APP_DIR / "archiview_cv.py"
@@ -1958,6 +1965,8 @@ class App(tk.Tk):
 
         self.project_dir = tk.StringVar(value=str(APP_DIR / "archiview_projects" / "new_house_project"))
         self.outdir = tk.StringVar(value=str(Path(self.project_dir.get()) / "result"))
+        self.current_house_record = None
+        self.current_house_paths = None
         self.historical_img = tk.StringVar(value="")
         self.modern_img = tk.StringVar(value="")
         self.selected_source_label = tk.StringVar(value="Историческое фото ещё не выбрано.")
@@ -2318,6 +2327,55 @@ class App(tk.Tk):
         path = filedialog.askdirectory(title="Выберите папку результата")
         if path:
             self.outdir.set(path)
+
+    def _build_houses_tab(self, parent: ttk.Frame) -> None:
+        if HouseDatabaseFrame is None:
+            ttk.Label(
+                parent,
+                text=(
+                    "Модуль базы домов не найден.\n\n"
+                    "Проверьте, что файл archiview_house_db.py лежит рядом с archiview_gui.py."
+                ),
+                foreground="red",
+                justify="left",
+            ).pack(anchor="nw", padx=12, pady=12)
+            return
+
+        self.house_db_frame = HouseDatabaseFrame(
+            parent,
+            project_root=APP_DIR / "archiview_projects",
+            on_house_selected=self._use_house_from_db,
+            on_log=self._log,
+        )
+        self.house_db_frame.pack(fill="both", expand=True)
+
+    def _use_house_from_db(self, record, paths) -> None:
+        """Получает дом из вкладки «База домов» и подставляет его в основной workflow."""
+        try:
+            self.address.set(record.address or "")
+            self.project_dir.set(str(paths["project_dir"]))
+            self.outdir.set(str(paths["result_dir"]))
+
+            if getattr(record, "lat", None) is not None:
+                self.lat.set(str(record.lat))
+            if getattr(record, "lon", None) is not None:
+                self.lon.set(str(record.lon))
+
+            if hasattr(self, "geocode_result"):
+                self.geocode_result.set(f"Выбран дом из базы: {record.address}")
+
+            self.current_house_record = record
+            self.current_house_paths = paths
+            self._ensure_project_dirs()
+
+            self._log(f"Выбран дом из базы: {record.address}\n")
+            self._log(f"Папка проекта: {paths['project_dir']}\n")
+
+            if hasattr(self, "notebook") and hasattr(self, "tab_select"):
+                self.notebook.select(self.tab_select)
+
+        except Exception as exc:
+            messagebox.showerror("Ошибка выбора дома", str(exc))
 
     def _ensure_project_dirs(self) -> None:
         root = self.project_root()
@@ -4336,18 +4394,21 @@ class AppV13(AppV12):
 
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True, padx=12, pady=6)
+        self.tab_houses = ttk.Frame(self.notebook)
         self.tab_select = ttk.Frame(self.notebook)
         self.tab_rectify = ttk.Frame(self.notebook)
         self.tab_compare = ttk.Frame(self.notebook)
         self.tab_markup = ttk.Frame(self.notebook)
         self.tab_result = ttk.Frame(self.notebook)
         self.tab_straight = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab_houses, text="0. База домов")
         self.notebook.add(self.tab_select, text="1. Источники")
         self.notebook.add(self.tab_rectify, text="2. Выпрямление")
         self.notebook.add(self.tab_compare, text="3. Сравнение")
         self.notebook.add(self.tab_markup, text="4. Разметка")
         self.notebook.add(self.tab_result, text="5. Результат")
         self.notebook.add(self.tab_straight, text="6. Отдельно выпрямить фасад")
+        self._build_houses_tab(self.tab_houses)
         self._build_select_tab(self.tab_select)
         self._build_rectify_tab(self.tab_rectify)
         self._build_compare_tab(self.tab_compare)
@@ -4365,7 +4426,9 @@ class AppV13(AppV12):
         self.compare_canvas.bind("<Configure>", lambda _e: self._schedule_compare_refresh(save=False, delay=120))
         self.markup_canvas.bind("<Configure>", lambda _e: self._schedule_markup_refresh(delay=120))
         self.result_canvas.bind("<Configure>", lambda _e: self._schedule_result_refresh(delay=120))
-        self._log("v13: результат без перекрывающих подписей, zoom колесом в разметке, современные источники упрощены до Commons/файл/буфер.\n")
+        self._log(
+            "v13: вкладка «0. База домов» → выбор дома из Excel/CSV; далее источники, выпрямление, разметка.\n"
+        )
 
     # ---------------- first tab ----------------
 
