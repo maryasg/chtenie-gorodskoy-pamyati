@@ -1,39 +1,66 @@
-# Copy Archiview export to website. Run copy_to_website.bat
+param(
+    [string]$CardId = '',
+    [string]$ResultDir = '',
+    [string]$ProjectId = '20260520_190036',
+    [string]$RepoRoot = 'C:\Users\Marusia\Projects\chtenie-gorodskoy-pamyati',
+    [switch]$NoPrompt
+)
+
 $ErrorActionPreference = 'Stop'
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$Web = 'C:\Users\Marusia\Projects\chtenie-gorodskoy-pamyati\public\explorer\MOSCOW_003'
-$ProjectId = '20260520_190036'
+
+if (-not $CardId -and -not $NoPrompt) {
+    Write-Host ''
+    Write-Host 'ID здания на сайте (из website_buildings.json):'
+    Write-Host '  MOSCOW_003 — Дом со зверями'
+    Write-Host '  MOSCOW_001 — Ордынка 17'
+    Write-Host '  MOSCOW_002, MOSCOW_004 — когда добавите в json'
+    $CardId = Read-Host 'CardId (Enter = MOSCOW_003)'
+}
+if (-not $CardId) { $CardId = 'MOSCOW_003' }
+
+$Web = Join-Path $RepoRoot ("public\explorer\{0}" -f $CardId)
 
 function Find-ResultFolder {
-    param([string]$StartDir)
-    $direct = Join-Path $StartDir "archiview_projects\$ProjectId\result"
+    param([string]$StartDir, [string]$Pid, [string]$Explicit)
+    if ($Explicit -and (Test-Path -LiteralPath $Explicit)) { return $Explicit }
+
+    $direct = Join-Path $StartDir "archiview_projects\$Pid\result"
     if (Test-Path -LiteralPath $direct) { return $direct }
 
     $cultTech = Join-Path $env:USERPROFILE 'Desktop\Cult Tech'
-    if (-not (Test-Path -LiteralPath $cultTech)) { return $null }
+    if (Test-Path -LiteralPath $cultTech) {
+        $matches = Get-ChildItem -LiteralPath $cultTech -Recurse -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -eq 'result' -and $_.Parent.Name -eq $Pid } |
+            Select-Object -First 1
+        if ($matches) { return $matches.FullName }
+    }
 
-    $matches = Get-ChildItem -LiteralPath $cultTech -Recurse -Directory -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -eq 'result' -and $_.Parent.Name -eq $ProjectId } |
+    $latest = Get-ChildItem -LiteralPath (Join-Path $StartDir 'archiview_projects') -Directory -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
-
-    if ($matches) { return $matches.FullName }
+    if ($latest) {
+        $candidate = Join-Path $latest.FullName 'result'
+        if (Test-Path -LiteralPath $candidate) { return $candidate }
+    }
     return $null
 }
 
-$Result = Find-ResultFolder -StartDir $ScriptDir
+$Result = Find-ResultFolder -StartDir $ScriptDir -Pid $ProjectId -Explicit $ResultDir
 
 Write-Host ''
 Write-Host 'FROM (Archiview result):'
 if ($Result) { Write-Host "  $Result" } else { Write-Host '  NOT FOUND' }
 Write-Host 'TO (website folder):'
 Write-Host "  $Web"
+Write-Host "CardId: $CardId"
 Write-Host ''
 
 if (-not $Result) {
     Write-Host 'ERROR: result folder not found.'
-    Write-Host 'Run copy_to_website.bat from archiview v15 folder on Desktop.'
-    Read-Host 'Press Enter to close'
+    Write-Host 'Run from archiview v15 folder or pass -ResultDir path to result/.'
+    if (-not $NoPrompt) { Read-Host 'Press Enter to close' }
     exit 1
 }
 
@@ -70,5 +97,14 @@ if (Test-Path -LiteralPath $ProjectJson) {
 }
 
 Write-Host ''
-Write-Host 'Done. Next: GitHub Desktop - Commit - Push'
-Read-Host 'Press Enter to close'
+Write-Host 'Updating website registry (archiviewAssets.ts + verification)...'
+try {
+    & (Join-Path $ScriptDir 'update_website_registry.ps1') -CardId $CardId -RepoRoot $RepoRoot -ScriptDir $ScriptDir
+} catch {
+    Write-Host "WARN: registry update failed: $_"
+    Write-Host 'Photos copied; add entry manually or fix website_buildings.json'
+}
+
+Write-Host ''
+Write-Host 'Done. Next: GitHub Desktop -> Commit -> Push origin'
+if (-not $NoPrompt) { Read-Host 'Press Enter to close' }

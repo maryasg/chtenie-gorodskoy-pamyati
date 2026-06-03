@@ -57,6 +57,19 @@ export interface PhotoRef {
   status?: string
 }
 
+export interface OfficialExpertise {
+  title: string
+  url: string
+  issuedAt?: string
+}
+
+export interface BuildingVerification {
+  historicalPhoto: boolean
+  historicalPhotoYear?: string
+  modernPhotoYear?: string
+  officialExpertise?: OfficialExpertise[]
+}
+
 export interface Building {
   id: string
   cardId: string
@@ -75,6 +88,7 @@ export interface Building {
   architect?: string
   protectionStatus?: string
   summary: string
+  verification?: BuildingVerification
   memoryTraces: MemoryTrace[]
   artifacts: Artifact[]
   timeline: TimelineStage[]

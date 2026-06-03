@@ -39,7 +39,7 @@ from urllib.error import URLError, HTTPError
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
 import numpy as np
 
@@ -2208,6 +2208,7 @@ class App(tk.Tk):
         ttk.Button(btns, text="Открыть overlay", command=self.open_overlay).pack(side="left", padx=6)
         ttk.Button(btns, text="Открыть до/после", command=self.open_before_after).pack(side="left", padx=6)
         ttk.Button(btns, text="Открыть папку результата", command=lambda: open_path(Path(self.outdir.get()))).pack(side="left", padx=6)
+        ttk.Button(btns, text="Отправить на сайт…", command=self.export_to_website).pack(side="left", padx=6)
 
         ttk.Label(parent, textvariable=self.rectified_status, font=("TkDefaultFont", 10, "bold")).grid(row=4, column=0, columnspan=3, sticky="w", padx=10, pady=8)
         warning = (
@@ -2945,6 +2946,67 @@ map.on('click',e=>{{last=e.latlng; marker.setLatLng(e.latlng); sendCoords();}});
         else:
             messagebox.showinfo("Файл ещё не создан", missing)
 
+    def export_to_website(self) -> None:
+        """Copy result/ to website repo and update archiviewAssets.ts via copy_to_website.ps1."""
+        default_card = "MOSCOW_003"
+        folder_name = self.project_root().name.upper()
+        match = re.match(r"MOSCOW_\d{3}", folder_name)
+        if match:
+            default_card = match.group(0)
+        card_id = simpledialog.askstring(
+            "Отправить на сайт",
+            "ID здания (как в website_buildings.json):\n"
+            "MOSCOW_003 — Дом со зверями\n"
+            "MOSCOW_001 — Ордынка\n"
+            "После копирования: GitHub Desktop → Commit → Push",
+            initialvalue=default_card,
+            parent=self,
+        )
+        if not card_id:
+            return
+        card_id = card_id.strip().upper()
+        script = APP_DIR / "copy_to_website.ps1"
+        if not script.exists():
+            messagebox.showerror(
+                "Скрипт не найден",
+                f"Не найден copy_to_website.ps1 рядом с программой:\n{script}",
+            )
+            return
+        result_dir = str(Path(self.outdir.get()))
+        cmd = [
+            "powershell",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(script),
+            "-CardId",
+            card_id,
+            "-ResultDir",
+            result_dir,
+            "-NoPrompt",
+        ]
+
+        def work() -> str:
+            proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+            if proc.returncode != 0:
+                raise RuntimeError(proc.stderr or proc.stdout or f"exit code {proc.returncode}")
+            return proc.stdout.strip()
+
+        def done(output: object) -> None:
+            text = str(output).strip()
+            if len(text) > 1200:
+                text = text[-1200:]
+            messagebox.showinfo(
+                "Скопировано на сайт",
+                "Фото и записи обновлены в проекте сайта.\n\n"
+                "Дальше: GitHub Desktop → Commit → Push origin.\n\n"
+                + text,
+            )
+            self._log(f"\nЭкспорт на сайт ({card_id}) выполнен.\n")
+
+        self._run_bg("Отправка на сайт", work, done)
+
     def open_in_app_preview(self) -> None:
         try:
             ComparisonPreviewWindow(self, Path(self.outdir.get()))
@@ -3330,6 +3392,11 @@ class AppV11(App):
         ttk.Button(side, text="Открыть HTML overlay", command=self.open_overlay).pack(fill="x", padx=10, pady=3)
         ttk.Button(side, text="Открыть HTML до/после", command=self.open_before_after).pack(fill="x", padx=10, pady=3)
         ttk.Button(side, text="Открыть Roboflow export", command=self.open_roboflow_export).pack(fill="x", padx=10, pady=3)
+        ttk.Button(
+            side,
+            text="Отправить на сайт (GitHub)…",
+            command=self.export_to_website,
+        ).pack(fill="x", padx=10, pady=(8, 3))
 
     # ---------------- image composition and display ----------------
 

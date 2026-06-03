@@ -20,6 +20,18 @@ export const MOSCOW_003: Building = {
   protectionStatus: 'региональный памятник архитектуры',
   summary:
     'Один из ярчайших примеров московского модерна с декором «древнерусской кремли». Сохранились рельефы зверей и решётки при существенных утратах верхних частей после надстройки 1945 года.',
+  verification: {
+    historicalPhoto: true,
+    historicalPhotoYear: '1911',
+    modernPhotoYear: '2026',
+    officialExpertise: [
+      {
+        title: 'Акт историко-культурной экспертизы (Чистопрудный бульвар, 14, стр. 3)',
+        url: 'https://www.mos.ru/upload/documents/files/5859/AKTGIKEsprilChistoprydnii14str3polvalChistoprydnii14str3polval.pdf',
+        issuedAt: '2019',
+      },
+    ],
+  },
   memoryTraces: [
     {
       id: 'MOSCOW_003_T001',
@@ -117,7 +129,7 @@ export const MOSCOW_003: Building = {
       whatChanged: 'Снос 3-этажного дома, новый доходный дом в модерне',
       visibleToday: 'Рельефы зверей, цоколь «под камень», плашки',
       confidence: 'confirmed',
-      source: 'Историческая справка',
+      source: 'Акт историко-культурной экспертизы (mos.ru, 2019)',
     },
     {
       id: 'tl-2',
@@ -126,7 +138,7 @@ export const MOSCOW_003: Building = {
       whatChanged: 'Надстройка до 6–7 этажей, утраты шатра, балконов, барельефа «АЦП»',
       visibleToday: 'Шов между этажами, декор только на нижних этажах',
       confidence: 'confirmed',
-      source: 'Историческая справка',
+      source: 'Акт историко-культурной экспертизы (mos.ru, 2019)',
     },
     {
       id: 'tl-3',
@@ -135,14 +147,14 @@ export const MOSCOW_003: Building = {
       whatChanged: 'Окно→дверь, перекраска фасада и барельефов',
       visibleToday: 'Дверь на 2 этаже, голубовато-зелёная штукатурка',
       confidence: 'confirmed',
-      source: 'Историческая справка',
+      source: 'Акт историко-культурной экспертизы (mos.ru, 2019)',
     },
   ],
   photos: [
     {
       id: 'pastvu-45932',
       type: 'archive',
-      description: 'До надстройки',
+      description: 'До надстройки (PastVu, ~1911)',
       url: 'https://pastvu.com/p/45932',
     },
     {
@@ -154,8 +166,8 @@ export const MOSCOW_003: Building = {
     {
       id: 'current',
       type: 'facade',
-      description: 'Современный фасад',
-      status: 'предстоит съёмка',
+      description: 'Современный фасад (полевая съёмка)',
+      status: '2026',
     },
   ],
   hotspots: [
@@ -164,6 +176,11 @@ export const MOSCOW_003: Building = {
     { id: 'hs-beasts', label: 'Рельефы зверей', x: 18, y: 48, width: 64, height: 18, artifactId: 'art-beasts' },
   ],
   sources: [
+    {
+      id: 'S001',
+      name: 'Акт историко-культурной экспертизы (PDF, mos.ru)',
+      url: 'https://www.mos.ru/upload/documents/files/5859/AKTGIKEsprilChistoprydnii14str3polvalChistoprydnii14str3polval.pdf',
+    },
     { id: 'S002', name: 'Узнай Москву', url: 'https://um.mos.ru/houses/dom_so_zveryami/' },
     { id: 'S003', name: 'PastVu — до надстройки', url: 'https://pastvu.com/p/45932' },
   ],

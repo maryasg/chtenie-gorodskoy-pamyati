@@ -3,9 +3,16 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 type Props = {
   historicalUrl: string
   modernUrl: string
+  historicalYear?: string
+  modernYear?: string
 }
 
-export function FacadeBeforeAfterSlider({ historicalUrl, modernUrl }: Props) {
+export function FacadeBeforeAfterSlider({
+  historicalUrl,
+  modernUrl,
+  historicalYear,
+  modernYear,
+}: Props) {
   const [split, setSplit] = useState(50)
   const [ready, setReady] = useState(false)
   const [error, setError] = useState(false)
@@ -94,40 +101,63 @@ export function FacadeBeforeAfterSlider({ historicalUrl, modernUrl }: Props) {
         <span className="text-xs text-stone-500">← история · современность →</span>
       </div>
 
-      <div
-        ref={stageRef}
-        className="relative inline-block max-w-full select-none overflow-hidden rounded-xl border border-stone-200 bg-stone-900 shadow-sm"
-        onPointerDown={(e) => {
-          if (e.button !== 0) return
-          dragging.current = true
-          setSplitFromClientX(e.clientX)
-        }}
-      >
-        <img
-          src={historicalUrl}
-          alt="Исторический фасад (выпрямленный)"
-          className="block max-h-[min(78vh,820px)] w-full object-contain"
-          draggable={false}
-        />
-        <img
-          src={modernUrl}
-          alt="Современный фасад (выпрямленный)"
-          className="pointer-events-none absolute inset-0 block max-h-[min(78vh,820px)] w-full object-contain"
-          style={{ clipPath: `inset(0 0 0 ${split}%)` }}
-          draggable={false}
-        />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch">
         <div
-          className="pointer-events-none absolute inset-y-0 z-10 w-0.5 bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]"
-          style={{ left: `${split}%`, transform: 'translateX(-50%)' }}
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute top-1/2 z-10 flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-amber-400 bg-amber-50/95 text-amber-900 shadow-md"
-          style={{ left: `${split}%` }}
-          aria-hidden
+          ref={stageRef}
+          className="relative min-w-0 flex-1 select-none overflow-hidden rounded-xl border border-stone-200 bg-stone-900 shadow-sm"
+          onPointerDown={(e) => {
+            if (e.button !== 0) return
+            dragging.current = true
+            setSplitFromClientX(e.clientX)
+          }}
         >
-          ↔
+          <img
+            src={historicalUrl}
+            alt={`Исторический фасад${historicalYear ? `, ${historicalYear}` : ''}`}
+            className="block max-h-[min(78vh,820px)] w-full object-contain"
+            draggable={false}
+          />
+          <img
+            src={modernUrl}
+            alt={`Современный фасад${modernYear ? `, ${modernYear}` : ''}`}
+            className="pointer-events-none absolute inset-0 block max-h-[min(78vh,820px)] w-full object-contain"
+            style={{ clipPath: `inset(0 0 0 ${split}%)` }}
+            draggable={false}
+          />
+          <div
+            className="pointer-events-none absolute inset-y-0 z-10 w-0.5 bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]"
+            style={{ left: `${split}%`, transform: 'translateX(-50%)' }}
+            aria-hidden
+          />
+          <div
+            className="pointer-events-none absolute top-1/2 z-10 flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-amber-400 bg-amber-50/95 text-amber-900 shadow-md"
+            style={{ left: `${split}%` }}
+            aria-hidden
+          >
+            ↔
+          </div>
         </div>
+
+        {(historicalYear || modernYear) && (
+          <div className="flex shrink-0 flex-row justify-center gap-6 sm:w-28 sm:flex-col sm:justify-center sm:gap-8 sm:py-4">
+            {historicalYear && (
+              <div className="text-center sm:text-left">
+                <p className="text-3xl font-semibold tabular-nums leading-none text-stone-900">
+                  {historicalYear}
+                </p>
+                <p className="mt-1 text-xs uppercase tracking-wide text-stone-500">история</p>
+              </div>
+            )}
+            {modernYear && (
+              <div className="text-center sm:text-left">
+                <p className="text-3xl font-semibold tabular-nums leading-none text-stone-900">
+                  {modernYear}
+                </p>
+                <p className="mt-1 text-xs uppercase tracking-wide text-stone-500">сегодня</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

@@ -1,0 +1,34 @@
+{
+  "MOSCOW_003": {
+    "buildingId": "MOSCOW_003_dom_so_zveryami",
+    "historicalPhotoYear": "1911",
+    "modernPhotoYear": "2026",
+    "officialExpertise": {
+      "title": "Акт историко-культурной экспертизы (Чистопрудный бульвар, 14, стр. 3)",
+      "url": "https://www.mos.ru/upload/documents/files/5859/AKTGIKEsprilChistoprydnii14str3polvalChistoprydnii14str3polval.pdf",
+      "issuedAt": "2019"
+    }
+  },
+  "MOSCOW_001": {
+    "buildingId": "MOSCOW_001_kumaninykh",
+    "historicalPhotoYear": "",
+    "modernPhotoYear": "2026",
+    "officialExpertise": {
+      "title": "Акт историко-культурной экспертизы (Большая Ордынка, 17)",
+      "url": "https://www.mos.ru/upload/documents/files/6285/BolshayaOrdinkayld17str1kv13d17str1d19str1(chast)Pyatnickayayld14str1213d12str4(31052019).pdf",
+      "issuedAt": "2019"
+    }
+  },
+  "MOSCOW_002": {
+    "buildingId": "MOSCOW_002_turgenev_library",
+    "historicalPhotoYear": "",
+    "modernPhotoYear": "2026",
+    "officialExpertise": null
+  },
+  "MOSCOW_004": {
+    "buildingId": "MOSCOW_004_krivokolenny",
+    "historicalPhotoYear": "",
+    "modernPhotoYear": "2026",
+    "officialExpertise": null
+  }
+}
