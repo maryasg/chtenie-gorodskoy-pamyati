@@ -26,6 +26,17 @@ export interface ArchiviewBuildingAssets {
 }
 
 export const ARCHIVIEW_ASSETS: Record<string, ArchiviewBuildingAssets> = {
+  MOSCOW_001_kumaninykh: {
+    buildingId: 'MOSCOW_001_kumaninykh',
+    cardId: 'MOSCOW_001',
+    markedFacadeUrl: `${base}explorer/MOSCOW_001/marked-facade.png`,
+    labeledFacadeUrl: `${base}explorer/MOSCOW_001/marked-facade-labeled.png`,
+    historicalRectifiedUrl: `${base}explorer/MOSCOW_001/historical-rectified.png`,
+    modernRectifiedUrl: `${base}explorer/MOSCOW_001/modern-rectified.png`,
+    modernPhotoYear: '2026',
+    annotationsUrl: `${base}explorer/MOSCOW_001/annotations.json`,
+    facadeProjectUrl: `${base}explorer/MOSCOW_001/facade-project.json`,
+  },
   MOSCOW_003_dom_so_zveryami: {
     buildingId: 'MOSCOW_003_dom_so_zveryami',
     cardId: 'MOSCOW_003',

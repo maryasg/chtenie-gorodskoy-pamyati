@@ -6047,7 +6047,13 @@ class AppV11(App):
         if not getattr(self, "auto_export_website", None) or not self.auto_export_website.get():
             return
         out = Path(self.outdir.get())
-        if not (out / "04_modern_rectified.png").exists() and not (out / "07_marked_on_original_modern.png").exists():
+        has_export = (
+            (out / "04_modern_rectified.png").exists()
+            or (out / "07_marked_on_original_modern.png").exists()
+            or (out / "08_marked_on_original_modern_labeled.png").exists()
+            or (out / "annotations" / "manual_annotations.json").exists()
+        )
+        if not has_export:
             return
         self._sync_export_to_website(quiet=True, show_dialog=False)
 

@@ -1,7 +1,7 @@
 param(
     [string]$CardId = '',
     [string]$ResultDir = '',
-    [string]$ProjectId = '20260520_190036',
+    [string]$ProjectFolder = '20260520_190036',
     [string]$RepoRoot = 'C:\Users\Marusia\Projects\chtenie-gorodskoy-pamyati',
     [switch]$NoPrompt
 )
@@ -23,16 +23,16 @@ if (-not $CardId) { $CardId = 'MOSCOW_003' }
 $Web = Join-Path $RepoRoot ("public\explorer\{0}" -f $CardId)
 
 function Find-ResultFolder {
-    param([string]$StartDir, [string]$Pid, [string]$Explicit)
+    param([string]$StartDir, [string]$ProjectFolder, [string]$Explicit)
     if ($Explicit -and (Test-Path -LiteralPath $Explicit)) { return $Explicit }
 
-    $direct = Join-Path $StartDir "archiview_projects\$Pid\result"
+    $direct = Join-Path $StartDir "archiview_projects\$ProjectFolder\result"
     if (Test-Path -LiteralPath $direct) { return $direct }
 
     $cultTech = Join-Path $env:USERPROFILE 'Desktop\Cult Tech'
     if (Test-Path -LiteralPath $cultTech) {
         $matches = Get-ChildItem -LiteralPath $cultTech -Recurse -Directory -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -eq 'result' -and $_.Parent.Name -eq $Pid } |
+            Where-Object { $_.Name -eq 'result' -and $_.Parent.Name -eq $ProjectFolder } |
             Select-Object -First 1
         if ($matches) { return $matches.FullName }
     }
@@ -47,7 +47,7 @@ function Find-ResultFolder {
     return $null
 }
 
-$Result = Find-ResultFolder -StartDir $ScriptDir -Pid $ProjectId -Explicit $ResultDir
+$Result = Find-ResultFolder -StartDir $ScriptDir -ProjectFolder $ProjectFolder -Explicit $ResultDir
 
 Write-Host ''
 Write-Host 'FROM (Archiview result):'
