@@ -1,5 +1,6 @@
 {
   "MOSCOW_003": {
+    "displayName": "Дом со зверями",
     "buildingId": "MOSCOW_003_dom_so_zveryami",
     "historicalPhotoYear": "1911",
     "modernPhotoYear": "2026",
@@ -10,6 +11,7 @@
     }
   },
   "MOSCOW_001": {
+    "displayName": "Дом Куманиных (Большая Ордынка)",
     "buildingId": "MOSCOW_001_kumaninykh",
     "historicalPhotoYear": "",
     "modernPhotoYear": "2026",
@@ -20,12 +22,14 @@
     }
   },
   "MOSCOW_002": {
+    "displayName": "Библиотека-читальня им. Тургенева",
     "buildingId": "MOSCOW_002_turgenev_library",
     "historicalPhotoYear": "",
     "modernPhotoYear": "2026",
     "officialExpertise": null
   },
   "MOSCOW_004": {
+    "displayName": "Дом на Кривоколенном",
     "buildingId": "MOSCOW_004_krivokolenny",
     "historicalPhotoYear": "",
     "modernPhotoYear": "2026",

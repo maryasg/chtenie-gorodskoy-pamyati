@@ -65,14 +65,42 @@ except Exception:
     create_house_project = None  # type: ignore[assignment,misc]
 
 try:
-    from archiview_project_model import ComparisonSession, ProjectStore
-    from archiview_project_ui import CombinedHousesTab, ComparisonsTabFrame, PhotosTabFrame
+    from archiview_project_model import (
+        ComparisonSession,
+        ProjectStore,
+        address_location_key,
+        format_nominatim_short_address,
+        house_number_from_nominatim,
+        infer_site_card_id,
+        merge_map_address,
+        normalize_site_card_id,
+        normalize_address_dedupe,
+        osm_tags_to_address_dict,
+        propose_project_slug,
+        propose_site_card_id,
+        next_site_card_id,
+        website_display_name,
+    )
+    from archiview_project_ui import CombinedHousesTab, ComparisonsTabFrame, MyProjectsPanel, PhotosTabFrame
 except Exception:
     ComparisonSession = None  # type: ignore[assignment,misc]
     ProjectStore = None  # type: ignore[assignment,misc]
+    infer_site_card_id = None  # type: ignore[assignment,misc]
+    normalize_site_card_id = None  # type: ignore[assignment,misc]
+    website_display_name = None  # type: ignore[assignment,misc]
+    normalize_address_dedupe = None  # type: ignore[assignment,misc]
+    merge_map_address = None  # type: ignore[assignment,misc]
+    format_nominatim_short_address = None  # type: ignore[assignment,misc]
+    house_number_from_nominatim = None  # type: ignore[assignment,misc]
+    address_location_key = None  # type: ignore[assignment,misc]
+    propose_project_slug = None  # type: ignore[assignment,misc]
+    propose_site_card_id = None  # type: ignore[assignment,misc]
+    next_site_card_id = None  # type: ignore[assignment,misc]
+    osm_tags_to_address_dict = None  # type: ignore[assignment,misc]
     CombinedHousesTab = None  # type: ignore[assignment,misc]
     PhotosTabFrame = None  # type: ignore[assignment,misc]
     ComparisonsTabFrame = None  # type: ignore[assignment,misc]
+    MyProjectsPanel = None  # type: ignore[assignment,misc]
 
 APP_VERSION = "v15 projects + hand cursor + delete any region"
 APP_DIR = Path(__file__).resolve().parent
@@ -84,6 +112,9 @@ PASTVU_IMG_THUMB = "https://img.pastvu.com/h/"
 PASTVU_IMG_STANDARD = "https://img.pastvu.com/d/"
 PASTVU_IMG_ORIGINAL = "https://img.pastvu.com/a/"
 NOMINATIM_SEARCH = "https://nominatim.openstreetmap.org/search"
+NOMINATIM_REVERSE = "https://nominatim.openstreetmap.org/reverse"
+PHOTON_REVERSE = "https://photon.komoot.io/reverse"
+OVERPASS_INTERPRETER = "https://overpass-api.de/api/interpreter"
 COMMONS_API = "https://commons.wikimedia.org/w/api.php"
 PANORAMAX_API = "https://api.panoramax.xyz/api"
 
@@ -198,6 +229,138 @@ def parse_four_points(text: str) -> np.ndarray:
             raise ValueError(f"Плохая точка: {p}")
         pts.append((float(xy[0]), float(xy[1])))
     return np.asarray(pts, dtype=np.float32)
+
+
+def crop_rect_to_text(x0: float, y0: float, x1: float, y1: float) -> str:
+    return f"{x0:.1f},{y0:.1f},{x1:.1f},{y1:.1f}"
+
+
+def parse_crop_rect(text: str) -> Optional[Tuple[float, float, float, float]]:
+    clean = str(text or "").strip()
+    if not clean:
+        return None
+    parts = [p.strip() for p in clean.replace(" ", "").split(",")]
+    if len(parts) != 4:
+        return None
+    try:
+        x0, y0, x1, y1 = (float(parts[0]), float(parts[1]), float(parts[2]), float(parts[3]))
+    except ValueError:
+        return None
+    if x0 > x1:
+        x0, x1 = x1, x0
+    if y0 > y1:
+        y0, y1 = y1, y0
+    if x1 - x0 < 8 or y1 - y0 < 8:
+        return None
+    return x0, y0, x1, y1
+
+
+def apply_source_crop(img: np.ndarray, crop_text: str) -> Tuple[np.ndarray, Tuple[float, float]]:
+    """Обрезка исходника по рамке; возвращает сдвиг (dx, dy) для координат углов."""
+    box = parse_crop_rect(crop_text)
+    if box is None:
+        return img, (0.0, 0.0)
+    x0, y0, x1, y1 = box
+    h, w = img.shape[:2]
+    ix0 = max(0, min(w - 1, int(round(x0))))
+    iy0 = max(0, min(h - 1, int(round(y0))))
+    ix1 = max(ix0 + 1, min(w, int(round(x1))))
+    iy1 = max(iy0 + 1, min(h, int(round(y1))))
+    return img[iy0:iy1, ix0:ix1].copy(), (float(ix0), float(iy0))
+
+
+def validate_facade_quad_points(pts: np.ndarray) -> Tuple[bool, str]:
+    """Проверка, что 4 угла — один фасад, а не небо/улица рядом."""
+    if pts.shape[0] != 4:
+        return False, "Нужно ровно 4 точки."
+    tl, tr, br, bl = pts.astype(np.float64)
+    w_top = float(np.linalg.norm(tr - tl))
+    w_bot = float(np.linalg.norm(br - bl))
+    h_left = float(np.linalg.norm(bl - tl))
+    h_right = float(np.linalg.norm(br - tr))
+    if min(w_top, w_bot, h_left, h_right) < 12:
+        return False, "Точки слишком близко друг к другу."
+    if max(w_top, w_bot) / max(min(w_top, w_bot), 1e-6) > 3.5:
+        return False, "Верх и низ сильно разной ширины — все 4 точки должны быть на одном фасаде, не в небе."
+    if max(h_left, h_right) / max(min(h_left, h_right), 1e-6) > 3.5:
+        return False, "Левый и правый край сильно разной высоты — проверьте порядок 1–4."
+    if cv is not None:
+        contour = pts.astype(np.float32).reshape(-1, 1, 2)
+        if not cv.isContourConvex(contour):
+            return False, "Углы пересекаются — кликайте строго: 1 верх-лево, 2 верх-право, 3 низ-право, 4 низ-лево."
+        if abs(float(cv.contourArea(contour))) < 800:
+            return False, "Четырёхугольник слишком маленький."
+    return True, ""
+
+
+def shift_points_after_crop(pts: np.ndarray, offset: Tuple[float, float]) -> np.ndarray:
+    dx, dy = offset
+    if dx == 0.0 and dy == 0.0:
+        return pts
+    out = pts.astype(np.float32).copy()
+    out[:, 0] -= float(dx)
+    out[:, 1] -= float(dy)
+    return out
+
+
+def source_crop_offset_from_project(project: dict, *, side: str = "modern") -> Tuple[float, float]:
+    """Сдвиг обрезки исходника: координаты выпрямления → полный файл modern_image."""
+    key_off = f"{side}_crop_offset_xy"
+    key_rect = f"{side}_crop_rect_text"
+    off = project.get(key_off)
+    if isinstance(off, (list, tuple)) and len(off) >= 2:
+        return float(off[0]), float(off[1])
+    box = parse_crop_rect(str(project.get(key_rect) or ""))
+    if box is not None:
+        return float(box[0]), float(box[1])
+    return 0.0, 0.0
+
+
+def homography_rect_to_full_source(
+    H_rect_to_cropped: np.ndarray,
+    crop_offset: Tuple[float, float],
+) -> np.ndarray:
+    """Разметка в выпрямленном кадре → координаты полного исходного фото."""
+    dx, dy = float(crop_offset[0]), float(crop_offset[1])
+    H = np.asarray(H_rect_to_cropped, dtype=np.float64)
+    if abs(dx) < 1e-9 and abs(dy) < 1e-9:
+        return H
+    T = np.array([[1.0, 0.0, dx], [0.0, 1.0, dy], [0.0, 0.0, 1.0]], dtype=np.float64)
+    return T @ H
+
+
+def _modern_crop_offset_resolved(project: dict, *, fallback_rect_text: str = "") -> Tuple[float, float]:
+    off = source_crop_offset_from_project(project, side="modern")
+    if off != (0.0, 0.0):
+        return off
+    for text in (fallback_rect_text, str(project.get("modern_crop_rect_text") or "")):
+        box = parse_crop_rect(text)
+        if box is not None:
+            return float(box[0]), float(box[1])
+    return 0.0, 0.0
+
+
+def H_rect_to_full_modern_from_project(project: dict, *, fallback_rect_text: str = "") -> np.ndarray:
+    H = np.asarray(project.get("H_rect_to_modern"), dtype=np.float64)
+    off = _modern_crop_offset_resolved(project, fallback_rect_text=fallback_rect_text)
+    return homography_rect_to_full_source(H, off)
+
+
+def modern_crop_rect_from_metadata_near(outdir: Path) -> str:
+    for meta in (
+        outdir.parent / "metadata" / "historical_sources.json",
+        outdir / "historical_sources.json",
+    ):
+        if not meta.exists():
+            continue
+        try:
+            data = json.loads(meta.read_text(encoding="utf-8"))
+            text = str(data.get("modern_crop_rect_text") or "").strip()
+            if text:
+                return text
+        except Exception:
+            pass
+    return ""
 
 
 def cv_read(path: str | Path) -> np.ndarray:
@@ -735,15 +898,282 @@ def download_open_street_photo(photo: OpenStreetPhoto, folder: Path) -> Path:
     return target
 
 def geocode_address(address: str) -> Tuple[float, float, str]:
-    query = urlencode({"format": "jsonv2", "limit": "1", "q": address})
+    query = urlencode({"format": "jsonv2", "limit": "1", "q": address, "addressdetails": "1"})
     data = request_json(f"{NOMINATIM_SEARCH}?{query}")
     if not isinstance(data, list) or not data:
         raise RuntimeError("Адрес не найден. Попробуйте добавить город или введите координаты вручную.")
     item = data[0]
     lat = float(item["lat"])
     lon = float(item["lon"])
-    display = str(item.get("display_name") or address)
+    addr = item.get("address") if isinstance(item.get("address"), dict) else {}
+    if format_nominatim_short_address is not None and addr:
+        short = format_nominatim_short_address(addr)
+        display = normalize_address_dedupe(short) if normalize_address_dedupe else short  # type: ignore[misc]
+    else:
+        display = str(item.get("display_name") or address)
+        if normalize_address_dedupe is not None:
+            display = normalize_address_dedupe(display)  # type: ignore[misc]
     return lat, lon, display
+
+
+def _nominatim_reverse_raw(lat: float, lon: float, zoom: int, *, layer: str = "") -> dict:
+    params: Dict[str, str] = {
+        "format": "jsonv2",
+        "lat": f"{lat:.7f}",
+        "lon": f"{lon:.7f}",
+        "accept-language": "ru",
+        "addressdetails": "1",
+        "extratags": "1",
+        "zoom": str(zoom),
+    }
+    if layer:
+        params["layer"] = layer
+    query = urlencode(params)
+    data = request_json(f"{NOMINATIM_REVERSE}?{query}")
+    if not isinstance(data, dict):
+        raise RuntimeError("Не удалось определить адрес по точке на карте.")
+    return data
+
+
+def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    r = 6371000.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(min(1.0, a)))
+
+
+def _short_from_osm_tags(tags: Dict[str, object]) -> str:
+    if format_nominatim_short_address is None or osm_tags_to_address_dict is None:
+        return ""
+    addr = osm_tags_to_address_dict({str(k): v for k, v in tags.items()})  # type: ignore[misc]
+    if not house_number_from_nominatim(addr):  # type: ignore[misc]
+        return ""
+    return format_nominatim_short_address(addr)  # type: ignore[misc]
+
+
+def overpass_nearest_building_address(lat: float, lon: float, radius_m: int = 80) -> str:
+    """Ближайшее здание с addr:housenumber в OSM (точнее для Москвы, чем reverse по улице)."""
+    if osm_tags_to_address_dict is None:
+        return ""
+    query = f"""[out:json][timeout:20];
+(
+  node(around:{radius_m},{lat:.7f},{lon:.7f})["addr:housenumber"];
+  way(around:{radius_m},{lat:.7f},{lon:.7f})["addr:housenumber"];
+);
+out center tags;"""
+    try:
+        import urllib.error
+        import urllib.request
+
+        req = urllib.request.Request(
+            OVERPASS_INTERPRETER,
+            data=query.encode("utf-8"),
+            headers={"User-Agent": USER_AGENT, "Content-Type": "text/plain; charset=utf-8"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        return ""
+    elements = data.get("elements") if isinstance(data, dict) else None
+    if not isinstance(elements, list):
+        return ""
+    best_short = ""
+    best_dist = 1e18
+    for el in elements:
+        if not isinstance(el, dict):
+            continue
+        tags = el.get("tags") if isinstance(el.get("tags"), dict) else {}
+        short = _short_from_osm_tags(tags)
+        if not short:
+            continue
+        elat = el.get("lat")
+        elon = el.get("lon")
+        if elat is None or elon is None:
+            center = el.get("center") if isinstance(el.get("center"), dict) else {}
+            elat = center.get("lat")
+            elon = center.get("lon")
+        try:
+            dist = _haversine_m(lat, lon, float(elat), float(elon))
+        except (TypeError, ValueError):
+            continue
+        if dist < best_dist:
+            best_dist = dist
+            best_short = short
+    if best_dist > float(radius_m) + 5.0:
+        return ""
+    return best_short
+
+
+def photon_reverse_address(lat: float, lon: float) -> str:
+    """Запасной геокодер (Komoot Photon), иногда даёт housenumber в РФ."""
+    query = urlencode({"lat": f"{lat:.7f}", "lon": f"{lon:.7f}", "lang": "ru"})
+    try:
+        data = request_json(f"{PHOTON_REVERSE}?{query}", timeout=15)
+    except Exception:
+        return ""
+    features = data.get("features") if isinstance(data, dict) else None
+    if not isinstance(features, list) or not features:
+        return ""
+    props = features[0].get("properties") if isinstance(features[0], dict) else {}
+    if not isinstance(props, dict):
+        return ""
+    pseudo = {
+        "house_number": str(props.get("housenumber") or ""),
+        "road": str(props.get("street") or props.get("name") or ""),
+        "city": str(props.get("city") or props.get("state") or "Москва"),
+        "unit": str(props.get("unit") or ""),
+    }
+    if format_nominatim_short_address is None or house_number_from_nominatim is None:
+        return ""
+    if not house_number_from_nominatim(pseudo):  # type: ignore[misc]
+        return ""
+    return format_nominatim_short_address(pseudo)  # type: ignore[misc]
+
+
+def _address_has_house_number(text: str) -> bool:
+    if not text:
+        return False
+    for part in reversed([p.strip() for p in text.split(",") if p.strip()]):
+        if part and part[0].isdigit():
+            return True
+    return False
+
+
+def _search_building_address_near(lat: float, lon: float, street: str, city: str) -> str:
+    """Если reverse дал только улицу — ищем ближайший дом с номером."""
+    if not street.strip():
+        return ""
+    q = f"{street}, {city}".strip(", ")
+    query = urlencode(
+        {
+            "format": "jsonv2",
+            "limit": "12",
+            "addressdetails": "1",
+            "accept-language": "ru",
+            "q": q,
+        }
+    )
+    data = request_json(f"{NOMINATIM_SEARCH}?{query}")
+    if not isinstance(data, list):
+        return ""
+    best_short = ""
+    best_dist = 1e18
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        addr = item.get("address") if isinstance(item.get("address"), dict) else {}
+        if format_nominatim_short_address is None or house_number_from_nominatim is None:
+            continue
+        if not house_number_from_nominatim(addr):  # type: ignore[misc]
+            continue
+        try:
+            dlat = float(item["lat"]) - lat
+            dlon = float(item["lon"]) - lon
+            dist = dlat * dlat + dlon * dlon
+        except (KeyError, TypeError, ValueError):
+            continue
+        short = format_nominatim_short_address(addr)  # type: ignore[misc]
+        if dist < best_dist:
+            best_dist = dist
+            best_short = short
+    if best_dist > 0.0012:
+        return ""
+    return best_short
+
+
+def reverse_geocode_address(lat: float, lon: float) -> Tuple[str, str]:
+    """Возвращает (полный адрес OSM, короткий адрес для поля ввода)."""
+    if format_nominatim_short_address is None:
+        raise RuntimeError("Модуль archiview_project_model не загружен.")
+    best_display = ""
+    best_short = ""
+    best_score = -1
+    best_addr: Dict[str, object] = {}
+    for zoom in (18, 17, 16):
+        for layer in ("", "address", "building"):
+            try:
+                data = _nominatim_reverse_raw(lat, lon, zoom, layer=layer)
+            except Exception:
+                continue
+            display = str(data.get("display_name") or "")
+            addr = data.get("address") if isinstance(data.get("address"), dict) else {}
+            short = format_nominatim_short_address(addr)  # type: ignore[misc]
+            has_house = bool(house_number_from_nominatim(addr))  # type: ignore[misc]
+            score = (3 if has_house else 0) + (1 if addr.get("road") or addr.get("pedestrian") else 0)
+            if score > best_score:
+                best_score = score
+                best_display = display
+                best_short = short
+                best_addr = addr
+    if best_score < 3:
+        for radius in (45, 80, 120):
+            over = overpass_nearest_building_address(lat, lon, radius_m=radius)
+            if over:
+                best_short = over
+                best_score = 3
+                break
+    if best_score < 3:
+        photon = photon_reverse_address(lat, lon)
+        if photon:
+            best_short = photon
+            best_score = 3
+    if best_score < 3:
+        city = str(
+            best_addr.get("city")
+            or best_addr.get("town")
+            or best_addr.get("municipality")
+            or "Москва"
+        )
+        street = str(
+            best_addr.get("road")
+            or best_addr.get("pedestrian")
+            or best_addr.get("footway")
+            or ""
+        )
+        near = _search_building_address_near(lat, lon, street, city)
+        if near:
+            best_short = near
+            best_score = 3
+    if normalize_address_dedupe is not None:
+        best_short = normalize_address_dedupe(best_short or best_display)  # type: ignore[misc]
+    if not best_short:
+        best_short = best_display
+    return best_display, best_short
+
+
+def normalize_annotation_list(annotations: List[dict]) -> List[dict]:
+    """Убирает дубликаты полигонов и перенумеровывает id."""
+    seen: set[Tuple[str, Tuple[Tuple[float, float], ...]]] = set()
+    out: List[dict] = []
+    for ann in annotations:
+        if not isinstance(ann, dict):
+            continue
+        poly = ann.get("polygon") or []
+        if not isinstance(poly, list) or len(poly) < 3:
+            continue
+        pts: List[Tuple[float, float]] = []
+        for p in poly:
+            if not isinstance(p, (list, tuple)) or len(p) < 2:
+                continue
+            try:
+                pts.append((round(float(p[0]), 1), round(float(p[1]), 1)))
+            except (TypeError, ValueError):
+                continue
+        if len(pts) < 3:
+            continue
+        key = (str(ann.get("class", "")), tuple(pts))
+        if key in seen:
+            continue
+        seen.add(key)
+        clean = dict(ann)
+        clean["polygon"] = [[float(x), float(y)] for x, y in pts]
+        out.append(clean)
+    for idx, ann in enumerate(out, start=1):
+        ann["id"] = idx
+    return out
 
 
 def pastvu_api(method: str, params: Dict[str, object]) -> object:
@@ -876,6 +1306,24 @@ def warp_facade_to_rect(img: np.ndarray, pts: np.ndarray, out_w: int, out_h: int
 
 
 
+def _expand_facade_quad(pts: np.ndarray, expand_ratio: float = 0.45) -> np.ndarray:
+    """Расширить четырёхугольник фасада вокруг центра — контекст без всего кадра."""
+    ctr = pts.astype(np.float64).mean(axis=0)
+    return pts.astype(np.float64) + (pts.astype(np.float64) - ctr) * float(expand_ratio)
+
+
+def _clip_quad_to_image(pts: np.ndarray, shape: Tuple[int, ...]) -> np.ndarray:
+    h, w = int(shape[0]), int(shape[1])
+    out = pts.astype(np.float64).copy()
+    out[:, 0] = np.clip(out[:, 0], 0.0, float(max(0, w - 1)))
+    out[:, 1] = np.clip(out[:, 1], 0.0, float(max(0, h - 1)))
+    return out
+
+
+def _warp_quad(quad: np.ndarray, H: np.ndarray) -> np.ndarray:
+    return cv.perspectiveTransform(quad.reshape(-1, 1, 2).astype(np.float32), H).reshape(-1, 2)
+
+
 def warp_pair_keep_context(
     old_img: np.ndarray,
     old_pts: np.ndarray,
@@ -885,14 +1333,10 @@ def warp_pair_keep_context(
     out_h: int,
     margin: int = 80,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Warp whole source photos into the same facade coordinate system.
+    """Выпрямить оба исходных снимка в общую систему координат с полным контекстом.
 
-    A simple four-point warp crops everything outside the selected quadrangle. For
-    our use case that is dangerous: a later added floor or side extension can sit
-    outside the common historical quadrangle and disappear before annotation.
-
-    This function maps the selected facade plane to a common rectangle, then expands
-    the canvas to also include the rest of both warped source images.
+    Четыре угла задают плоскость фасада для наложения; в кадр попадает весь
+    выпрямленный исходник (как на экране «до/после»), а не обрезка по маске.
     """
     dst = np.array([[0, 0], [out_w - 1, 0], [out_w - 1, out_h - 1], [0, out_h - 1]], dtype=np.float32)
     H_old_core = cv.getPerspectiveTransform(old_pts.astype(np.float32), dst)
@@ -922,10 +1366,76 @@ def warp_pair_keep_context(
     H_old = T @ H_old_core
     H_modern = T @ H_mod_core
 
-    border = (238, 238, 238)
+    border = (0, 0, 0)
     old_rect = cv.warpPerspective(old_img, H_old, (canvas_w, canvas_h), flags=cv.INTER_CUBIC, borderMode=cv.BORDER_CONSTANT, borderValue=border)
     modern_rect = cv.warpPerspective(modern_img, H_modern, (canvas_w, canvas_h), flags=cv.INTER_CUBIC, borderMode=cv.BORDER_CONSTANT, borderValue=border)
     return old_rect, modern_rect, H_old, H_modern
+
+
+def _content_mask(img: np.ndarray) -> np.ndarray:
+    """Маска «есть картинка», без белых/серых полей выпрямления."""
+    if cv is None:
+        return np.ones(img.shape[:2], dtype=np.uint8)
+    if img.ndim == 3:
+        b, g, r = cv.split(img.astype(np.uint8))
+        maxc = np.maximum(np.maximum(b, g), r)
+        minc = np.minimum(np.minimum(b, g), r)
+        chroma = maxc.astype(np.int16) - minc.astype(np.int16)
+        empty = (maxc >= 228) & (chroma <= 14)
+        return (~empty).astype(np.uint8)
+    gray = img if img.ndim == 2 else cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+    return (gray < 228).astype(np.uint8)
+
+
+def _content_bbox(img: np.ndarray, *, pad: int = 6) -> Tuple[int, int, int, int]:
+    if cv is None:
+        h, w = img.shape[:2]
+        return 0, 0, w, h
+    mask = (_content_mask(img) * 255).astype(np.uint8)
+    coords = cv.findNonZero(mask)
+    if coords is None:
+        h, w = img.shape[:2]
+        return 0, 0, w, h
+    x, y, w, h = cv.boundingRect(coords)
+    H, W = img.shape[:2]
+    x0 = max(0, int(x) - pad)
+    y0 = max(0, int(y) - pad)
+    x1 = min(W, int(x + w) + pad)
+    y1 = min(H, int(y + h) + pad)
+    return x0, y0, x1, y1
+
+
+def _bbox_area(box: Tuple[int, int, int, int]) -> int:
+    x0, y0, x1, y1 = box
+    return max(0, x1 - x0) * max(0, y1 - y0)
+
+
+def crop_white_margins_pair(
+    old_rect: np.ndarray,
+    modern_rect: np.ndarray,
+    *,
+    pad: int = 12,
+) -> Tuple[np.ndarray, np.ndarray, Tuple[int, int]]:
+    """Лёгкая обрезка пустых полей — только для режима «только 4 угла», без контекста."""
+    full = old_rect.shape[0] * old_rect.shape[1]
+    boxes = [_content_bbox(im, pad=pad) for im in (old_rect, modern_rect)]
+    x0 = max(0, min(b[0] for b in boxes) - pad)
+    y0 = max(0, min(b[1] for b in boxes) - pad)
+    x1 = min(old_rect.shape[1], max(b[2] for b in boxes) + pad)
+    y1 = min(old_rect.shape[0], max(b[3] for b in boxes) + pad)
+    if x1 - x0 < 40 or y1 - y0 < 40 or _bbox_area((x0, y0, x1, y1)) >= full * 0.97:
+        return old_rect, modern_rect, (0, 0)
+    return (
+        old_rect[y0:y1, x0:x1].copy(),
+        modern_rect[y0:y1, x0:x1].copy(),
+        (x0, y0),
+    )
+
+
+def _translate_homography(H: np.ndarray, dx: float, dy: float) -> np.ndarray:
+    T = np.array([[1.0, 0.0, -dx], [0.0, 1.0, -dy], [0.0, 0.0, 1.0]], dtype=np.float64)
+    return T @ H
+
 
 def create_comparison_for_labeling(old_rect: np.ndarray, new_rect: np.ndarray) -> np.ndarray:
     """Create a calm comparison image for manual markup.
@@ -1033,6 +1543,9 @@ def prepare_rectified_project(
     pastvu_meta: Optional[dict] = None,
     modern_meta: Optional[dict] = None,
     keep_context: bool = True,
+    crop_white: bool = True,
+    old_crop_rect_text: str = "",
+    modern_crop_rect_text: str = "",
 ) -> Dict[str, object]:
     if cv is None:
         raise RuntimeError("OpenCV не установлен.")
@@ -1041,6 +1554,10 @@ def prepare_rectified_project(
     modern_img = cv_read(modern_path)
     old_pts = parse_four_points(old_points_text)
     modern_pts = parse_four_points(modern_points_text)
+    old_img, old_off = apply_source_crop(old_img, old_crop_rect_text)
+    modern_img, modern_off = apply_source_crop(modern_img, modern_crop_rect_text)
+    old_pts = shift_points_after_crop(old_pts, old_off)
+    modern_pts = shift_points_after_crop(modern_pts, modern_off)
     out_w, out_h = facade_output_size(old_pts, modern_pts)
 
     if keep_context:
@@ -1051,6 +1568,15 @@ def prepare_rectified_project(
         old_rect, H_old_to_rect = warp_facade_to_rect(old_img, old_pts, out_w, out_h)
         modern_rect, H_modern_to_rect = warp_facade_to_rect(modern_img, modern_pts, out_w, out_h)
     H_rect_to_modern = np.linalg.inv(H_modern_to_rect)
+    crop_offset = (0, 0)
+    # С контекстом исходника не обрезаем выпрямленные файлы — 4 угла только для геометрии наложения.
+    if crop_white and not keep_context:
+        old_rect, modern_rect, crop_offset = crop_white_margins_pair(old_rect, modern_rect)
+        if crop_offset != (0, 0):
+            dx, dy = crop_offset
+            H_old_to_rect = _translate_homography(H_old_to_rect, dx, dy)
+            H_modern_to_rect = _translate_homography(H_modern_to_rect, dx, dy)
+            H_rect_to_modern = np.linalg.inv(H_modern_to_rect)
 
     alpha_old = max(0, min(100, int(old_opacity_percent))) / 100.0
     overlay = cv.addWeighted(modern_rect, 1.0 - alpha_old, old_rect, alpha_old, 0)
@@ -1083,6 +1609,12 @@ def prepare_rectified_project(
         "modern_points_tl_tr_br_bl": modern_pts.tolist(),
         "rectified_size": {"width": int(old_rect.shape[1]), "height": int(old_rect.shape[0])},
         "keep_context_outside_four_points": bool(keep_context),
+        "crop_white_margins": bool(crop_white),
+        "crop_offset_xy": list(crop_offset),
+        "old_crop_rect_text": old_crop_rect_text,
+        "modern_crop_rect_text": modern_crop_rect_text,
+        "old_crop_offset_xy": [float(old_off[0]), float(old_off[1])],
+        "modern_crop_offset_xy": [float(modern_off[0]), float(modern_off[1])],
         "H_old_to_rect": H_old_to_rect.tolist(),
         "H_modern_to_rect": H_modern_to_rect.tolist(),
         "H_rect_to_modern": H_rect_to_modern.tolist(),
@@ -1148,7 +1680,13 @@ def _canvas_draw_index_label(canvas: tk.Canvas, x: float, y: float, text: str, c
     canvas.create_text(x, y, text=text, fill=color, font=font, tags=tags)
 
 
-def draw_polygons_on_image(img: np.ndarray, annotations: List[dict], transform: Optional[np.ndarray] = None) -> np.ndarray:
+def draw_polygons_on_image(
+    img: np.ndarray,
+    annotations: List[dict],
+    transform: Optional[np.ndarray] = None,
+    *,
+    draw_indices: bool = True,
+) -> np.ndarray:
     out = img.copy()
     overlay = out.copy()
     for idx, ann in enumerate(annotations, start=1):
@@ -1174,17 +1712,18 @@ def draw_polygons_on_image(img: np.ndarray, annotations: List[dict], transform: 
             pts = cv.perspectiveTransform(pts.reshape(-1, 1, 2), transform).reshape(-1, 2)
         pts_i = np.round(pts).astype(np.int32).reshape(-1, 1, 2)
         cv.polylines(out, [pts_i], True, color, 4, cv.LINE_AA)
-    for idx, ann in enumerate(annotations, start=1):
-        cls = ann.get("class", "added_architecture")
-        color = CLASS_COLORS.get(cls, (0, 190, 0))
-        pts = np.asarray(ann.get("polygon", []), dtype=np.float32)
-        if pts.shape[0] < 3:
-            continue
-        if transform is not None:
-            pts = cv.perspectiveTransform(pts.reshape(-1, 1, 2), transform).reshape(-1, 2)
-        pts_i = np.round(pts).astype(np.int32)
-        x, y = pts_i.mean(axis=0).astype(int)
-        _put_index_on_cv(out, int(x), int(y), idx, color)
+    if draw_indices:
+        for idx, ann in enumerate(annotations, start=1):
+            cls = ann.get("class", "added_architecture")
+            color = CLASS_COLORS.get(cls, (0, 190, 0))
+            pts = np.asarray(ann.get("polygon", []), dtype=np.float32)
+            if pts.shape[0] < 3:
+                continue
+            if transform is not None:
+                pts = cv.perspectiveTransform(pts.reshape(-1, 1, 2), transform).reshape(-1, 2)
+            pts_i = np.round(pts).astype(np.int32)
+            x, y = pts_i.mean(axis=0).astype(int)
+            _put_index_on_cv(out, int(x), int(y), idx, color)
     return out
 
 
@@ -1202,7 +1741,8 @@ def save_annotations_and_exports(outdir: Path, annotations: List[dict]) -> Dict[
     modern_rect_path = Path(outputs.get("modern_rectified", outdir / "04_modern_rectified.png"))
     comparison_path = Path(outputs.get("comparison_for_labeling", outdir / "05_comparison_for_labeling.png"))
     modern_src_path = Path(project.get("modern_image"))
-    H_rect_to_modern = np.asarray(project.get("H_rect_to_modern"), dtype=np.float64)
+    crop_fb = modern_crop_rect_from_metadata_near(outdir)
+    H_rect_to_modern = H_rect_to_full_modern_from_project(project, fallback_rect_text=crop_fb)
 
     ann_dir = outdir / "annotations"
     ann_dir.mkdir(parents=True, exist_ok=True)
@@ -1216,10 +1756,11 @@ def save_annotations_and_exports(outdir: Path, annotations: List[dict]) -> Dict[
     }
     manual_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    annotations = normalize_annotation_list(annotations)
     modern_rect = cv_read(modern_rect_path)
     modern_src = cv_read(modern_src_path)
-    marked_rect = draw_polygons_on_image(modern_rect, annotations, transform=None)
-    marked_src = draw_polygons_on_image(modern_src, annotations, transform=H_rect_to_modern)
+    marked_rect = draw_polygons_on_image(modern_rect, annotations, transform=None, draw_indices=False)
+    marked_src = draw_polygons_on_image(modern_src, annotations, transform=H_rect_to_modern, draw_indices=False)
 
     marked_rect_path = outdir / "06_marked_rectified.png"
     marked_src_path = outdir / "07_marked_on_original_modern.png"
@@ -1463,6 +2004,11 @@ class FacadePointPicker(tk.Toplevel):
         if len(self.points) != 4:
             messagebox.showinfo("Нужно 4 точки", "Поставьте ровно 4 угла фасада.", parent=self)
             return
+        pts = np.asarray(self.points, dtype=np.float32)
+        ok, msg = validate_facade_quad_points(pts)
+        if not ok:
+            messagebox.showwarning("Проверьте углы", msg, parent=self)
+            return
         self.callback(points_to_cli(self.points))
         self.destroy()
 
@@ -1659,6 +2205,19 @@ class AnnotationWindow(tk.Toplevel):
         self.on_saved(outputs)
 
 
+@dataclass
+class HistoricalSourceItem:
+    """Одно историческое фото в списке для сравнения — со своими 4 углами."""
+
+    key: str
+    path: str
+    label: str
+    old_points_text: str = ""
+    crop_rect_text: str = ""
+    source_type: str = "file"
+    pastvu_cid: Optional[int] = None
+    comparison_id: str = ""
+
 
 class DualFacadePointPicker(tk.Toplevel):
     """Pick matching four facade corners on historical and modern photos in one window."""
@@ -1673,22 +2232,35 @@ class DualFacadePointPicker(tk.Toplevel):
     def __init__(
         self,
         parent: tk.Tk,
-        old_image_path: str,
         modern_image_path: str,
-        callback: Callable[[str, str], None],
+        callback: Callable[[str, str, List[Dict[str, str]], str], None],
+        *,
+        historical_sources: List[Dict[str, str]],
+        start_index: int = 0,
+        initial_modern_points_text: str = "",
+        initial_modern_crop_rect_text: str = "",
+        lock_modern_when_complete: bool = False,
     ) -> None:
         super().__init__(parent)
-        self.title("Указать 4 угла на двух фото одновременно")
-        self.geometry("1240x820")
-        self.minsize(1040, 700)
+        self.title("Углы фасада и рамка обрезки")
+        self.geometry("1280x900")
+        self.minsize(1040, 720)
         self.callback = callback
+        self.hist_sources = list(historical_sources) if historical_sources else []
+        self.tool_mode = tk.StringVar(value="corners")
+        self.modern_crop_rect_text = str(initial_modern_crop_rect_text or "")
+        self._crop_drag: Optional[Tuple[str, float, float]] = None
+        if not self.hist_sources:
+            messagebox.showerror("Нет фото", "Добавьте хотя бы одно историческое фото.", parent=parent)
+            self.destroy()
+            return
+        self.hist_index = max(0, min(start_index, len(self.hist_sources) - 1))
         self.old_points: List[Optional[Point]] = [None, None, None, None]
         self.modern_points: List[Optional[Point]] = [None, None, None, None]
+        self._fill_points_from_text(initial_modern_points_text, self.modern_points)
+        self.lock_modern = bool(lock_modern_when_complete)
 
         try:
-            self.old_photo, self.old_scale, self.old_w, self.old_h, self.old_orig_w, self.old_orig_h = cv_to_photoimage(
-                old_image_path, 560, 540
-            )
             self.modern_photo, self.modern_scale, self.modern_w, self.modern_h, self.modern_orig_w, self.modern_orig_h = cv_to_photoimage(
                 modern_image_path, 560, 540
             )
@@ -1698,32 +2270,52 @@ class DualFacadePointPicker(tk.Toplevel):
             return
 
         intro = (
-            "Здесь специально показываются оба здания сразу. Для каждой точки кликните один и тот же угол "
-            "на историческом фото слева и на современном фото справа. Порядок строго такой: "
-            "1 верх-лево, 2 верх-право, 3 низ-право, 4 низ-лево. Если фасад потом выворачивается — "
-            "обычно перепутан порядок или выбраны разные плоскости фасада."
+            "Слева — исторические фото (ползунок), справа — современное. "
+            "Режим «4 угла»: клики 1–4 на обоих фото для наложения. "
+            "Режим «Рамка»: потяните мышью прямоугольник — что останется из исходника перед выпрямлением."
         )
-        ttk.Label(self, text=intro, wraplength=1180).pack(anchor="w", padx=12, pady=(10, 6))
+        ttk.Label(self, text=intro, wraplength=1220).pack(anchor="w", padx=12, pady=(10, 4))
+        tools = ttk.Frame(self)
+        tools.pack(anchor="w", padx=12, pady=(0, 4))
+        ttk.Label(tools, text="Инструмент:").pack(side="left")
+        ttk.Radiobutton(tools, text="4 угла фасада", variable=self.tool_mode, value="corners", command=self._redraw).pack(side="left", padx=6)
+        ttk.Radiobutton(tools, text="Рамка обрезки (историческое)", variable=self.tool_mode, value="crop_old", command=self._redraw).pack(side="left", padx=6)
+        ttk.Radiobutton(tools, text="Рамка обрезки (современное)", variable=self.tool_mode, value="crop_modern", command=self._redraw).pack(side="left", padx=6)
 
         canvases = ttk.Frame(self)
         canvases.pack(fill="both", expand=True, padx=12, pady=6)
         canvases.columnconfigure(0, weight=1)
         canvases.columnconfigure(1, weight=1)
 
-        left_box = ttk.LabelFrame(canvases, text="Историческое фото")
+        self.left_box = ttk.LabelFrame(canvases, text="Историческое фото")
         right_box = ttk.LabelFrame(canvases, text="Современное фото")
-        left_box.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
+        self.left_box.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
         right_box.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
 
-        self.old_canvas = tk.Canvas(left_box, width=self.old_w, height=self.old_h, bg="#eeeeee", highlightthickness=1)
+        hist_nav = ttk.Frame(self.left_box)
+        hist_nav.pack(fill="x", padx=8, pady=(6, 2))
+        ttk.Button(hist_nav, text="◀", width=3, command=self._hist_prev).pack(side="left")
+        self.hist_slider = tk.Scale(
+            hist_nav,
+            from_=0,
+            to=max(0, len(self.hist_sources) - 1),
+            orient="horizontal",
+            showvalue=False,
+            command=self._on_hist_slider,
+        )
+        self.hist_slider.pack(side="left", fill="x", expand=True, padx=6)
+        ttk.Button(hist_nav, text="▶", width=3, command=self._hist_next).pack(side="left")
+        self.hist_caption = ttk.Label(self.left_box, text="", wraplength=520)
+        self.hist_caption.pack(anchor="w", padx=8, pady=(0, 4))
+
+        self.old_canvas = tk.Canvas(self.left_box, width=560, height=540, bg="#eeeeee", highlightthickness=1)
         self.old_canvas.pack(anchor="center", padx=8, pady=8)
-        self.old_canvas.create_image(0, 0, image=self.old_photo, anchor="nw")
-        self.old_canvas.bind("<Button-1>", lambda e: self._click("old", e))
+        self._bind_canvas_events(self.old_canvas, "old")
 
         self.modern_canvas = tk.Canvas(right_box, width=self.modern_w, height=self.modern_h, bg="#eeeeee", highlightthickness=1)
         self.modern_canvas.pack(anchor="center", padx=8, pady=8)
         self.modern_canvas.create_image(0, 0, image=self.modern_photo, anchor="nw")
-        self.modern_canvas.bind("<Button-1>", lambda e: self._click("modern", e))
+        self._bind_canvas_events(self.modern_canvas, "modern")
 
         self.status = tk.StringVar()
         ttk.Label(self, textvariable=self.status, font=("TkDefaultFont", 10, "bold")).pack(anchor="w", padx=12, pady=5)
@@ -1731,20 +2323,165 @@ class DualFacadePointPicker(tk.Toplevel):
         btns = ttk.Frame(self)
         btns.pack(anchor="w", padx=12, pady=(6, 12))
         ttk.Button(btns, text="Отменить последний клик", command=self.undo).pack(side="left")
-        ttk.Button(btns, text="Очистить все точки", command=self.clear).pack(side="left", padx=8)
-        ttk.Button(btns, text="Готово, использовать эти углы", command=self.done).pack(side="left", padx=8)
+        ttk.Button(btns, text="Очистить все", command=self.clear_all).pack(side="left", padx=(8, 2))
+        ttk.Button(btns, text="Только историческое", command=self.clear_old).pack(side="left", padx=2)
+        ttk.Button(btns, text="Только современное", command=self.clear_modern).pack(side="left", padx=2)
+        ttk.Button(btns, text="Сбросить рамку слева", command=self.clear_crop_old).pack(side="left", padx=(8, 2))
+        ttk.Button(btns, text="Сбросить рамку справа", command=self.clear_crop_modern).pack(side="left", padx=2)
+        self.lock_var = tk.BooleanVar(value=self.lock_modern)
+        ttk.Checkbutton(
+            btns,
+            text="Не трогать современное (замок)",
+            variable=self.lock_var,
+            command=self._toggle_lock_modern,
+        ).pack(side="left", padx=8)
+        ttk.Button(btns, text="Готово", command=self.done).pack(side="left", padx=8)
         ttk.Button(btns, text="Закрыть", command=self.destroy).pack(side="left", padx=8)
 
-        self._redraw()
+        self._load_historical_index(self.hist_index, initial=True)
         self.grab_set()
+
+    def _points_to_text(self, points: List[Optional[Point]]) -> str:
+        if any(p is None for p in points):
+            return ""
+        return points_to_cli([p for p in points if p is not None])
+
+    def _save_current_historical_points(self) -> None:
+        if 0 <= self.hist_index < len(self.hist_sources):
+            self.hist_sources[self.hist_index]["points"] = self._points_to_text(self.old_points)
+            self.hist_sources[self.hist_index]["crop_rect"] = str(
+                self.hist_sources[self.hist_index].get("crop_rect") or ""
+            )
+
+    def _bind_canvas_events(self, canvas: tk.Canvas, side: str) -> None:
+        canvas.bind("<Button-1>", lambda e, s=side: self._canvas_press(s, e))
+        canvas.bind("<B1-Motion>", lambda e, s=side: self._canvas_motion(s, e))
+        canvas.bind("<ButtonRelease-1>", lambda e, s=side: self._canvas_release(s, e))
+
+    def _current_old_crop_text(self) -> str:
+        if 0 <= self.hist_index < len(self.hist_sources):
+            return str(self.hist_sources[self.hist_index].get("crop_rect") or "")
+        return ""
+
+    def _set_old_crop_text(self, text: str) -> None:
+        if 0 <= self.hist_index < len(self.hist_sources):
+            self.hist_sources[self.hist_index]["crop_rect"] = text
+
+    def _load_historical_index(self, index: int, *, initial: bool = False) -> None:
+        if not initial:
+            self._save_current_historical_points()
+        self.hist_index = max(0, min(index, len(self.hist_sources) - 1))
+        src = self.hist_sources[self.hist_index]
+        path = str(src.get("path") or "")
+        label = str(src.get("label") or Path(path).name)
+        if "crop_rect" not in src:
+            src["crop_rect"] = ""
+        self.old_points = [None, None, None, None]
+        self._fill_points_from_text(str(src.get("points") or ""), self.old_points)
+        try:
+            self.old_photo, self.old_scale, self.old_w, self.old_h, self.old_orig_w, self.old_orig_h = cv_to_photoimage(
+                path, 560, 540
+            )
+        except Exception as exc:
+            messagebox.showerror("Фото", str(exc), parent=self)
+            return
+        self.old_canvas.configure(width=self.old_w, height=self.old_h)
+        self.old_canvas.delete("all")
+        self.old_canvas.create_image(0, 0, image=self.old_photo, anchor="nw")
+        self.hist_slider.set(self.hist_index)
+        self.hist_caption.configure(text=f"{self.hist_index + 1} / {len(self.hist_sources)} — {label}")
+        self.left_box.configure(text=f"Историческое: {label}")
+        self._redraw()
+
+    def _on_hist_slider(self, value: str) -> None:
+        try:
+            idx = int(float(value))
+        except ValueError:
+            return
+        if idx != self.hist_index:
+            self._load_historical_index(idx)
+
+    def _hist_prev(self) -> None:
+        if self.hist_index > 0:
+            self._load_historical_index(self.hist_index - 1)
+
+    def _hist_next(self) -> None:
+        if self.hist_index < len(self.hist_sources) - 1:
+            self._load_historical_index(self.hist_index + 1)
+
+    def _toggle_lock_modern(self) -> None:
+        self.lock_modern = bool(self.lock_var.get())
+        self._redraw()
+
+    @staticmethod
+    def _fill_points_from_text(text: str, target: List[Optional[Point]]) -> None:
+        if not text.strip():
+            return
+        try:
+            pts = parse_four_points(text)
+            for i in range(4):
+                target[i] = (float(pts[i][0]), float(pts[i][1]))
+        except Exception:
+            pass
 
     def _current_index(self) -> int:
         for i in range(4):
-            if self.old_points[i] is None or self.modern_points[i] is None:
+            if self.old_points[i] is None:
+                return i
+            if not self.lock_modern and self.modern_points[i] is None:
                 return i
         return 4
 
-    def _click(self, side: str, event: tk.Event) -> None:
+    def _canvas_press(self, side: str, event: tk.Event) -> None:
+        mode = self.tool_mode.get()
+        if mode in ("crop_old", "crop_modern"):
+            target = "old" if mode == "crop_old" else "modern"
+            if side != target:
+                return
+            self._crop_drag = (side, float(event.x), float(event.y))
+            return
+        self._click_corner(side, event)
+
+    def _canvas_motion(self, side: str, event: tk.Event) -> None:
+        if self._crop_drag is None or self._crop_drag[0] != side:
+            return
+        self._redraw(crop_preview=(side, self._crop_drag[1], self._crop_drag[2], float(event.x), float(event.y)))
+
+    def _canvas_release(self, side: str, event: tk.Event) -> None:
+        if self._crop_drag is None or self._crop_drag[0] != side:
+            return
+        x1, y1 = self._crop_drag[1], self._crop_drag[2]
+        x2, y2 = float(event.x), float(event.y)
+        self._crop_drag = None
+        scale = self.old_scale if side == "old" else self.modern_scale
+        ox0 = min(x1, x2) / scale
+        oy0 = min(y1, y2) / scale
+        ox1 = max(x1, x2) / scale
+        oy1 = max(y1, y2) / scale
+        ow = self.old_orig_w if side == "old" else self.modern_orig_w
+        oh = self.old_orig_h if side == "old" else self.modern_orig_h
+        ox0 = max(0.0, min(ox0, float(ow)))
+        oy0 = max(0.0, min(oy0, float(oh)))
+        ox1 = max(0.0, min(ox1, float(ow)))
+        oy1 = max(0.0, min(oy1, float(oh)))
+        if ox1 - ox0 < 12 or oy1 - oy0 < 12:
+            self.status.set("Рамка слишком мала — потяните побольше.")
+            self._redraw()
+            return
+        text = crop_rect_to_text(ox0, oy0, ox1, oy1)
+        if side == "old":
+            self._set_old_crop_text(text)
+        else:
+            self.modern_crop_rect_text = text
+        self.status.set("Рамка обрезки сохранена. При необходимости укажите 4 угла внутри неё.")
+        self._redraw()
+
+    def _click_corner(self, side: str, event: tk.Event) -> None:
+        if self.tool_mode.get() != "corners":
+            return
+        if side == "modern" and self.lock_modern:
+            self.status.set("Современные углы уже заданы. Кликайте только на историческом фото слева.")
+            return
         idx = self._current_index()
         if idx >= 4:
             self.status.set("Все 4 пары точек уже выбраны. Нажмите “Готово” или очистите точки.")
@@ -1764,7 +2501,7 @@ class DualFacadePointPicker(tk.Toplevel):
         return (pt[0] * scale, pt[1] * scale)
 
     def _draw_side(self, canvas: tk.Canvas, points: List[Optional[Point]], side: str) -> None:
-        canvas.delete("marker")
+        canvas.delete("corner_marker")
         disp_points: List[Point] = []
         for i, pt in enumerate(points, start=1):
             if pt is None:
@@ -1772,9 +2509,9 @@ class DualFacadePointPicker(tk.Toplevel):
             x, y = self._to_disp(pt, side)
             disp_points.append((x, y))
             r = 11
-            canvas.create_oval(x - r, y - r, x + r, y + r, fill="#d92323", outline="white", width=2, tags="marker")
-            canvas.create_text(x, y, text=str(i), fill="white", font=("TkDefaultFont", 9, "bold"), tags="marker")
-            canvas.create_text(x + 16, y - 12, text=self.NAMES[i - 1].replace(" фасада", ""), fill="#d92323", anchor="w", tags="marker")
+            canvas.create_oval(x - r, y - r, x + r, y + r, fill="#d92323", outline="white", width=2, tags="corner_marker")
+            canvas.create_text(x, y, text=str(i), fill="white", font=("TkDefaultFont", 9, "bold"), tags="corner_marker")
+            canvas.create_text(x + 16, y - 12, text=self.NAMES[i - 1].replace(" фасада", ""), fill="#d92323", anchor="w", tags="corner_marker")
         # Draw lines only through consecutive existing points. Close polygon when all are present.
         consecutive: List[Point] = []
         for pt in points:
@@ -1783,20 +2520,51 @@ class DualFacadePointPicker(tk.Toplevel):
             consecutive.append(self._to_disp(pt, side))
         if len(consecutive) >= 2:
             flat = [v for xy in consecutive for v in xy]
-            canvas.create_line(flat, fill="#d92323", width=2, tags="marker")
+            canvas.create_line(flat, fill="#d92323", width=2, tags="corner_marker")
         if len(consecutive) == 4:
             flat = [v for xy in consecutive + [consecutive[0]] for v in xy]
-            canvas.create_line(flat, fill="#d92323", width=2, tags="marker")
+            canvas.create_line(flat, fill="#d92323", width=2, tags="corner_marker")
 
-    def _redraw(self) -> None:
+    def _draw_crop_rect(self, canvas: tk.Canvas, crop_text: str, side: str, *, preview: Optional[Tuple[float, float, float, float]] = None) -> None:
+        scale = self.old_scale if side == "old" else self.modern_scale
+        if preview is not None:
+            x0, y0, x1, y1 = preview
+        else:
+            box = parse_crop_rect(crop_text)
+            if box is None:
+                return
+            x0, y0, x1, y1 = box
+        dx0, dy0 = x0 * scale, y0 * scale
+        dx1, dy1 = x1 * scale, y1 * scale
+        canvas.create_rectangle(dx0, dy0, dx1, dy1, outline="#1a8a3a", width=2, dash=(6, 4), tags="crop_marker")
+        canvas.create_text(dx0 + 6, dy0 + 6, text="обрезка", fill="#1a8a3a", anchor="nw", tags="crop_marker")
+
+    def _redraw(self, crop_preview: Optional[Tuple[str, float, float, float, float]] = None) -> None:
+        self.old_canvas.delete("crop_marker")
+        self.modern_canvas.delete("crop_marker")
         self._draw_side(self.old_canvas, self.old_points, "old")
         self._draw_side(self.modern_canvas, self.modern_points, "modern")
+        self._draw_crop_rect(self.old_canvas, self._current_old_crop_text(), "old")
+        self._draw_crop_rect(self.modern_canvas, self.modern_crop_rect_text, "modern")
+        if crop_preview is not None:
+            side, x1, y1, x2, y2 = crop_preview
+            scale = self.old_scale if side == "old" else self.modern_scale
+            prev = (min(x1, x2) / scale, min(y1, y2) / scale, max(x1, x2) / scale, max(y1, y2) / scale)
+            canvas = self.old_canvas if side == "old" else self.modern_canvas
+            self._draw_crop_rect(canvas, "", side, preview=prev)
+        mode = self.tool_mode.get()
+        if mode == "crop_old":
+            self.status.set("Потяните мышью рамку на историческом фото слева — останется выбранный фрагмент.")
+            return
+        if mode == "crop_modern":
+            self.status.set("Потяните мышью рамку на современном фото справа.")
+            return
         idx = self._current_index()
         if idx >= 4:
             self.status.set("Все 4 пары выбраны. Нажмите “Готово”.")
             return
         left_ok = self.old_points[idx] is not None
-        right_ok = self.modern_points[idx] is not None
+        right_ok = self.modern_points[idx] is not None or self.lock_modern
         missing = []
         if not left_ok:
             missing.append("слева на историческом фото")
@@ -1806,7 +2574,7 @@ class DualFacadePointPicker(tk.Toplevel):
 
     def undo(self) -> None:
         for i in range(3, -1, -1):
-            if self.modern_points[i] is not None:
+            if not self.lock_modern and self.modern_points[i] is not None:
                 self.modern_points[i] = None
                 self._redraw()
                 return
@@ -1816,18 +2584,97 @@ class DualFacadePointPicker(tk.Toplevel):
                 return
         self._redraw()
 
-    def clear(self) -> None:
+    def clear_all(self) -> None:
         self.old_points = [None, None, None, None]
+        if not self.lock_modern:
+            self.modern_points = [None, None, None, None]
+        self._save_current_historical_points()
+        self._redraw()
+
+    def clear_old(self) -> None:
+        self.old_points = [None, None, None, None]
+        self._save_current_historical_points()
+        self._redraw()
+
+    def clear_modern(self) -> None:
+        self.lock_modern = False
+        self.lock_var.set(False)
         self.modern_points = [None, None, None, None]
         self._redraw()
 
+    def clear_crop_old(self) -> None:
+        self._set_old_crop_text("")
+        self._redraw()
+
+    def clear_crop_modern(self) -> None:
+        self.modern_crop_rect_text = ""
+        self._redraw()
+
+    @staticmethod
+    def _points_inside_crop(points: List[Point], crop_text: str) -> bool:
+        box = parse_crop_rect(crop_text)
+        if box is None:
+            return True
+        x0, y0, x1, y1 = box
+        for x, y in points:
+            if x < x0 or x > x1 or y < y0 or y > y1:
+                return False
+        return True
+
+    @staticmethod
+    def _quad_aspect_ratio(points: List[Point]) -> float:
+        if len(points) < 4 or any(p is None for p in points):
+            return 1.0
+        pts = np.asarray([points[0], points[1], points[2], points[3]], dtype=np.float64)
+        w = (np.linalg.norm(pts[1] - pts[0]) + np.linalg.norm(pts[2] - pts[3])) / 2.0
+        h = (np.linalg.norm(pts[3] - pts[0]) + np.linalg.norm(pts[2] - pts[1])) / 2.0
+        return float(w / max(h, 1e-6))
+
     def done(self) -> None:
+        self._save_current_historical_points()
         if any(p is None for p in self.old_points) or any(p is None for p in self.modern_points):
-            messagebox.showinfo("Нужны все точки", "Поставьте 4 угла на старом фото и 4 угла на современном фото.", parent=self)
+            messagebox.showinfo(
+                "Нужны все точки",
+                "Поставьте 4 угла на текущем историческом фото и 4 угла на современном.",
+                parent=self,
+            )
             return
         old = [p for p in self.old_points if p is not None]
         modern = [p for p in self.modern_points if p is not None]
-        self.callback(points_to_cli(old), points_to_cli(modern))
+        old_crop = self._current_old_crop_text()
+        if not self._points_inside_crop(old, old_crop):
+            messagebox.showwarning(
+                "Углы вне рамки",
+                "Все 4 угла на историческом фото должны быть внутри зелёной рамки обрезки (или сбросьте рамку).",
+                parent=self,
+            )
+            return
+        if not self._points_inside_crop(modern, self.modern_crop_rect_text):
+            messagebox.showwarning(
+                "Углы вне рамки",
+                "Все 4 угла на современном фото должны быть внутри зелёной рамки обрезки.",
+                parent=self,
+            )
+            return
+        ro = self._quad_aspect_ratio(old)
+        rm = self._quad_aspect_ratio(modern)
+        if ro > 0 and rm > 0 and (ro / rm > 2.8 or rm / ro > 2.8):
+            if not messagebox.askyesno(
+                "Проверьте углы",
+                "Выделения на историческом и современном фото сильно разной формы "
+                "(узкая полоска с одной стороны и широкая с другой).\n\n"
+                "Точка 1 должна совпасть с точкой 1 на том же углу здания, и так далее. "
+                "Иначе выпрямление «рвёт» картинку.\n\n"
+                "Всё равно сохранить эти углы?",
+                parent=self,
+            ):
+                return
+        self.callback(
+            points_to_cli(old),
+            points_to_cli(modern),
+            list(self.hist_sources),
+            self.modern_crop_rect_text,
+        )
         self.destroy()
 
 # ---------------------------------------------------------------------------
@@ -1835,16 +2682,45 @@ class DualFacadePointPicker(tk.Toplevel):
 # ---------------------------------------------------------------------------
 
 class ScrollableFrame(ttk.Frame):
+    """Прокручиваемая область; в Panedwindow не раздувает окно — высота = родитель."""
+
     def __init__(self, parent: tk.Widget) -> None:
         super().__init__(parent)
         self.canvas = tk.Canvas(self, highlightthickness=0)
         self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
         self.inner = ttk.Frame(self.canvas)
-        self.inner.bind("<Configure>", lambda _e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-        self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
+        self._window_id = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
+        self.inner.bind("<Configure>", self._on_inner_configure)
+        self.canvas.bind("<Configure>", self._on_canvas_configure)
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
+        self.bind_mousewheel()
+
+    def _on_inner_configure(self, _event: tk.Event) -> None:
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def _on_canvas_configure(self, event: tk.Event) -> None:
+        self.canvas.itemconfig(self._window_id, width=max(event.width, 1))
+
+    def bind_mousewheel(self) -> None:
+        def on_wheel(event: tk.Event) -> str:
+            if not self.winfo_ismapped():
+                return "break"
+            delta = 0
+            if hasattr(event, "delta") and event.delta:
+                delta = -1 * int(event.delta / 120)
+            elif getattr(event, "num", None) == 4:
+                delta = -1
+            elif getattr(event, "num", None) == 5:
+                delta = 1
+            if delta:
+                self.canvas.yview_scroll(delta, "units")
+            return "break"
+
+        for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            self.canvas.bind(seq, on_wheel, add="+")
+            self.inner.bind(seq, on_wheel, add="+")
 
 
 class ComparisonPreviewWindow(tk.Toplevel):
@@ -1959,11 +2835,12 @@ class App(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title(f"Archiview CV {APP_VERSION}")
-        self.geometry("1240x900")
-        self.minsize(1020, 760)
 
         # Project and photo selection.
         self.address = tk.StringVar(value="")
+        self.site_card_id = tk.StringVar(value="")
+        self.auto_export_website = tk.BooleanVar(value=True)
+        self.object_name = tk.StringVar(value="")
         self.lat = tk.StringVar(value="")
         self.lon = tk.StringVar(value="")
         self.geocode_result = tk.StringVar(value="Адрес/координаты пока не выбраны.")
@@ -1998,6 +2875,9 @@ class App(tk.Tk):
         # Rectification and analysis.
         self.old_points_text = ""
         self.modern_points_text = ""
+        self.modern_crop_rect_text = ""
+        self.historical_sources: List[HistoricalSourceItem] = []
+        self.active_historical_key = ""
         self.points_status = tk.StringVar(value="Углы фасада ещё не выбраны.")
         self.old_opacity = tk.IntVar(value=75)
         self.old_opacity_label = tk.StringVar(value="Видимость старого фото в overlay: 75%")
@@ -2013,8 +2893,12 @@ class App(tk.Tk):
 
         self._map_server = None
         self._map_server_thread = None
+        self._suppress_house_autosave = False
+        self._house_save_after_id: Optional[str] = None
+        self._bind_house_field_autosave()
 
         self._build_ui()
+        self._fit_main_window_to_screen()
         self._check_environment()
 
     # ----------------------------- UI ---------------------------------
@@ -2218,7 +3102,7 @@ class App(tk.Tk):
                  command=self._update_opacity_label, length=420, showvalue=False).pack(anchor="w", padx=8, pady=(0, 4))
         ttk.Checkbutton(
             slider_frame,
-            text="Не обрезать фото по 4 углам: оставить надстройки, пристройки и контекст вокруг фасада",
+            text="Показывать весь исходный снимок (4 угла только для наложения; рекомендуется)",
             variable=self.keep_context,
         ).pack(anchor="w", padx=8, pady=(0, 8))
 
@@ -2228,7 +3112,12 @@ class App(tk.Tk):
         ttk.Button(btns, text="Открыть overlay", command=self.open_overlay).pack(side="left", padx=6)
         ttk.Button(btns, text="Открыть до/после", command=self.open_before_after).pack(side="left", padx=6)
         ttk.Button(btns, text="Открыть папку результата", command=lambda: open_path(Path(self.outdir.get()))).pack(side="left", padx=6)
-        ttk.Button(btns, text="Отправить на сайт…", command=self.export_to_website).pack(side="left", padx=6)
+        ttk.Button(btns, text="Отправить на сайт", command=self.export_to_website).pack(side="left", padx=6)
+        ttk.Checkbutton(
+            btns,
+            text="Автоматически копировать на сайт (код из «Данные дома»)",
+            variable=self.auto_export_website,
+        ).pack(side="left", padx=8)
 
         ttk.Label(parent, textvariable=self.rectified_status, font=("TkDefaultFont", 10, "bold")).grid(row=4, column=0, columnspan=3, sticky="w", padx=10, pady=8)
         warning = (
@@ -2296,7 +3185,16 @@ class App(tk.Tk):
         point_frame.grid(row=2, column=0, columnspan=3, sticky="w", padx=10, pady=8)
         ttk.Button(point_frame, text="Указать 4 угла фасада", command=self.pick_straight_corners).pack(side="left")
         ttk.Label(point_frame, textvariable=self.straight_points_status, foreground="#555").pack(side="left", padx=8)
-        ttk.Label(parent, text="Этот режим оставлен отдельно для одиночного выпрямления. Основной сценарий сравнения — вкладки 1 → 2 → 3.", wraplength=900, foreground="#555").grid(row=3, column=0, columnspan=3, sticky="w", padx=10, pady=8)
+        ttk.Label(
+            parent,
+            text=(
+                "Все 4 точки — только на одном фасаде (не в небе и не на соседнем здании). "
+                "Точка 2 — верхний правый угол того же дома, что точка 1. "
+                "Основное сравнение двух фото — вкладки 1 → 2 → 3."
+            ),
+            wraplength=900,
+            foreground="#555",
+        ).grid(row=3, column=0, columnspan=3, sticky="w", padx=10, pady=8)
         btns = ttk.Frame(parent)
         btns.grid(row=4, column=0, columnspan=3, sticky="w", padx=10, pady=10)
         ttk.Button(btns, text="Выпрямить по 4 углам", command=self.run_straighten_manual).pack(side="left")
@@ -2330,9 +3228,786 @@ class App(tk.Tk):
     def choose_project_dir(self) -> None:
         path = filedialog.askdirectory(title="Выберите папку проекта дома")
         if path:
-            self.project_dir.set(path)
-            self.outdir.set(str(Path(path) / "result"))
+            self._load_project_into_workflow(path)
+
+    def _load_legacy_metadata_coords(self, project_dir: Path) -> None:
+        for candidate in (project_dir / "house.json", project_dir / "metadata" / "house.json"):
+            if not candidate.exists():
+                continue
+            try:
+                data = json.loads(candidate.read_text(encoding="utf-8"))
+                addr = str(data.get("address") or "").strip()
+                if addr:
+                    self.address.set(addr)
+                site = str(data.get("site_card_id") or "").strip()
+                if site:
+                    self.site_card_id.set(site)
+                obj = str(data.get("object_name") or "").strip()
+                if obj:
+                    self.object_name.set(obj)
+                lat = data.get("lat")
+                lon = data.get("lon")
+                if lat is not None and str(lat).strip():
+                    self.lat.set(str(lat))
+                if lon is not None and str(lon).strip():
+                    self.lon.set(str(lon))
+                if hasattr(self, "geocode_result") and addr:
+                    self.geocode_result.set(f"Открыт проект: {addr}")
+                return
+            except Exception:
+                continue
+
+    def _parse_float_or_none(self, text: str) -> Optional[float]:
+        t = str(text).strip().replace(",", ".")
+        if not t:
+            return None
+        try:
+            return float(t)
+        except ValueError:
+            return None
+
+    def _ensure_project_store_attached(self) -> bool:
+        if ProjectStore is None:
+            return False
+        root = self.project_root()
+        if not root.exists():
+            return False
+        try:
+            if self.project_store is None or Path(self.project_store.project_dir).resolve() != root.resolve():
+                self.project_store = ProjectStore.load(root)
+            return True
+        except Exception as exc:
+            self._log(f"Проект: {exc}\n")
+            return False
+
+    def _catalog_entry_matches_house(self, card_id: str) -> bool:
+        if not card_id:
+            return True
+        try:
+            from archiview_project_model import load_website_buildings_catalog, _text_matches_catalog  # type: ignore
+
+            catalog = load_website_buildings_catalog(APP_DIR)
+            entry = catalog.get(card_id) if isinstance(catalog, dict) else None
+            if not isinstance(entry, dict):
+                return True
+            return bool(
+                _text_matches_catalog(
+                    card_id=card_id,
+                    entry=entry,
+                    address=self.address.get(),
+                    object_name=self.object_name.get(),
+                    folder_name=self.project_root().name,
+                )
+            )
+        except Exception:
+            return True
+
+    def _apply_site_card_autofill(self) -> None:
+        """Нормализует MOSCOW_NNN и подставляет код/название из каталога сайта."""
+        if infer_site_card_id is None or normalize_site_card_id is None:
+            return
+        root = self.project_root()
+        raw = self.site_card_id.get().strip()
+        normalized = normalize_site_card_id(raw)  # type: ignore[misc]
+        if normalized and normalized != raw.upper():
+            self.site_card_id.set(normalized)
+        inferred = infer_site_card_id(  # type: ignore[misc]
+            root,
+            self.address.get(),
+            self.object_name.get(),
+            APP_DIR,
+        )
+        current = normalize_site_card_id(self.site_card_id.get())  # type: ignore[misc]
+        if inferred and (not current or (raw and not normalized)):
+            self.site_card_id.set(inferred)
+        card = normalize_site_card_id(self.site_card_id.get()) or inferred  # type: ignore[misc]
+        if website_display_name is not None and not self.object_name.get().strip():
+            display = website_display_name(card, APP_DIR)
+            if display:
+                self.object_name.set(display)
+        elif card and website_display_name is not None and not self._catalog_entry_matches_house(card):
+            pass
+
+    def _sync_house_identity_from_catalog(self) -> None:
+        self._apply_site_card_autofill()
+
+    def _bind_house_field_autosave(self) -> None:
+        for var in (self.address, self.lat, self.lon, self.object_name, self.site_card_id):
+            var.trace_add("write", self._schedule_house_autosave)
+
+    def _schedule_house_autosave(self, *_args: object) -> None:
+        if self._suppress_house_autosave:
+            return
+        if self._house_save_after_id:
+            try:
+                self.after_cancel(self._house_save_after_id)
+            except Exception:
+                pass
+        self._house_save_after_id = self.after(900, self._autosave_house_fields)
+
+    def _autosave_house_fields(self) -> None:
+        self._house_save_after_id = None
+        if self._suppress_house_autosave:
+            return
+        if not self.project_dir.get().strip():
+            return
+        if self._persist_house_metadata(quiet=True):
+            self._update_house_status_label()
+
+    def _update_house_status_label(self) -> None:
+        if not hasattr(self, "geocode_result"):
+            return
+        parts: List[str] = []
+        name = self.object_name.get().strip()
+        code = self.site_card_id.get().strip().upper()
+        addr = self.address.get().strip()
+        lat = self.lat.get().strip()
+        lon = self.lon.get().strip()
+        if name:
+            parts.append(name)
+        if code:
+            parts.append(code)
+        if addr:
+            parts.append(addr)
+        if lat and lon:
+            parts.append(f"{lat}, {lon}")
+        if parts:
+            self.geocode_result.set(" · ".join(parts))
+        else:
+            self.geocode_result.set("Выберите дом в таблице или укажите точку на карте")
+        self._refresh_workflow_steps()
+
+    def _compute_workflow_steps(self) -> List[Dict[str, object]]:
+        root = self.project_root()
+        proj_name = root.name
+        has_project = (
+            proj_name not in ("new_house_project", "house_project")
+            or (root / "house.json").exists()
+            or (root / "metadata" / "house.json").exists()
+        )
+        lat_s = self.lat.get().strip().replace(",", ".")
+        lon_s = self.lon.get().strip().replace(",", ".")
+        has_location = False
+        if lat_s and lon_s:
+            try:
+                float(lat_s)
+                float(lon_s)
+                has_location = True
+            except ValueError:
+                has_location = False
+        has_location = has_location and bool(self.address.get().strip())
+        has_hist = bool(self.historical_sources)
+        if not has_hist and self.historical_img.get():
+            has_hist = Path(self.historical_img.get()).exists()
+        has_mod = bool(self.modern_img.get()) and Path(self.modern_img.get()).exists()
+        item = self._get_active_historical_item()
+        has_corners = bool(self.modern_points_text.strip()) and bool(
+            item and item.old_points_text.strip()
+        )
+        outdir = Path(self.outdir.get()) if self.outdir.get() else root / "result"
+        has_rect = (outdir / "03_historical_rectified.png").exists() and (
+            outdir / "04_modern_rectified.png"
+        ).exists()
+        has_markup = self._work_dir_has_saved_markup()
+        return [
+            {
+                "id": "project",
+                "done": has_project,
+                "title": "1. Дом в «Мои проекты»",
+                "hint": proj_name if has_project else "Откройте или создайте «Новый дом…»",
+            },
+            {
+                "id": "location",
+                "done": has_location,
+                "title": "2. Адрес и координаты (карта)",
+                "hint": "Кнопка «Карта / выбрать точку» в данных дома",
+            },
+            {
+                "id": "historical",
+                "done": has_hist,
+                "title": "3. Историческое фото",
+                "hint": "PastVu или файл слева внизу",
+            },
+            {
+                "id": "modern",
+                "done": has_mod,
+                "title": "4. Современное фото",
+                "hint": "Файл или Wikimedia справа",
+            },
+            {
+                "id": "corners",
+                "done": has_corners,
+                "title": "5. Четыре угла фасада",
+                "hint": "«Указать 4 угла» → вкладка «Выпрямление»",
+            },
+            {
+                "id": "rectify",
+                "done": has_rect,
+                "title": "6. Выпрямление пары",
+                "hint": "Вкладка «2. Выпрямление» → большая синяя кнопка",
+            },
+            {
+                "id": "markup",
+                "done": has_markup,
+                "title": "7. Разметка и результат",
+                "hint": "Вкладки «4. Разметка» и «5. Результат»",
+            },
+        ]
+
+    def _build_workflow_steps_panel(self, parent: ttk.Widget) -> None:
+        wf = ttk.LabelFrame(parent, text="Шаги работы — по порядку (✓ готово, → перейти)")
+        wf.pack(fill="both", expand=True)
+        wf.columnconfigure(0, weight=1)
+        self.workflow_steps_container = ttk.Frame(wf)
+        self.workflow_steps_container.pack(fill="x", padx=8, pady=6)
+        self._workflow_step_rows: List[Tuple[ttk.Label, ttk.Label, ttk.Button]] = []
+        for step in self._compute_workflow_steps():
+            row = ttk.Frame(self.workflow_steps_container)
+            row.pack(fill="x", pady=1)
+            mark = ttk.Label(row, width=3, font=("TkDefaultFont", 11, "bold"))
+            mark.pack(side="left", anchor="nw")
+            text = ttk.Label(row, anchor="w", justify="left")
+            text.pack(side="left", fill="x", expand=True, padx=(4, 8))
+            sid = str(step["id"])
+            btn = ttk.Button(row, text="→", width=3, command=lambda s=sid: self._workflow_go_step(s))
+            btn.pack(side="right")
+            self._workflow_step_rows.append((mark, text, btn))
+        self.workflow_next_hint = ttk.Label(wf, text="", foreground="#0b6bcb", wraplength=900)
+        self.workflow_next_hint.pack(anchor="w", padx=8, pady=(0, 8))
+
+    def _refresh_workflow_steps(self) -> None:
+        if not hasattr(self, "_workflow_step_rows"):
+            return
+        steps = self._compute_workflow_steps()
+        next_step: Optional[Dict[str, object]] = None
+        for i, step in enumerate(steps):
+            if i >= len(self._workflow_step_rows):
+                break
+            mark_lbl, text_lbl, _btn = self._workflow_step_rows[i]
+            done = bool(step.get("done"))
+            mark_lbl.configure(text="✓" if done else "○", foreground="#087a20" if done else "#888")
+            title = str(step.get("title") or "")
+            hint = str(step.get("hint") or "")
+            text_lbl.configure(text=f"{title} — {hint}", foreground="#333" if done else "#555")
+            if not done and next_step is None:
+                next_step = step
+        if hasattr(self, "workflow_next_hint"):
+            if next_step:
+                self.workflow_next_hint.configure(
+                    text=f"Следующий шаг: {next_step.get('title')} — {next_step.get('hint')}"
+                )
+            else:
+                self.workflow_next_hint.configure(text="Все шаги выполнены. Можно править разметку и экспортировать на сайт.")
+        if self._ensure_project_store_attached():
+            self.project_store.house.workflow_steps = {
+                str(s.get("id", "")): "done" if s.get("done") else "open" for s in steps
+            }
+
+    def _workflow_go_step(self, step_id: str) -> None:
+        if hasattr(self, "notebook") and hasattr(self, "tab_select"):
+            self.notebook.select(self.tab_select)
+        if step_id == "project":
+            return
+        elif step_id == "location":
+            self.open_map_picker()
+        elif step_id == "historical":
+            return
+        elif step_id == "modern":
+            return
+        elif step_id == "corners":
+            if hasattr(self, "notebook") and hasattr(self, "tab_rectify"):
+                self.notebook.select(self.tab_rectify)
+            if hasattr(self, "pick_corners_for_selected_historical"):
+                self.pick_corners_for_selected_historical()
+            elif hasattr(self, "pick_both_corners"):
+                self.pick_both_corners()
+        elif step_id == "rectify":
+            if hasattr(self, "notebook") and hasattr(self, "tab_rectify"):
+                self.notebook.select(self.tab_rectify)
+        elif step_id == "markup":
+            if hasattr(self, "notebook"):
+                if self._work_dir_has_saved_markup() and hasattr(self, "tab_result"):
+                    self.notebook.select(self.tab_result)
+                    if hasattr(self, "_refresh_result_canvas"):
+                        self._refresh_result_canvas()
+                elif hasattr(self, "tab_markup"):
+                    self.notebook.select(self.tab_markup)
+        self._refresh_workflow_steps()
+
+    def _fit_main_window_to_screen(self) -> None:
+        self.update_idletasks()
+        sw = max(800, int(self.winfo_screenwidth()))
+        sh = max(600, int(self.winfo_screenheight()))
+        w = min(1180, sw - 40)
+        h = min(820, sh - 72)
+        x = max(0, (sw - w) // 2)
+        y = max(0, (sh - h) // 2)
+        self.geometry(f"{w}x{h}+{x}+{y}")
+        self.minsize(min(880, w), min(560, h))
+        self.maxsize(sw, sh)
+
+    def _configure_vertical_pane(
+        self,
+        pane: ttk.Panedwindow,
+        top: tk.Widget,
+        bottom: tk.Widget,
+        *,
+        top_minsize: int = 220,
+        bottom_minsize: int = 140,
+        initial_top: int = 320,
+    ) -> None:
+        def apply() -> None:
+            try:
+                pane.pane(top, minsize=top_minsize)
+                pane.pane(bottom, minsize=bottom_minsize)
+                total = max(pane.winfo_height(), top_minsize + bottom_minsize + 40)
+                pane.sashpos(0, min(max(initial_top, top_minsize), total - bottom_minsize))
+            except Exception:
+                pass
+
+        self.after(80, apply)
+        pane.bind("<Configure>", lambda _e: self.after(50, apply))
+
+    def _persist_house_metadata(self, *, quiet: bool = False) -> bool:
+        self._ensure_project_dirs()
+        root = self.project_root()
+        address = self.address.get().strip()
+        if normalize_address_dedupe is not None:
+            address = normalize_address_dedupe(address)  # type: ignore[misc]
+            if address != self.address.get().strip():
+                self.address.set(address)
+        lat = self._parse_float_or_none(self.lat.get())
+        lon = self._parse_float_or_none(self.lon.get())
+        self._apply_site_card_autofill()
+        site_card_id = ""
+        if normalize_site_card_id is not None:
+            site_card_id = normalize_site_card_id(self.site_card_id.get())  # type: ignore[misc]
+        if not site_card_id:
+            if propose_site_card_id is not None:
+                site_card_id = propose_site_card_id(root, address, self.object_name.get(), APP_DIR)  # type: ignore[misc]
+            elif infer_site_card_id is not None:
+                site_card_id = infer_site_card_id(root, address, self.object_name.get(), APP_DIR)  # type: ignore[misc]
+            site_card_id = normalize_site_card_id(site_card_id) if normalize_site_card_id else site_card_id  # type: ignore[misc]
+            if site_card_id:
+                self.site_card_id.set(site_card_id)
+        object_name = self.object_name.get().strip()
+        if not object_name and site_card_id and website_display_name is not None:
+            object_name = website_display_name(site_card_id, APP_DIR)
+            if object_name:
+                self.object_name.set(object_name)
+
+        saved = False
+        if self._ensure_project_store_attached():
+            house = self.project_store.house
+            house.address = address
+            house.lat = lat
+            house.lon = lon
+            house.site_card_id = normalize_site_card_id(site_card_id) or site_card_id  # type: ignore[misc]
+            if object_name:
+                house.object_name = object_name
+            house.project_slug = root.name
+            house.workflow_steps = {
+                str(s.get("id", "")): "done" if s.get("done") else "open"
+                for s in self._compute_workflow_steps()
+            }
+            self.project_store.save()
+            saved = True
+        else:
+            house_json = root / "house.json"
+            legacy_json = root / "metadata" / "house.json"
+            payload: Dict[str, object] = {}
+            if house_json.exists():
+                try:
+                    payload = json.loads(house_json.read_text(encoding="utf-8"))
+                except Exception:
+                    payload = {}
+            payload.update(
+                {
+                    "project_id": root.name,
+                    "address": address,
+                    "lat": lat,
+                    "lon": lon,
+                    "site_card_id": site_card_id,
+                    "object_name": object_name,
+                    "project_slug": root.name,
+                    "workflow_steps": {
+                        str(s.get("id", "")): "done" if s.get("done") else "open"
+                        for s in self._compute_workflow_steps()
+                    },
+                }
+            )
+            house_json.parent.mkdir(parents=True, exist_ok=True)
+            house_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            legacy_json.parent.mkdir(parents=True, exist_ok=True)
+            legacy_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            saved = True
+
+        if saved:
+            self._refresh_my_projects_panel()
+            if not quiet:
+                self._update_house_status_label()
+            elif lat is not None and lon is not None:
+                pass
+        return saved
+
+    def _after_projects_deleted(self, deleted_dirs: List[Path]) -> None:
+        current = self.project_root().resolve()
+        if any(current == d.resolve() for d in deleted_dirs):
+            fresh = APP_DIR / "archiview_projects" / "new_house_project"
+            fresh.mkdir(parents=True, exist_ok=True)
+            self._load_project_into_workflow(fresh)
+        self._refresh_my_projects_panel()
+
+    def _result_workdir_hint(self) -> str:
+        if not self.outdir.get():
+            return ""
+        try:
+            rel = str(Path(self.outdir.get()).resolve().relative_to(self.project_root().resolve()))
+        except Exception:
+            rel = Path(self.outdir.get()).name
+        if self.project_store:
+            cmp = self.project_store.get_active_comparison()
+            if cmp and cmp.is_legacy:
+                return f"Папка: {rel} (старая разметка result/)"
+        return f"Папка: {rel}"
+
+    def _activate_comparison_workdir(self, comparison: "ComparisonSession") -> None:
+        if not self.project_store:
+            return
+        self.project_store.set_active_comparison(comparison.comparison_id)
+        work = comparison.work_path(self.project_store.project_dir)
+        work.mkdir(parents=True, exist_ok=True)
+        current = str(Path(self.outdir.get()).resolve())
+        target = str(work.resolve())
+        if current != target:
+            self.outdir.set(str(work))
+            self._clear_markup_cache()
+            if hasattr(self, "_rectified_images_cache"):
+                self._rectified_images_cache = None
+                self._rectified_cache_key = None
+            if hasattr(self, "_refresh_compare_canvas"):
+                self._refresh_compare_canvas(save=False)
+            if hasattr(self, "_refresh_markup_canvas"):
+                self._refresh_markup_canvas()
+            if hasattr(self, "_refresh_result_canvas"):
+                self._refresh_result_canvas()
+
+    def _create_comparison_for_historical_item(self, item: HistoricalSourceItem) -> Optional["ComparisonSession"]:
+        if not self._ensure_project_store_attached():
+            return None
+        if not self.modern_img.get() or not Path(self.modern_img.get()).exists():
+            return None
+        hist_path = str(Path(item.path).resolve())
+        mod_path = str(Path(self.modern_img.get()).resolve())
+        hist_photo = self.project_store.ensure_photo_from_path(hist_path, "historical", title=item.label)
+        mod_photo = self.project_store.ensure_photo_from_path(mod_path, "modern")
+        title = f"{item.label} + {Path(mod_path).name}"
+        cmp = self.project_store.create_comparison(
+            title=title,
+            modern_photo_id=mod_photo.photo_id,
+            historical_photo_ids=[hist_photo.photo_id],
+            historical_source_key=item.key,
+            modern_source_path=mod_path,
+        )
+        item.comparison_id = cmp.comparison_id
+        self._save_historical_sources()
+        self._activate_comparison_workdir(cmp)
+        self._log(f"Создано сравнение {cmp.comparison_id} для «{item.label}» — чистая папка.\n")
+        self._refresh_project_tabs()
+        return cmp
+
+    def _offer_new_comparison_for_historical(self, item: HistoricalSourceItem) -> None:
+        if not self._ensure_project_store_attached():
+            return
+        existing = self.project_store.find_comparison_for_sources(item.key, self.modern_img.get())
+        if existing:
+            item.comparison_id = existing.comparison_id
+            self._save_historical_sources()
+            self._activate_comparison_workdir(existing)
+            return
+        if item.comparison_id:
+            cmp = self.project_store.get_comparison(item.comparison_id)
+            if cmp:
+                self._activate_comparison_workdir(cmp)
+                return
+        current_has_work = self._work_dir_has_saved_markup() or (
+            Path(self.outdir.get()) / "03_historical_rectified.png"
+        ).exists()
+        if current_has_work:
+            create_new = messagebox.askyesno(
+                "Новое фото — новое сравнение?",
+                f"Добавлено историческое фото «{item.label}».\n\n"
+                "В текущей папке уже есть выпрямление или разметка от другого фото.\n\n"
+                "Создать отдельное сравнение с чистой папкой?\n"
+                "(Старая работа сохранится в своём сравнении.)",
+            )
+            if not create_new:
+                self._log(f"Фото «{item.label}» добавлено в список; активная папка не менялась.\n")
+                return
+        if not self.modern_img.get() or not Path(self.modern_img.get()).exists():
+            self._log(f"Фото «{item.label}» добавлено. Выберите современное фото — затем выпрямление.\n")
+            return
+        self._create_comparison_for_historical_item(item)
+
+    def _work_dir_matches_historical(self, work_dir: Path, item: HistoricalSourceItem) -> bool:
+        if self.project_store:
+            cmp = self.project_store.find_comparison_for_sources(item.key, self.modern_img.get())
+            if cmp:
+                return cmp.work_path(self.project_store.project_dir).resolve() == work_dir.resolve()
+        for name in ("project_v8.json", "project_v7.json", "project_v6.json"):
+            proj = work_dir / name
+            if not proj.exists():
+                continue
+            try:
+                data = json.loads(proj.read_text(encoding="utf-8"))
+                inputs = data.get("inputs", data)
+                hist = inputs.get("historical_image") or inputs.get("old_image") or inputs.get("historical")
+                if hist:
+                    return str(Path(hist).resolve()) == str(Path(item.path).resolve())
+            except Exception:
+                continue
+        return not (work_dir / "03_historical_rectified.png").exists()
+
+    def _switch_session_for_historical(self, item: HistoricalSourceItem) -> None:
+        if not self._ensure_project_store_attached():
+            self._clear_markup_cache()
+            return
+        if item.comparison_id:
+            cmp = self.project_store.get_comparison(item.comparison_id)
+            if cmp:
+                self._activate_comparison_workdir(cmp)
+                return
+        existing = self.project_store.find_comparison_for_sources(item.key, self.modern_img.get())
+        if existing:
+            item.comparison_id = existing.comparison_id
+            self._save_historical_sources()
+            self._activate_comparison_workdir(existing)
+            return
+        current = Path(self.outdir.get())
+        has_work = (current / "03_historical_rectified.png").exists() or self._work_dir_has_saved_markup()
+        if has_work and not self._work_dir_matches_historical(current, item):
+            if self.modern_img.get() and Path(self.modern_img.get()).exists():
+                self._create_comparison_for_historical_item(item)
+                return
+        self._clear_markup_cache()
+
+    def _ensure_work_session_for_active_pair(self) -> Optional[Path]:
+        item = self._get_active_historical_item()
+        if not item or not self.modern_img.get() or not Path(self.modern_img.get()).exists():
+            return Path(self.outdir.get()) if self.outdir.get() else None
+        if not self._ensure_project_store_attached():
+            return Path(self.outdir.get())
+        self._switch_session_for_historical(item)
+        if item.comparison_id:
+            cmp = self.project_store.get_comparison(item.comparison_id)
+            if cmp:
+                return cmp.work_path(self.project_store.project_dir)
+        if not self._work_dir_has_saved_markup() and not (Path(self.outdir.get()) / "03_historical_rectified.png").exists():
+            cmp = self._create_comparison_for_historical_item(item)
+            if cmp:
+                return cmp.work_path(self.project_store.project_dir)
+        return Path(self.outdir.get())
+
+    def _sync_historical_list_from_folder(self) -> None:
+        hist_dir = self.project_root() / "historical_sources"
+        if not hist_dir.exists():
+            return
+        image_ext = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".bmp"}
+        for f in sorted(hist_dir.iterdir()):
+            if not f.is_file() or f.suffix.lower() not in image_ext:
+                continue
+            self._add_historical_source(
+                str(f),
+                f.stem,
+                source_type="folder",
+                set_active=False,
+                save=False,
+            )
+        if self.historical_sources and not self.active_historical_key:
+            self._set_active_historical(self.historical_sources[0], save=False)
+        if self.historical_sources:
+            self._save_historical_sources()
+            self._refresh_historical_sources_tree()
+
+    def _load_modern_from_folder(self) -> None:
+        if self.modern_img.get() and Path(self.modern_img.get()).exists():
+            return
+        mod_dir = self.project_root() / "modern_sources"
+        if not mod_dir.exists():
+            return
+        image_ext = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".bmp"}
+        for f in sorted(mod_dir.iterdir()):
+            if f.is_file() and f.suffix.lower() in image_ext:
+                self.modern_img.set(str(f))
+                if hasattr(self, "modern_source_label"):
+                    self.modern_source_label.set(f"Современное фото из папки проекта: {f.name}")
+                break
+
+    def _load_project_into_workflow(self, project_dir: str | Path) -> None:
+        path = Path(project_dir)
+        self._suppress_house_autosave = True
+        try:
+            self.project_dir.set(str(path))
             self._ensure_project_dirs()
+            self.project_store = None
+            self.site_card_id.set("")
+            self.object_name.set("")
+            self.address.set("")
+            self.lat.set("")
+            self.lon.set("")
+            if ProjectStore is not None:
+                try:
+                    self.project_store = ProjectStore.load(path)
+                    house = self.project_store.house
+                    if house.address:
+                        self.address.set(house.address)
+                    if house.site_card_id:
+                        card = (
+                            normalize_site_card_id(house.site_card_id)  # type: ignore[misc]
+                            if normalize_site_card_id is not None
+                            else house.site_card_id.strip().upper()
+                        )
+                        self.site_card_id.set(card or house.site_card_id)
+                    if house.object_name:
+                        self.object_name.set(house.object_name)
+                    if house.lat is not None:
+                        self.lat.set(str(house.lat))
+                    if house.lon is not None:
+                        self.lon.set(str(house.lon))
+                    work = self.project_store.work_dir_for_active()
+                    self.outdir.set(str(work))
+                    self._apply_site_card_autofill()
+                except Exception as exc:
+                    self._log(f"Метаданные проекта: {exc}\n")
+                    self.outdir.set(str(path / "result"))
+            else:
+                self.outdir.set(str(path / "result"))
+            self._load_legacy_metadata_coords(path)
+            self._sync_house_identity_from_catalog()
+            self.historical_sources = []
+            self.active_historical_key = ""
+            self.old_points_text = ""
+            self.modern_points_text = ""
+            self.modern_crop_rect_text = ""
+            self.historical_img.set("")
+            self.modern_img.set("")
+            self._clear_markup_cache()
+            self._load_historical_sources()
+            self._sync_historical_list_from_folder()
+            self._load_modern_from_folder()
+            active_item = self._get_active_historical_item()
+            if active_item:
+                self._switch_session_for_historical(active_item)
+            self._persist_house_metadata(quiet=True)
+            self._refresh_my_projects_panel()
+            self._log(f"Открыт проект: {path.name}\n")
+            self._update_house_status_label()
+            if hasattr(self, "_refresh_compare_source_thumbnails"):
+                self.after(0, self._refresh_compare_source_thumbnails)
+            if hasattr(self, "_refresh_result_canvas"):
+                self.after(50, self._refresh_result_canvas)
+        finally:
+            self._suppress_house_autosave = False
+
+    def _refresh_my_projects_panel(self) -> None:
+        if hasattr(self, "my_projects_panel"):
+            self.my_projects_panel.refresh()
+
+    def _allocate_new_project_dir(self, slug: str) -> Path:
+        clean = safe_filename(slug.strip(), "house_project") if slug.strip() else "house_project"
+        if clean in ("new_house_project", "house_project"):
+            clean = time.strftime("house_%Y%m%d_%H%M%S")
+        base = APP_DIR / "archiview_projects" / clean
+        root = base
+        n = 2
+        while root.exists():
+            root = Path(f"{base}_{n}")
+            n += 1
+        return root
+
+    def _init_new_project_on_disk(self, root: Path, *, address: str, object_name: str) -> None:
+        for sub in ("historical_sources", "modern_sources", "metadata", "comparisons", "result"):
+            (root / sub).mkdir(parents=True, exist_ok=True)
+        site_id = ""
+        if next_site_card_id is not None:
+            try:
+                site_id = next_site_card_id(APP_DIR)  # type: ignore[misc]
+            except Exception:
+                site_id = ""
+        payload = {
+            "project_id": root.name,
+            "project_slug": root.name,
+            "address": address.strip(),
+            "object_name": object_name.strip(),
+            "site_card_id": site_id,
+            "lat": None,
+            "lon": None,
+            "workflow_steps": {},
+        }
+        text = json.dumps(payload, ensure_ascii=False, indent=2)
+        (root / "house.json").write_text(text, encoding="utf-8")
+        (root / "metadata" / "house.json").write_text(text, encoding="utf-8")
+
+    def new_house_project(self) -> None:
+        text = simpledialog.askstring(
+            "Новый дом",
+            "Введите адрес дома или имя папки проекта\n"
+            "(например: Большая Ордынка 17  или  dom_so_zveryami  или  MOSCOW_004):",
+            parent=self,
+        )
+        if text is None:
+            return
+        text = text.strip()
+        if not text:
+            return
+        # Короткое имя без пробелов — как заданная папка; иначе — адрес и slug из него.
+        if re.match(r"^[\w.\-]+$", text, re.UNICODE) and " " not in text:
+            slug = text
+            address = ""
+            object_name = text.replace("_", " ").replace("-", " ")
+        else:
+            address = text
+            object_name = ""
+            slug = (
+                propose_project_slug("", address, text)  # type: ignore[misc]
+                if propose_project_slug is not None
+                else safe_filename(address, "house_project")
+            )
+            if not slug or slug in ("house_project", "new_house_project"):
+                slug = safe_filename(address, "house_project")
+        root = self._allocate_new_project_dir(slug)
+        try:
+            self._init_new_project_on_disk(root, address=address, object_name=object_name)
+            self._load_project_into_workflow(root)
+            self._refresh_my_projects_panel()
+            if hasattr(self, "my_projects_panel"):
+                self.my_projects_panel.select_by_folder(root.name)
+            messagebox.showinfo(
+                "Новый дом создан",
+                f"Папка проекта:\n{root}\n\nДальше выберите фото PastVu и современное снимок на вкладке «Источники».",
+                parent=self,
+            )
+        except Exception as exc:
+            messagebox.showerror("Не удалось создать дом", str(exc), parent=self)
+
+    def open_excel_import_dialog(self) -> None:
+        if HouseDatabaseFrame is None:
+            messagebox.showwarning(
+                "Модуль не найден",
+                "Для импорта Excel нужен файл archiview_house_db.py рядом с программой.",
+            )
+            return
+        win = tk.Toplevel(self)
+        win.title("Импорт домов из Excel / CSV")
+        win.geometry("980x620")
+        win.minsize(820, 520)
+        frame = HouseDatabaseFrame(
+            win,
+            project_root=APP_DIR / "archiview_projects",
+            on_house_selected=lambda record, paths: self._use_house_from_db(record, paths) or win.destroy(),
+            on_log=self._log,
+        )
+        frame.pack(fill="both", expand=True)
 
     def choose_result_dir(self) -> None:
         path = filedialog.askdirectory(title="Выберите папку результата")
@@ -2367,7 +4042,12 @@ class App(tk.Tk):
                 anchor="nw", padx=12, pady=12
             )
             return
-        self.photos_tab_frame = PhotosTabFrame(parent, get_store=self._get_project_store, on_log=self._log)
+        self.photos_tab_frame = PhotosTabFrame(
+            parent,
+            get_store=self._get_project_store,
+            on_photo_added=self._after_project_photo_added,
+            on_log=self._log,
+        )
         self.photos_tab_frame.pack(fill="both", expand=True)
 
     def _build_comparisons_tab(self, parent: ttk.Frame) -> None:
@@ -2388,12 +4068,7 @@ class App(tk.Tk):
         return self.project_store
 
     def _refresh_project_tabs(self) -> None:
-        if hasattr(self, "houses_tab_frame") and hasattr(self.houses_tab_frame, "refresh_overview"):
-            self.houses_tab_frame.refresh_overview()
-        if hasattr(self, "photos_tab_frame"):
-            self.photos_tab_frame.refresh()
-        if hasattr(self, "comparisons_tab_frame"):
-            self.comparisons_tab_frame.refresh()
+        self._refresh_my_projects_panel()
 
     def _attach_project_store(self, project_dir: str | Path) -> None:
         if ProjectStore is None:
@@ -2410,23 +4085,72 @@ class App(tk.Tk):
             self.lon.set(str(self.project_store.house.lon))
         self._apply_active_comparison_photos()
         self._ensure_project_dirs()
-        self._refresh_project_tabs()
+        self._load_historical_sources()
+        self._refresh_my_projects_panel()
 
-    def _open_project_dir(self, project_dir: str | Path, go_tab: str = "photos") -> None:
+    def _open_project_dir(self, project_dir: str | Path, go_tab: str = "result") -> None:
         try:
-            self._attach_project_store(project_dir)
-            self._log(f"Открыт проект: {project_dir}\n")
-            if hasattr(self, "geocode_result"):
-                self.geocode_result.set(f"Открыт проект: {self.project_store.house.address or project_dir}")
-            if hasattr(self, "notebook"):
-                if go_tab == "sources" and hasattr(self, "tab_select"):
-                    self.notebook.select(self.tab_select)
-                elif go_tab == "comparisons" and hasattr(self, "tab_comparisons"):
-                    self.notebook.select(self.tab_comparisons)
-                elif hasattr(self, "tab_photos"):
-                    self.notebook.select(self.tab_photos)
+            self._load_project_into_workflow(project_dir)
+            if not hasattr(self, "notebook"):
+                return
+            tab_map = {
+                "sources": getattr(self, "tab_select", None),
+                "result": getattr(self, "tab_result", None),
+                "compare": getattr(self, "tab_compare", None),
+                "markup": getattr(self, "tab_markup", None),
+                "rectify": getattr(self, "tab_rectify", None),
+            }
+            target = tab_map.get(go_tab) or getattr(self, "tab_select", None)
+            if target is not None:
+                self.notebook.select(target)
+            if go_tab == "result" and hasattr(self, "_refresh_result_canvas"):
+                self._refresh_result_canvas()
+            elif go_tab == "compare" and hasattr(self, "_refresh_compare_canvas"):
+                self._refresh_compare_canvas(save=False)
         except Exception as exc:
             messagebox.showerror("Ошибка открытия проекта", str(exc))
+
+    def _compare_source_thumb_path(self, kind: str) -> Optional[Path]:
+        outdir = Path(self.outdir.get())
+        if kind == "historical":
+            candidates = [
+                outdir / "03_historical_rectified.png",
+                Path(self.historical_img.get()) if self.historical_img.get() else None,
+            ]
+        else:
+            candidates = [
+                outdir / "04_modern_rectified.png",
+                Path(self.modern_img.get()) if self.modern_img.get() else None,
+            ]
+        for cand in candidates:
+            if cand and cand.exists():
+                return cand
+        return None
+
+    def _set_photo_thumb(self, label: ttk.Label, path: Optional[Path], caption: str, ref_attr: str) -> None:
+        if Image is None or ImageTk is None or not path or not path.exists():
+            label.configure(image="", text=f"{caption}\n(нет фото)")
+            return
+        try:
+            pil = Image.open(path).convert("RGB")  # type: ignore[union-attr]
+            pil.thumbnail((168, 112))
+            photo = ImageTk.PhotoImage(pil)  # type: ignore[union-attr]
+            setattr(self, ref_attr, photo)
+            label.configure(image=photo, text="")
+        except Exception:
+            label.configure(image="", text=f"{caption}\n(ошибка загрузки)")
+
+    def _refresh_compare_source_thumbnails(self) -> None:
+        if not hasattr(self, "compare_hist_thumb_label"):
+            return
+        hist = self._compare_source_thumb_path("historical")
+        mod = self._compare_source_thumb_path("modern")
+        self._set_photo_thumb(self.compare_hist_thumb_label, hist, "Историческое", "_compare_hist_thumb_ref")
+        self._set_photo_thumb(self.compare_modern_thumb_label, mod, "Современное", "_compare_modern_thumb_ref")
+        hist_name = hist.name if hist else "—"
+        mod_name = mod.name if mod else "—"
+        if hasattr(self, "compare_thumb_caption"):
+            self.compare_thumb_caption.set(f"Сравниваем: {hist_name}  ↔  {mod_name}")
 
     def _apply_active_comparison_photos(self) -> None:
         if not self.project_store:
@@ -2450,6 +4174,101 @@ class App(tk.Tk):
                 if path:
                     self.historical_img.set(str(path))
 
+    def _clear_markup_cache(self) -> None:
+        self.embedded_annotations = []
+        self.current_markup_points = []
+        self._annotation_loaded_for = None
+        if hasattr(self, "_preview_base_cache"):
+            self._preview_base_cache.clear()
+
+    def _work_dir_has_saved_markup(self) -> bool:
+        outdir = Path(self.outdir.get())
+        ann_path = outdir / "annotations" / "manual_annotations.json"
+        if ann_path.exists():
+            try:
+                data = json.loads(ann_path.read_text(encoding="utf-8"))
+                anns = data.get("annotations", [])
+                if isinstance(anns, list) and len(anns) > 0:
+                    return True
+            except Exception:
+                pass
+        legacy_marked = outdir / "07_marked_on_original_modern.png"
+        return legacy_marked.exists()
+
+    def _after_project_photo_added(self, photo) -> None:
+        """После добавления фото — предложить новое сравнение, чтобы не смешивать со старой разметкой."""
+        if not self.project_store:
+            return
+
+        cmp = self.project_store.get_active_comparison()
+        cmp_label = cmp.comparison_id if cmp else "result/"
+        has_old = self._work_dir_has_saved_markup() or (cmp is not None and cmp.is_legacy)
+
+        if photo.kind == "historical":
+            pair_list = self.project_store.list_photos("modern")
+            question = (
+                f"Добавлено историческое фото {photo.photo_id}.\n\n"
+                f"Сейчас активно сравнение «{cmp_label}»"
+                + (" — там уже есть разметка." if has_old else ".")
+                + "\n\nСоздать новое сравнение для этой пары?\n"
+                "Старая разметка в result/ и cmp_legacy_001 не изменится."
+            )
+        else:
+            pair_list = self.project_store.list_photos("historical")
+            question = (
+                f"Добавлено современное фото {photo.photo_id}.\n\n"
+                f"Создать новое сравнение с этим фото?\n"
+                "Старая разметка останется в прежнем сравнении."
+            )
+
+        if not pair_list:
+            messagebox.showinfo(
+                "Фото добавлено",
+                f"{photo.photo_id} сохранено в проект.\n\n"
+                f"Добавьте также {'современное' if photo.kind == 'historical' else 'историческое'} фото, "
+                "затем создайте сравнение во вкладке «2. Сравнения».",
+            )
+            return
+
+        if has_old or cmp is not None:
+            create_new = messagebox.askyesno("Новое фото — новое сравнение?", question)
+        else:
+            create_new = messagebox.askyesno(
+                "Создать сравнение?",
+                f"Фото {photo.photo_id} добавлено.\n\nСразу создать для него новое сравнение?",
+            )
+
+        if not create_new:
+            self._log(
+                f"Фото {photo.photo_id} только добавлено в библиотеку. "
+                f"Активная разметка по-прежнему в «{cmp_label}».\n"
+            )
+            return
+
+        if photo.kind == "historical":
+            modern_id = pair_list[0].photo_id
+            hist_ids = [photo.photo_id]
+        else:
+            modern_id = photo.photo_id
+            hist_ids = [pair_list[0].photo_id]
+
+        title = f"{photo.photo_id} + {modern_id if photo.kind == 'historical' else hist_ids[0]}"
+        new_cmp = self.project_store.create_comparison(
+            title=title,
+            modern_photo_id=modern_id,
+            historical_photo_ids=hist_ids,
+        )
+        self.outdir.set(str(new_cmp.work_path(self.project_store.project_dir)))
+        self._apply_active_comparison_photos()
+        self._clear_markup_cache()
+        self._ensure_project_dirs()
+        self._log(
+            f"Создано новое сравнение {new_cmp.comparison_id} — чистая папка, старая разметка не затронута.\n"
+        )
+        self._refresh_project_tabs()
+        if hasattr(self, "notebook") and hasattr(self, "tab_select"):
+            self.notebook.select(self.tab_select)
+
     def _open_comparison_session(self, comparison) -> None:
         if not self.project_store:
             return
@@ -2458,6 +4277,7 @@ class App(tk.Tk):
             work = self.project_store.work_dir_for_active()
             self.outdir.set(str(work))
             self._apply_active_comparison_photos()
+            self._clear_markup_cache()
             self._ensure_project_dirs()
             self._log(f"Активно сравнение: {comparison.comparison_id} → {work}\n")
             if comparison.is_legacy:
@@ -2469,7 +4289,7 @@ class App(tk.Tk):
             messagebox.showerror("Ошибка открытия сравнения", str(exc))
 
     def _use_house_from_db(self, record, paths) -> None:
-        """Получает дом из вкладки «База домов» и подставляет его в основной workflow."""
+        """Дом из Excel — создаёт папку и открывает на вкладке «Источники»."""
         try:
             self.address.set(record.address or "")
             self.project_dir.set(str(paths["project_dir"]))
@@ -2485,15 +4305,13 @@ class App(tk.Tk):
 
             self.current_house_record = record
             self.current_house_paths = paths
-            self._ensure_project_dirs()
-            self._attach_project_store(paths["project_dir"])
-
+            if getattr(record, "object_name", None):
+                self.object_name.set(str(record.object_name))
+            self._load_project_into_workflow(paths["project_dir"])
+            self._persist_house_metadata()
             self._log(f"Выбран дом из базы: {record.address}\n")
             self._log(f"Папка проекта: {paths['project_dir']}\n")
-
-            if hasattr(self, "notebook") and hasattr(self, "tab_photos"):
-                self.notebook.select(self.tab_photos)
-            elif hasattr(self, "notebook") and hasattr(self, "tab_select"):
+            if hasattr(self, "notebook") and hasattr(self, "tab_select"):
                 self.notebook.select(self.tab_select)
 
         except Exception as exc:
@@ -2505,27 +4323,60 @@ class App(tk.Tk):
             (root / sub).mkdir(parents=True, exist_ok=True)
 
     def _project_slug(self) -> str:
+        """Имя папки для нового дома: название объекта или адрес, не имя файла PastVu."""
+        if propose_project_slug is not None:
+            slug = propose_project_slug(  # type: ignore[misc]
+                self.object_name.get(),
+                self.address.get(),
+                "",
+            )
+            if slug and slug not in ("house_project", "new_house_project"):
+                return slug
+        if self.object_name.get().strip():
+            return safe_filename(self.object_name.get().strip(), "house_project")
         if self.address.get().strip():
             return safe_filename(self.address.get().strip(), "house_project")
-        if self.modern_img.get():
-            return safe_filename(Path(self.modern_img.get()).stem, "house_project")
-        if self.historical_img.get():
-            return safe_filename(Path(self.historical_img.get()).stem, "house_project")
+        code = self.site_card_id.get().strip().upper()
+        if code and re.match(r"MOSCOW_\d{3}", code):
+            return safe_filename(code.lower(), "house_project")
         return "house_project"
 
-    def _suggest_project_dir(self) -> None:
-        # Do not keep moving the project folder after the user has already started a house project.
-        # Exception: if an address is entered/found, using it as the stable house name is helpful.
-        current_name = Path(self.project_dir.get()).name
-        has_address = bool(self.address.get().strip())
-        if current_name not in ("new_house_project", "house_project") and not has_address:
+    def _project_is_established(self) -> bool:
+        """Открытый дом — не переносить в другую папку при карте/адресе/фото."""
+        path_s = self.project_dir.get().strip()
+        if not path_s:
+            return False
+        root = Path(path_s)
+        if (root / "house.json").exists() or (root / "metadata" / "house.json").exists():
+            return True
+        return root.name not in ("new_house_project", "house_project", "")
+
+    def _ensure_work_dirs(self) -> None:
+        """Обновить только рабочую папку (result/ или comparisons/), не меняя проект."""
+        if not self.project_dir.get().strip():
+            return
+        if self._ensure_project_store_attached():
+            work = self.project_store.work_dir_for_active()
+            self.outdir.set(str(work))
+        else:
             self.outdir.set(str(self.project_root() / "result"))
-            self._ensure_project_dirs()
+        self._ensure_project_dirs()
+
+    def _suggest_project_dir(self) -> None:
+        """Подобрать папку только для нового дома. Открытый проект — только обновить result/comparisons."""
+        if self._project_is_established():
+            self._ensure_work_dirs()
             return
         slug = self._project_slug()
-        if not slug or slug == "new_house_project":
+        if not slug or slug in ("new_house_project", "house_project"):
             slug = "house_project"
         root = APP_DIR / "archiview_projects" / slug
+        if root.resolve() != self.project_root().resolve():
+            i = 2
+            base = root
+            while root.exists() and not (root / "house.json").exists():
+                root = Path(f"{base}_{i}")
+                i += 1
         self.project_dir.set(str(root))
         self.outdir.set(str(root / "result"))
         self._ensure_project_dirs()
@@ -2619,8 +4470,14 @@ class App(tk.Tk):
             lat, lon, display = result  # type: ignore[misc]
             self.lat.set(f"{lat:.7f}")
             self.lon.set(f"{lon:.7f}")
-            self.geocode_result.set(display)
+            if display and not self.address.get().strip():
+                self.address.set(display)
             self._suggest_project_dir()
+            self._sync_house_identity_from_catalog()
+            if self._persist_house_metadata(quiet=True):
+                self._update_house_status_label()
+            else:
+                self.geocode_result.set(display)
             self._log(f"Координаты найдены: {lat:.7f}, {lon:.7f}\n")
 
         self._run_bg("Поиск координат", work, done)
@@ -2735,7 +4592,7 @@ class App(tk.Tk):
             caption.pack(padx=4, pady=2)
             btns = ttk.Frame(cell)
             btns.pack(padx=4, pady=(2, 5))
-            ttk.Button(btns, text="Выбрать", command=lambda p=photo: self.select_pastvu_photo(p)).pack(side="left")
+            ttk.Button(btns, text="Добавить", command=lambda p=photo: self.select_pastvu_photo(p)).pack(side="left")
             ttk.Button(btns, text="Миниатюра", command=lambda l=lbl, u=urls: self._manual_load_thumbnail(l, u, (180, 125), self.pastvu_thumb_refs)).pack(side="left", padx=4)
             ttk.Button(btns, text="Страница", command=lambda p=photo: webbrowser.open(p.page_url)).pack(side="left", padx=4)
 
@@ -2750,11 +4607,9 @@ class App(tk.Tk):
 
         def done(result: object) -> None:
             path = Path(result)  # type: ignore[arg-type]
-            self.historical_img.set(str(path))
-            self.old_points_text = ""
-            self.modern_points_text = ""
-            self.points_status.set("Углы сброшены: выбрано новое историческое фото.")
-            self.selected_source_label.set(f"Выбрано PastVu #{photo.cid}; сохранено в historical_sources.")
+            label = f"PastVu #{photo.cid}"
+            item = self._add_historical_source(str(path), label, source_type="pastvu", pastvu_cid=photo.cid)
+            self.selected_source_label.set(f"Добавлено в список: {label}")
             self._log(f"Старое фото сохранено: {path}\n")
 
         self._run_bg("Скачивание PastVu", work, done)
@@ -2768,9 +4623,73 @@ class App(tk.Tk):
     def _set_coords_from_map(self, lat: float, lon: float) -> None:
         self.lat.set(f"{lat:.7f}")
         self.lon.set(f"{lon:.7f}")
-        self.geocode_result.set(f"Точка выбрана на карте: {lat:.7f}, {lon:.7f}")
+        self.geocode_result.set(f"Точка на карте: {lat:.7f}, {lon:.7f} — определяю адрес…")
         self._suggest_project_dir()
-        self._log(f"Координаты получены с карты: {lat:.7f}, {lon:.7f}\n")
+        self._log(f"Координаты с карты: {lat:.7f}, {lon:.7f}\n")
+
+        def work() -> object:
+            return reverse_geocode_address(lat, lon)
+
+        def done(result: object) -> None:
+            display, short = result  # type: ignore[misc]
+            merged = short or display
+            if merge_map_address is not None:
+                merged = merge_map_address(self.address.get().strip(), merged)  # type: ignore[misc]
+            elif normalize_address_dedupe is not None:
+                merged = normalize_address_dedupe(merged)  # type: ignore[misc]
+            if merged:
+                self.address.set(merged)
+            hint = ""
+            card = ""
+            if normalize_site_card_id is not None:
+                card = normalize_site_card_id(self.site_card_id.get())  # type: ignore[misc]
+            addr_l = (merged or "").lower()
+            if card and not self._catalog_entry_matches_house(card):
+                parts = [p.strip() for p in (merged or "").split(",") if p.strip()]
+                short_name = ", ".join(parts[1:]) if len(parts) > 1 and parts[0].casefold() in ("москва", "moscow", "г москва") else (merged or "")
+                if short_name:
+                    self.object_name.set(short_name)
+                hint = ""
+                if card == "MOSCOW_004" and "ордын" in addr_l:
+                    hint = " Для Большой Ордынки 17 в каталоге сайта обычно MOSCOW_001, не MOSCOW_004."
+                elif card == "MOSCOW_001" and "кривоколен" in addr_l:
+                    hint = " Для Кривоколенного в каталоге — MOSCOW_004."
+            has_house = _address_has_house_number(merged or "")
+            if not has_house and merged:
+                extra = simpledialog.askstring(
+                    "Номер дома",
+                    f"Карта определила улицу, но не номер здания:\n{merged}\n\n"
+                    "Введите номер и строение (например 14с3) — они добавятся к адресу:",
+                    parent=self,
+                )
+                if extra and str(extra).strip():
+                    hn = str(extra).strip()
+                    merged = f"{merged}, {hn}" if hn.lower() not in merged.lower() else merged
+                    if normalize_address_dedupe is not None:
+                        merged = normalize_address_dedupe(merged)  # type: ignore[misc]
+                    self.address.set(merged)
+                    has_house = True
+            self._apply_site_card_autofill()
+            if self._persist_house_metadata(quiet=True):
+                self._update_house_status_label()
+                self._refresh_my_projects_panel()
+                if has_house:
+                    msg = f"С карты сохранено в «Данные дома» и в папку проекта:\n{merged}"
+                    if hint:
+                        msg += f"\n\nВнимание:{hint}"
+                    self.geocode_result.set(msg.replace("\n\n", " — "))
+                    messagebox.showinfo("Данные с карты сохранены", msg, parent=self)
+                else:
+                    self.geocode_result.set(
+                        f"С карты: {merged} — номер не найден в OSM; введите номер вручную в поле «Адрес»"
+                    )
+            else:
+                self._update_house_status_label()
+                self.geocode_result.set(f"Координаты: {lat:.7f}, {lon:.7f} — адрес: {merged}")
+            self._log(f"Адрес по карте (папка «{Path(self.project_dir.get()).name}» не менялась): {merged}\n")
+            self._refresh_workflow_steps()
+
+        self._run_bg("Адрес по точке на карте", work, done)
 
     def _ensure_map_callback_server(self) -> str:
         if self._map_server is not None:
@@ -2826,24 +4745,34 @@ class App(tk.Tk):
 <title>Выбрать точку здания</title>
 <link rel='stylesheet' href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'>
 <style>body{{font-family:Arial,sans-serif;margin:0}} #map{{height:84vh}} .box{{padding:12px;background:#fff;box-shadow:0 1px 8px #bbb;position:relative;z-index:999}} input{{font-size:18px;width:360px}} button{{font-size:16px}} .ok{{color:#087a20;font-weight:bold}}</style></head>
-<body><div class='box'>Кликните по зданию на карте — координаты автоматически попадут в программу.<br>
+<body><div class='box'><b>Клик по крыше/контуру здания</b> (не по проезжей части), затем «Передать в программу».<br>
+Координаты и адрес с номером дома подставятся в «Данные дома».<br>
 <input id='coords' value='{lat:.7f}, {lon:.7f}'><button onclick='sendCoords()'>Передать в программу</button> <span id='status'></span></div>
 <div id='map'></div><script src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'></script><script>
 const cb='{callback}';
-const map=L.map('map').setView([{lat:.7f},{lon:.7f}],18);
+const map=L.map('map').setView([{lat:.7f},{lon:.7f}],19);
 L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png',{{maxZoom:20, attribution:'© OpenStreetMap'}}).addTo(map);
 let marker=L.marker([{lat:.7f},{lon:.7f}]).addTo(map);
 let last={{lat:{lat:.7f},lng:{lon:.7f}}};
 function sendCoords(){{
   document.getElementById('coords').value=last.lat.toFixed(7)+', '+last.lng.toFixed(7);
   const img=new Image(); img.src=cb+'?lat='+last.lat.toFixed(7)+'&lon='+last.lng.toFixed(7)+'&t='+(Date.now());
-  document.getElementById('status').innerHTML='<span class="ok">передано</span>';
+  document.getElementById('status').innerHTML='<span class="ok">передано — ждите адрес в программе</span>';
 }}
-map.on('click',e=>{{last=e.latlng; marker.setLatLng(e.latlng); sendCoords();}});
+map.on('click',e=>{{
+  last=e.latlng; marker.setLatLng(e.latlng);
+  document.getElementById('coords').value=last.lat.toFixed(7)+', '+last.lng.toFixed(7);
+  document.getElementById('status').textContent='точка выбрана — нажмите «Передать в программу»';
+}});
 </script></body></html>"""
         path.write_text(html_text, encoding="utf-8")
         open_path(path)
-        messagebox.showinfo("Карта открыта", "Кликните по зданию на карте. Координаты должны автоматически появиться в программе.")
+        messagebox.showinfo(
+            "Карта открыта",
+            "1. Увеличьте карту и кликните по зданию (крыша/контур), не по улице.\n"
+            "2. Нажмите «Передать в программу».\n"
+            "3. Если номер дома не подставился — появится окно для ввода (например 14с3).",
+        )
 
     # ------------------------- Modern open imagery ----------------------
 
@@ -2942,6 +4871,7 @@ map.on('click',e=>{{last=e.latlng; marker.setLatLng(e.latlng); sendCoords();}});
             self._write_source_note(path, metadata)
         self.old_points_text = ""
         self.modern_points_text = ""
+        self.modern_crop_rect_text = ""
         self.points_status.set("Углы сброшены: выбрано новое современное фото.")
 
     def select_open_modern_photo(self, photo: OpenStreetPhoto) -> None:
@@ -3043,19 +4973,249 @@ map.on('click',e=>{{last=e.latlng; marker.setLatLng(e.latlng); sendCoords();}});
     def choose_historical_img(self) -> None:
         path = filedialog.askopenfilename(title="Выберите историческое фото", filetypes=IMAGE_TYPES)
         if path:
-            self.historical_img.set(path)
             self.selected_pastvu = None
             self._suggest_project_dir()
+            final_path = path
             try:
                 copied = self._copy_to_project_sources(path, "historical_sources", prefix="manual_old_")
-                self.historical_img.set(str(copied))
-                self.selected_source_label.set("Историческое фото выбрано вручную и скопировано в historical_sources.")
+                final_path = str(copied)
                 self._log(f"Историческое фото скопировано в папку проекта: {copied}\n")
             except Exception as exc:
                 self._log(f"Не удалось скопировать историческое фото в проект: {exc}\nИспользую исходный путь.\n")
+            label = Path(final_path).name
+            item = self._add_historical_source(final_path, label, source_type="file")
+            self.selected_source_label.set(f"Добавлено в список: {label}")
+
+    def _historical_sources_json(self) -> Path:
+        return self.project_root() / "metadata" / "historical_sources.json"
+
+    def _save_historical_sources(self) -> None:
+        try:
+            path = self._historical_sources_json()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "modern_points_text": self.modern_points_text,
+                "modern_crop_rect_text": self.modern_crop_rect_text,
+                "active_key": self.active_historical_key,
+                "items": [asdict(item) for item in self.historical_sources],
+            }
+            path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
+    def _load_historical_sources(self) -> None:
+        path = self._historical_sources_json()
+        self.historical_sources = []
+        self.active_historical_key = ""
+        if not path.exists():
+            if self.historical_img.get() and Path(self.historical_img.get()).exists():
+                p = str(Path(self.historical_img.get()).resolve())
+                self._add_historical_source(p, Path(p).name, source_type="legacy", save=False, set_active=True)
+            return
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            self.modern_points_text = str(data.get("modern_points_text") or "")
+            self.modern_crop_rect_text = str(data.get("modern_crop_rect_text") or "")
+            self.active_historical_key = str(data.get("active_key") or "")
+            for raw in data.get("items", []):
+                if not isinstance(raw, dict) or not raw.get("path"):
+                    continue
+                resolved = str(Path(raw["path"]).resolve())
+                self.historical_sources.append(
+                    HistoricalSourceItem(
+                        key=str(raw.get("key") or resolved),
+                        path=str(raw["path"]),
+                        label=str(raw.get("label") or Path(raw["path"]).name),
+                        old_points_text=str(raw.get("old_points_text") or ""),
+                        crop_rect_text=str(raw.get("crop_rect_text") or ""),
+                        source_type=str(raw.get("source_type") or "file"),
+                        pastvu_cid=raw.get("pastvu_cid"),
+                        comparison_id=str(raw.get("comparison_id") or ""),
+                    )
+                )
+            active = self._get_active_historical_item()
+            if active:
+                self.historical_img.set(active.path)
+                self.old_points_text = active.old_points_text
+            elif self.historical_sources:
+                self._set_active_historical(self.historical_sources[0], save=False)
+            self._refresh_historical_sources_tree()
+        except Exception:
+            pass
+
+    def _add_historical_source(
+        self,
+        path: str,
+        label: str,
+        *,
+        source_type: str = "file",
+        pastvu_cid: Optional[int] = None,
+        set_active: bool = True,
+        save: bool = True,
+    ) -> HistoricalSourceItem:
+        key = str(Path(path).resolve())
+        for item in self.historical_sources:
+            if item.key == key:
+                if set_active:
+                    self._set_active_historical(item, save=save)
+                return item
+        item = HistoricalSourceItem(
+            key=key,
+            path=path,
+            label=label,
+            source_type=source_type,
+            pastvu_cid=pastvu_cid,
+        )
+        self.historical_sources.append(item)
+        if set_active:
+            self._set_active_historical(item, save=save)
+        elif save:
+            self._save_historical_sources()
+            self._refresh_historical_sources_tree()
+        if save and set_active:
+            self.after(0, lambda i=item: self._offer_new_comparison_for_historical(i))
+        return item
+
+    def _get_active_historical_item(self) -> Optional[HistoricalSourceItem]:
+        if not self.historical_sources:
+            return None
+        if self.active_historical_key:
+            for item in self.historical_sources:
+                if item.key == self.active_historical_key:
+                    return item
+        return self.historical_sources[0]
+
+    def _set_active_historical(self, item: HistoricalSourceItem, *, save: bool = True) -> None:
+        self.active_historical_key = item.key
+        self.historical_img.set(item.path)
+        self.old_points_text = item.old_points_text
+        if item.old_points_text:
+            self.points_status.set(f"4 угла заданы для: {item.label}")
+        else:
+            self.points_status.set(f"Активно: {item.label}. Углы ещё не выбраны.")
+        self._refresh_historical_sources_tree()
+        self._switch_session_for_historical(item)
+        if save:
+            self._save_historical_sources()
+
+    def _refresh_historical_sources_tree(self) -> None:
+        if not hasattr(self, "hist_sources_tree"):
+            return
+        tree = self.hist_sources_tree
+        tree.delete(*tree.get_children())
+        for i, item in enumerate(self.historical_sources):
+            active = "●" if item.key == self.active_historical_key else ""
+            pts = "Да" if item.old_points_text else "Нет"
+            tree.insert("", "end", iid=str(i), values=(active, item.label, pts, item.source_type))
+
+    def _selected_historical_source(self) -> Optional[HistoricalSourceItem]:
+        if not hasattr(self, "hist_sources_tree"):
+            return self._get_active_historical_item()
+        sel = self.hist_sources_tree.selection()
+        if not sel:
+            return self._get_active_historical_item()
+        idx = int(sel[0])
+        if 0 <= idx < len(self.historical_sources):
+            return self.historical_sources[idx]
+        return self._get_active_historical_item()
+
+    def activate_selected_historical_source(self) -> None:
+        item = self._selected_historical_source()
+        if not item:
+            messagebox.showinfo("Список пуст", "Сначала добавьте историческое фото из PastVu или с компьютера.")
+            return
+        self._set_active_historical(item)
+
+    def remove_selected_historical_source(self) -> None:
+        item = self._selected_historical_source()
+        if not item:
+            return
+        if not messagebox.askyesno("Удалить из списка", f"Убрать «{item.label}» из списка сравнения?"):
+            return
+        self.historical_sources = [x for x in self.historical_sources if x.key != item.key]
+        if self.active_historical_key == item.key:
+            self.active_historical_key = ""
             self.old_points_text = ""
-            self.modern_points_text = ""
-            self.points_status.set("Углы сброшены: выбрано новое историческое фото.")
+            if self.historical_sources:
+                self._set_active_historical(self.historical_sources[0])
+            else:
+                self.historical_img.set("")
+                self._refresh_historical_sources_tree()
+                self._save_historical_sources()
+            return
+        self._refresh_historical_sources_tree()
+        self._save_historical_sources()
+
+    def _historical_sources_for_picker(self) -> List[Dict[str, str]]:
+        out: List[Dict[str, str]] = []
+        for it in self.historical_sources:
+            if Path(it.path).exists():
+                out.append(
+                    {
+                        "path": it.path,
+                        "label": it.label,
+                        "points": it.old_points_text or "",
+                        "crop_rect": it.crop_rect_text or "",
+                        "key": it.key,
+                    }
+                )
+        return out
+
+    def _apply_picker_historical_points(self, hist_sources: List[Dict[str, str]]) -> None:
+        by_path = {str(s.get("path") or ""): s for s in hist_sources}
+        for it in self.historical_sources:
+            if it.path in by_path:
+                row = by_path[it.path]
+                it.old_points_text = str(row.get("points") or "")
+                it.crop_rect_text = str(row.get("crop_rect") or "")
+
+    def pick_corners_for_selected_historical(self) -> None:
+        item = self._selected_historical_source()
+        if not item:
+            messagebox.showinfo("Список пуст", "Сначала добавьте историческое фото в список слева.")
+            return
+        if not Path(item.path).exists():
+            messagebox.showinfo("Файл не найден", f"Не найдено: {item.path}")
+            return
+        if not self.modern_img.get() or not Path(self.modern_img.get()).exists():
+            messagebox.showinfo("Нужно современное фото", "Справа выберите современное фото для сравнения.")
+            return
+        sources = self._historical_sources_for_picker()
+        if not sources:
+            messagebox.showinfo("Нет файлов", "Нет доступных исторических фото на диске.")
+            return
+        self._set_active_historical(item, save=False)
+        start = next((i for i, s in enumerate(sources) if s["path"] == item.path), 0)
+
+        def receive(
+            old_points: str,
+            modern_points: str,
+            hist_sources: List[Dict[str, str]],
+            modern_crop_rect: str,
+        ) -> None:
+            self._apply_picker_historical_points(hist_sources)
+            item.old_points_text = old_points
+            self.old_points_text = old_points
+            self.modern_points_text = modern_points
+            self.modern_crop_rect_text = modern_crop_rect
+            self.points_status.set(f"4 угла заданы для: {item.label}")
+            if self.modern_points_text:
+                self.rectified_status.set("Углы выбраны. Можно выпрямлять на вкладке «Выпрямление».")
+            self._save_historical_sources()
+            self._refresh_historical_sources_tree()
+            self._log(f"4 угла сохранены для {item.label}.\n")
+            self._refresh_workflow_steps()
+
+        DualFacadePointPicker(
+            self,
+            self.modern_img.get(),
+            receive,
+            historical_sources=sources,
+            start_index=start,
+            initial_modern_points_text=self.modern_points_text,
+            initial_modern_crop_rect_text=self.modern_crop_rect_text,
+            lock_modern_when_complete=False,
+        )
 
     def choose_modern_img(self) -> None:
         path = filedialog.askopenfilename(title="Выберите современное фото", filetypes=IMAGE_TYPES)
@@ -3069,25 +5229,55 @@ map.on('click',e=>{{last=e.latlng; marker.setLatLng(e.latlng); sendCoords();}});
             except Exception as exc:
                 self._set_modern_image_path(Path(path), "Современное фото выбрано с компьютера, но не скопировано в проект.", {"source_type": "local_file", "original_path": path})
                 self._log(f"Не удалось скопировать современное фото в проект: {exc}\nИспользую исходный путь.\n")
+            self._refresh_workflow_steps()
 
     # ----------------------------- Points and rectification -------------
 
     def pick_both_corners(self) -> None:
-        if not self.historical_img.get() or not Path(self.historical_img.get()).exists():
-            messagebox.showinfo("Нужно старое фото", "Сначала выберите историческое фото: PastVu или файл с компьютера.")
+        item = self._get_active_historical_item()
+        if not item or not Path(item.path).exists():
+            messagebox.showinfo(
+                "Нужно старое фото",
+                "Сначала добавьте историческое фото в список на вкладке «Источники» (PastVu или файл).",
+            )
             return
         if not self.modern_img.get() or not Path(self.modern_img.get()).exists():
             messagebox.showinfo("Нужно современное фото", "Сначала выберите современное фото.")
             return
 
-        def receive(old_points: str, modern_points: str) -> None:
+        sources = self._historical_sources_for_picker()
+        if not sources:
+            messagebox.showinfo("Нет файлов", "Нет доступных исторических фото на диске.")
+            return
+        start = next((i for i, s in enumerate(sources) if s["path"] == item.path), 0)
+
+        def receive(
+            old_points: str,
+            modern_points: str,
+            hist_sources: List[Dict[str, str]],
+            modern_crop_rect: str,
+        ) -> None:
+            self._apply_picker_historical_points(hist_sources)
+            item.old_points_text = old_points
             self.old_points_text = old_points
             self.modern_points_text = modern_points
-            self.points_status.set("Выбрано 4 пары углов на двух фото.")
+            self.modern_crop_rect_text = modern_crop_rect
+            self.points_status.set(f"4 угла заданы для: {item.label}")
             self.rectified_status.set("Углы выбраны. Теперь нажмите “Подготовить выпрямленные фото и overlay”.")
+            self._save_historical_sources()
+            self._refresh_historical_sources_tree()
             self._log("4 пары углов выбраны в одном окне.\n")
 
-        DualFacadePointPicker(self, self.historical_img.get(), self.modern_img.get(), receive)
+        DualFacadePointPicker(
+            self,
+            self.modern_img.get(),
+            receive,
+            historical_sources=sources,
+            start_index=start,
+            initial_modern_points_text=self.modern_points_text,
+            initial_modern_crop_rect_text=self.modern_crop_rect_text,
+            lock_modern_when_complete=False,
+        )
 
     def _update_opacity_label(self, _value: object = None) -> None:
         self.old_opacity_label.set(f"Видимость старого фото в overlay: {int(self.old_opacity.get())}%")
@@ -3099,9 +5289,13 @@ map.on('click',e=>{{last=e.latlng; marker.setLatLng(e.latlng); sendCoords();}});
         if not self.old_points_text or not self.modern_points_text:
             messagebox.showinfo("Нужны точки", "Во вкладке 2 нажмите “Указать 4 угла на двух фото одновременно”.")
             return
+        self._ensure_work_session_for_active_pair()
+        self._persist_house_metadata()
         outdir = Path(self.outdir.get())
         pastvu_meta = asdict(self.selected_pastvu) if self.selected_pastvu else {}
 
+        active = self._get_active_historical_item()
+        old_crop = (active.crop_rect_text if active else "") or ""
         def work() -> object:
             return prepare_rectified_project(
                 Path(self.historical_img.get()),
@@ -3113,6 +5307,8 @@ map.on('click',e=>{{last=e.latlng; marker.setLatLng(e.latlng); sendCoords();}});
                 pastvu_meta=pastvu_meta,
                 modern_meta=self.modern_meta,
                 keep_context=bool(self.keep_context.get()),
+                old_crop_rect_text=old_crop,
+                modern_crop_rect_text=self.modern_crop_rect_text,
             )
 
         def done(_result: object) -> None:
@@ -3124,6 +5320,7 @@ map.on('click',e=>{{last=e.latlng; marker.setLatLng(e.latlng); sendCoords();}});
                 "Сначала откройте overlay / до-после и проверьте совпадение. Если фасад вывернулся — заново укажите 4 угла.",
             )
             open_path(outdir)
+            self._maybe_auto_export_to_website()
 
         self._run_bg("Подготовка выпрямленной пары", work, done)
 
@@ -3136,33 +5333,45 @@ map.on('click',e=>{{last=e.latlng; marker.setLatLng(e.latlng); sendCoords();}});
         else:
             messagebox.showinfo("Файл ещё не создан", missing)
 
-    def export_to_website(self) -> None:
-        """Copy result/ to website repo and update archiviewAssets.ts via copy_to_website.ps1."""
-        default_card = "MOSCOW_003"
-        folder_name = self.project_root().name.upper()
-        match = re.match(r"MOSCOW_\d{3}", folder_name)
-        if match:
-            default_card = match.group(0)
-        card_id = simpledialog.askstring(
-            "Отправить на сайт",
-            "ID здания (как в website_buildings.json):\n"
-            "MOSCOW_003 — Дом со зверями\n"
-            "MOSCOW_001 — Ордынка\n"
-            "После копирования: GitHub Desktop → Commit → Push",
-            initialvalue=default_card,
-            parent=self,
-        )
+    def _website_repo_root(self) -> Path:
+        return Path(r"C:\Users\Marusia\Projects\chtenie-gorodskoy-pamyati")
+
+    def _resolve_site_card_id_for_export(self) -> str:
+        card = ""
+        if normalize_site_card_id is not None:
+            card = normalize_site_card_id(self.site_card_id.get())  # type: ignore[misc]
+        if not card and propose_site_card_id is not None:
+            card = propose_site_card_id(  # type: ignore[misc]
+                self.project_root(),
+                self.address.get(),
+                self.object_name.get(),
+                APP_DIR,
+            )
+            if normalize_site_card_id is not None:
+                card = normalize_site_card_id(card)  # type: ignore[misc]
+        if not card:
+            match = re.match(r"(MOSCOW_\d{3})", self.project_root().name.upper())
+            if match:
+                card = match.group(1)
+        return card or ""
+
+    def _sync_export_to_website(self, *, quiet: bool = False, show_dialog: bool = True) -> bool:
+        """Копирует result/ в public/explorer/MOSCOW_NNN без ручного ввода кода."""
+        card_id = self._resolve_site_card_id_for_export()
         if not card_id:
-            return
-        card_id = card_id.strip().upper()
+            if not quiet:
+                messagebox.showinfo(
+                    "Код сайта не найден",
+                    "Укажите «Код на сайте» (MOSCOW_001 …) в «Данные дома» и сохраните.",
+                )
+            return False
         script = APP_DIR / "copy_to_website.ps1"
         if not script.exists():
-            messagebox.showerror(
-                "Скрипт не найден",
-                f"Не найден copy_to_website.ps1 рядом с программой:\n{script}",
-            )
-            return
+            if not quiet:
+                messagebox.showerror("Скрипт не найден", f"Не найден:\n{script}")
+            return False
         result_dir = str(Path(self.outdir.get()))
+        repo = self._website_repo_root()
         cmd = [
             "powershell",
             "-NoProfile",
@@ -3174,6 +5383,8 @@ map.on('click',e=>{{last=e.latlng; marker.setLatLng(e.latlng); sendCoords();}});
             card_id,
             "-ResultDir",
             result_dir,
+            "-RepoRoot",
+            str(repo),
             "-NoPrompt",
         ]
 
@@ -3183,19 +5394,25 @@ map.on('click',e=>{{last=e.latlng; marker.setLatLng(e.latlng); sendCoords();}});
                 raise RuntimeError(proc.stderr or proc.stdout or f"exit code {proc.returncode}")
             return proc.stdout.strip()
 
-        def done(output: object) -> None:
+        def done_export(output: object) -> None:
             text = str(output).strip()
-            if len(text) > 1200:
-                text = text[-1200:]
-            messagebox.showinfo(
-                "Скопировано на сайт",
-                "Фото и записи обновлены в проекте сайта.\n\n"
-                "Дальше: GitHub Desktop → Commit → Push origin.\n\n"
-                + text,
-            )
-            self._log(f"\nЭкспорт на сайт ({card_id}) выполнен.\n")
+            if len(text) > 800:
+                text = text[-800:]
+            self._log(f"\nНа сайт скопировано ({card_id}): {repo / 'public' / 'explorer' / card_id}\n")
+            if show_dialog:
+                messagebox.showinfo(
+                    "Скопировано на сайт",
+                    f"Папка сайта обновлена: public/explorer/{card_id}/\n"
+                    f"Код взят из поля «Код на сайте»: {card_id}\n\n"
+                    "Дальше в GitHub Desktop: Commit → Push.\n\n" + text,
+                )
 
-        self._run_bg("Отправка на сайт", work, done)
+        self._run_bg(f"Копирование на сайт ({card_id})", work, done_export)
+        return True
+
+    def export_to_website(self) -> None:
+        """Копирует result/ на сайт — код MOSCOW_NNN из «Данные дома»."""
+        self._sync_export_to_website(show_dialog=True)
 
     def open_in_app_preview(self) -> None:
         try:
@@ -3271,46 +5488,28 @@ map.on('click',e=>{{last=e.latlng; marker.setLatLng(e.latlng); sendCoords();}});
         if not self.straight_points:
             messagebox.showinfo("Нужны 4 угла", "Нажмите “Указать 4 угла фасада” и поставьте точки.")
             return
-        cmd = [
-            sys.executable,
-            str(SCRIPT),
-            "straighten",
-            self.straight_img.get(),
-            "-o",
-            self.straight_out.get(),
-            "--points",
-            self.straight_points,
-        ]
-        self._log("\nЗапуск ручного выпрямления…\n" + " ".join(f'\"{c}\"' if " " in c else c for c in cmd) + "\n")
-
-        def worker() -> None:
-            try:
-                proc = subprocess.Popen(
-                    cmd,
-                    cwd=str(APP_DIR),
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                )
-                assert proc.stdout is not None
-                for line in proc.stdout:
-                    self.after(0, self._log, line)
-                code = proc.wait()
-            except Exception as exc:
-                err = str(exc)
-                self.after(0, lambda msg=err: messagebox.showerror("Ошибка", msg))
+        if cv is None:
+            messagebox.showerror("OpenCV", "Нужен OpenCV (install_windows.bat).")
+            return
+        try:
+            pts = parse_four_points(self.straight_points)
+            ok, msg = validate_facade_quad_points(pts)
+            if not ok:
+                messagebox.showwarning("Проверьте углы", msg)
                 return
-            def finish() -> None:
-                if code == 0:
-                    self._log("Готово. Фасад сохранён.\n")
-                    open_path(Path(self.straight_out.get()).parent)
-                else:
-                    self._log(f"Ошибка, код {code}.\n")
-                    messagebox.showwarning("Не получилось", "Посмотрите сообщения программы внизу окна.")
-            self.after(0, finish)
-        threading.Thread(target=worker, daemon=True).start()
+            img = cv_read(self.straight_img.get())
+            out_w, out_h = facade_output_size(pts, pts)
+            rect, _ = warp_facade_to_rect(img, pts, out_w, out_h)
+            rect, _, _ = crop_white_margins_pair(rect, rect)
+            out_path = Path(self.straight_out.get())
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            cv_write(out_path, rect)
+            self._log(f"\nВыпрямлено по 4 углам → {out_path} ({rect.shape[1]}×{rect.shape[0]} px)\n")
+            messagebox.showinfo("Готово", f"Сохранено:\n{out_path}")
+            open_path(out_path.parent)
+        except Exception as exc:
+            messagebox.showerror("Ошибка выпрямления", str(exc))
+            self._log(f"Ошибка выпрямления: {exc}\n")
 
 
 # ---------------------------------------------------------------------------
@@ -3693,6 +5892,15 @@ class AppV11(App):
 
     # ---------------- markup methods ----------------
 
+    def _reload_markup_from_disk(self) -> None:
+        """Разметка на экране = файл на диске (если нет несохранённых правок)."""
+        if getattr(self, "_markup_dirty", False):
+            return
+        self._annotation_loaded_for = None
+        self.current_markup_points = []
+        self._ensure_annotations_loaded()
+        self._refresh_markup_canvas()
+
     def _ensure_annotations_loaded(self) -> None:
         outdir = str(Path(self.outdir.get()).resolve())
         if self._annotation_loaded_for == outdir:
@@ -3705,7 +5913,11 @@ class AppV11(App):
                 data = json.loads(path.read_text(encoding="utf-8"))
                 anns = data.get("annotations", [])
                 if isinstance(anns, list):
-                    self.embedded_annotations = anns
+                    self.embedded_annotations = normalize_annotation_list(anns)
+                    if len(self.embedded_annotations) < len(anns):
+                        self._log(
+                            f"Разметка: убрано {len(anns) - len(self.embedded_annotations)} дубликатов в {path.name}\n"
+                        )
             except Exception:
                 self.embedded_annotations = []
         self._annotation_loaded_for = outdir
@@ -3815,21 +6027,58 @@ class AppV11(App):
             messagebox.showinfo("Разметки нет", "Сначала обведите хотя бы одну область.")
             return
         try:
+            self.embedded_annotations = normalize_annotation_list(self.embedded_annotations)
             self._save_current_labeling_image(mode=self.markup_background_mode.get())
             outputs = save_annotations_and_exports(Path(self.outdir.get()), self.embedded_annotations)
             self._annotation_saved(outputs)
+            self._annotation_loaded_for = None
+            if hasattr(self, "_clear_dirty"):
+                self._clear_dirty()
             self._refresh_result_canvas()
             if hasattr(self, "notebook"):
                 self.notebook.select(self.tab_result)
             messagebox.showinfo("Готово", "Разметка сохранена и перенесена на исходное современное фото.")
+            if hasattr(self, "_maybe_auto_export_to_website"):
+                self._maybe_auto_export_to_website()
         except Exception as exc:
             messagebox.showerror("Не удалось сохранить разметку", str(exc))
+
+    def _maybe_auto_export_to_website(self) -> None:
+        if not getattr(self, "auto_export_website", None) or not self.auto_export_website.get():
+            return
+        out = Path(self.outdir.get())
+        if not (out / "04_modern_rectified.png").exists() and not (out / "07_marked_on_original_modern.png").exists():
+            return
+        self._sync_export_to_website(quiet=True, show_dialog=False)
+
+    def _update_result_house_header(self) -> None:
+        if not hasattr(self, "result_house_header"):
+            return
+        parts: List[str] = []
+        name = self.object_name.get().strip()
+        code = self.site_card_id.get().strip().upper()
+        addr = self.address.get().strip()
+        folder = Path(self.project_dir.get()).name if self.project_dir.get() else ""
+        if name:
+            parts.append(name)
+        if code:
+            parts.append(code)
+        if addr:
+            parts.append(addr)
+        line1 = " · ".join(parts) if parts else "Дом не указан"
+        hint = self._result_workdir_hint() if hasattr(self, "_result_workdir_hint") else ""
+        if folder:
+            line1 = f"{line1}\nПапка: {folder}" + (f" | {hint}" if hint else "")
+        elif hint:
+            line1 = f"{line1}\n{hint}"
+        self.result_house_header.configure(text=line1)
 
     # ---------------- result methods ----------------
 
     def _refresh_result_canvas(self) -> None:
         if not hasattr(self, "result_canvas"):
             return
+        self._update_result_house_header()
         path = Path(self.outdir.get()) / "07_marked_on_original_modern.png"
         if not path.exists():
             self.result_status.set("После сохранения разметки здесь появится итоговая картинка.")
@@ -3884,9 +6133,13 @@ class AppV11(App):
         if not self.old_points_text or not self.modern_points_text:
             messagebox.showinfo("Нужны точки", "Во вкладке 2 нажмите “Указать 4 угла на двух фото одновременно”.")
             return
+        self._ensure_work_session_for_active_pair()
+        self._persist_house_metadata()
         outdir = Path(self.outdir.get())
         pastvu_meta = asdict(self.selected_pastvu) if self.selected_pastvu else {}
 
+        active = self._get_active_historical_item()
+        old_crop = (active.crop_rect_text if active else "") or ""
         def work() -> object:
             return prepare_rectified_project(
                 Path(self.historical_img.get()),
@@ -3898,6 +6151,8 @@ class AppV11(App):
                 pastvu_meta=pastvu_meta,
                 modern_meta=self.modern_meta,
                 keep_context=bool(self.keep_context.get()),
+                old_crop_rect_text=old_crop,
+                modern_crop_rect_text=self.modern_crop_rect_text,
             )
 
         def done(_result: object) -> None:
@@ -3907,6 +6162,7 @@ class AppV11(App):
             self._log(f"Готово. Результаты сохранены в: {outdir}\n")
             self._refresh_compare_canvas(save=True)
             self._refresh_markup_canvas()
+            self._refresh_workflow_steps()
             if hasattr(self, "notebook"):
                 self.notebook.select(self.tab_compare)
             messagebox.showinfo(
@@ -4040,7 +6296,9 @@ class AppV12(AppV11):
         # During initial layout Tk sometimes reports a tiny canvas; use a sane preview box.
         if cw < 80 or ch < 80:
             cw, ch = 1100, 760
-        scale = min(cw / old.width, ch / old.height, 1.0)
+        scale = min(cw / old.width, ch / old.height)
+        if scale > 1.0:
+            scale = min(scale, 2.5)
         dw = max(1, int(round(old.width * scale)))
         dh = max(1, int(round(old.height * scale)))
         ox = int((cw - dw) / 2)
@@ -4087,6 +6345,7 @@ class AppV12(AppV11):
     def _refresh_compare_canvas(self, save: bool = False) -> None:
         if not hasattr(self, "compare_canvas"):
             return
+        self._refresh_compare_source_thumbnails()
         try:
             img, display = self._compose_preview_for_canvas(self.compare_canvas, self.compare_mode.get())
             self._put_preview_on_canvas(self.compare_canvas, img, "_compare_photo_ref", "compare_display", display)
@@ -4250,7 +6509,10 @@ class AppV12(AppV11):
         if project_path is not None:
             try:
                 project = json.loads(project_path.read_text(encoding="utf-8"))
-                H = np.asarray(project.get("H_rect_to_modern"), dtype=np.float64)
+                fb = str(getattr(self, "modern_crop_rect_text", "") or "")
+                if not fb:
+                    fb = modern_crop_rect_from_metadata_near(Path(self.outdir.get()))
+                H = H_rect_to_full_modern_from_project(project, fallback_rect_text=fb)
                 if H.shape != (3, 3):
                     H = None
             except Exception:
@@ -4446,17 +6708,14 @@ class AppV12(AppV11):
     def _on_tab_changed(self, _event: tk.Event) -> None:
         try:
             current = self.notebook.select()
-            if hasattr(self, "tab_photos") and current == str(self.tab_photos):
-                if hasattr(self, "photos_tab_frame"):
-                    self.photos_tab_frame.refresh()
-            elif hasattr(self, "tab_comparisons") and current == str(self.tab_comparisons):
-                if hasattr(self, "comparisons_tab_frame"):
-                    self.comparisons_tab_frame.refresh()
+            if hasattr(self, "tab_select") and current == str(self.tab_select):
+                self._refresh_my_projects_panel()
+                self._refresh_workflow_steps()
             elif current == str(self.tab_compare):
                 self._schedule_compare_refresh(save=False, delay=60)
             elif current == str(self.tab_markup):
                 self.markup_background_mode.set(self.compare_mode.get())
-                # Do not save full-resolution PNG here; this was one of the main slow points.
+                self._reload_markup_from_disk()
                 self._schedule_markup_refresh(delay=60)
             elif current == str(self.tab_result):
                 self._schedule_result_refresh(delay=60)
@@ -4526,34 +6785,25 @@ class AppV13(AppV12):
 
         title = ttk.Label(
             self,
-            text="Archiview CV v15: база домов → фото → сравнения → выпрямление → разметка",
+            text="Archiview CV v15: источники → выпрямление → сравнение → разметка",
             font=("TkDefaultFont", 12, "bold"),
         )
         title.pack(anchor="w", padx=12, pady=(10, 4))
 
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True, padx=12, pady=6)
-        self.tab_houses = ttk.Frame(self.notebook)
-        self.tab_photos = ttk.Frame(self.notebook)
-        self.tab_comparisons = ttk.Frame(self.notebook)
         self.tab_select = ttk.Frame(self.notebook)
         self.tab_rectify = ttk.Frame(self.notebook)
         self.tab_compare = ttk.Frame(self.notebook)
         self.tab_markup = ttk.Frame(self.notebook)
         self.tab_result = ttk.Frame(self.notebook)
         self.tab_straight = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab_houses, text="0. База домов")
-        self.notebook.add(self.tab_photos, text="1. Фото")
-        self.notebook.add(self.tab_comparisons, text="2. Сравнения")
-        self.notebook.add(self.tab_select, text="3. Источники")
-        self.notebook.add(self.tab_rectify, text="4. Выпрямление")
-        self.notebook.add(self.tab_compare, text="5. Сравнение")
-        self.notebook.add(self.tab_markup, text="6. Разметка")
-        self.notebook.add(self.tab_result, text="7. Результат")
-        self.notebook.add(self.tab_straight, text="8. Отдельно выпрямить фасад")
-        self._build_houses_tab(self.tab_houses)
-        self._build_photos_tab(self.tab_photos)
-        self._build_comparisons_tab(self.tab_comparisons)
+        self.notebook.add(self.tab_select, text="1. Источники")
+        self.notebook.add(self.tab_rectify, text="2. Выпрямление")
+        self.notebook.add(self.tab_compare, text="3. Сравнение")
+        self.notebook.add(self.tab_markup, text="4. Разметка")
+        self.notebook.add(self.tab_result, text="5. Результат")
+        self.notebook.add(self.tab_straight, text="6. Отдельно выпрямить фасад")
         self._build_select_tab(self.tab_select)
         self._build_rectify_tab(self.tab_rectify)
         self._build_compare_tab(self.tab_compare)
@@ -4564,69 +6814,130 @@ class AppV13(AppV12):
 
         log_frame = ttk.LabelFrame(self, text="Сообщения программы")
         log_frame.pack(fill="x", padx=12, pady=(0, 10))
-        self.log = tk.Text(log_frame, height=7, wrap="word")
+        self.log = tk.Text(log_frame, height=4, wrap="word")
         self.log.pack(fill="x", expand=False, padx=8, pady=8)
 
         # Throttled resize handlers from v12.
         self.compare_canvas.bind("<Configure>", lambda _e: self._schedule_compare_refresh(save=False, delay=120))
         self.markup_canvas.bind("<Configure>", lambda _e: self._schedule_markup_refresh(delay=120))
         self.result_canvas.bind("<Configure>", lambda _e: self._schedule_result_refresh(delay=120))
-        self._log(
-            "v15: проект дома — много фото и сравнений; legacy result/ не перезаписывается автоматически.\n"
-        )
-        self.after(0, self._refresh_project_tabs)
+        self._log("v15: откройте дом в «Мои проекты» или добавьте новый — дальше PastVu и 4 угла на этой вкладке.\n")
+        self.after(0, self._refresh_my_projects_panel)
+        self._fit_main_window_to_screen()
 
     # ---------------- first tab ----------------
 
     def _build_select_tab(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(0, weight=1)
-        parent.rowconfigure(1, weight=1)
+        parent.rowconfigure(0, weight=1)
 
-        top = ttk.LabelFrame(parent, text="A. Папка дома / проекта")
-        top.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 6))
+        outer_pane = ttk.Panedwindow(parent, orient="vertical")
+        outer_pane.grid(row=0, column=0, sticky="nsew", padx=8, pady=6)
+
+        header = ttk.Frame(outer_pane)
+        body = ttk.Frame(outer_pane)
+        outer_pane.add(header, weight=0)
+        outer_pane.add(body, weight=1)
+        header.columnconfigure(0, weight=1)
+        body.columnconfigure(0, weight=1)
+        body.rowconfigure(0, weight=1)
+
+        if MyProjectsPanel is not None:
+            self.my_projects_panel = MyProjectsPanel(
+                header,
+                project_root=APP_DIR / "archiview_projects",
+                on_open_project=lambda p: self._open_project_dir(p, go_tab="result"),
+                on_new_project=self.new_house_project,
+                on_import_excel=self.open_excel_import_dialog,
+                on_projects_deleted=self._after_projects_deleted,
+                on_log=self._log,
+            )
+            self.my_projects_panel.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        else:
+            ttk.Label(header, text="Модуль списка проектов не найден.", foreground="red").grid(
+                row=0, column=0, sticky="w", padx=4, pady=4
+            )
+
+        mid_row = ttk.Panedwindow(header, orient="horizontal")
+        mid_row.grid(row=1, column=0, sticky="nsew", pady=(0, 6))
+        wf_col = ttk.Frame(mid_row)
+        house_col = ttk.LabelFrame(
+            mid_row,
+            text="Данные дома — справа: карта, адрес, код сайта (папка ≠ код сайта)",
+        )
+        mid_row.add(wf_col, weight=2)
+        mid_row.add(house_col, weight=3)
+        self._build_workflow_steps_panel(wf_col)
+
+        top = house_col
         top.columnconfigure(1, weight=1)
-        ttk.Label(top, text="Папка проекта:").grid(row=0, column=0, sticky="w", padx=8, pady=6)
-        ttk.Entry(top, textvariable=self.project_dir).grid(row=0, column=1, sticky="ew", padx=6, pady=6)
-        ttk.Button(top, text="Папка…", command=self.choose_project_dir).grid(row=0, column=2, padx=8, pady=6)
+        ttk.Label(top, text="Папка проекта:").grid(row=0, column=0, sticky="w", padx=8, pady=4)
+        ttk.Entry(top, textvariable=self.project_dir).grid(row=0, column=1, sticky="ew", padx=6, pady=4)
+        ttk.Button(top, text="Папка…", command=self.choose_project_dir).grid(row=0, column=2, padx=8, pady=4)
+        ttk.Label(top, text="Название дома:").grid(row=1, column=0, sticky="w", padx=8, pady=4)
+        ttk.Entry(top, textvariable=self.object_name).grid(row=1, column=1, sticky="ew", padx=6, pady=4)
+        ttk.Label(top, text="Код на сайте:").grid(row=2, column=0, sticky="w", padx=8, pady=4)
+        ttk.Entry(top, textvariable=self.site_card_id, width=14).grid(row=2, column=1, sticky="w", padx=6, pady=4)
         ttk.Label(
             top,
-            text="Границы блоков ниже можно двигать мышкой. Внутри блоков есть прокрутка — если кнопки не видны, прокрутите вниз.",
+            text="Как в таблице «Код сайта»: MOSCOW_001, MOSCOW_003… (не имя папки и не …_kumaninykh из ссылки)",
+            foreground="#666",
+            wraplength=520,
+        ).grid(row=3, column=0, columnspan=3, sticky="w", padx=8, pady=(0, 4))
+        ttk.Label(top, text="Адрес:").grid(row=4, column=0, sticky="w", padx=8, pady=4)
+        ttk.Entry(top, textvariable=self.address).grid(row=4, column=1, sticky="ew", padx=6, pady=4)
+        ttk.Label(top, text="Координаты:").grid(row=5, column=0, sticky="w", padx=8, pady=4)
+        coord_row = ttk.Frame(top)
+        coord_row.grid(row=5, column=1, sticky="ew", padx=6, pady=4)
+        ttk.Label(coord_row, text="Широта").pack(side="left")
+        ttk.Entry(coord_row, textvariable=self.lat, width=14).pack(side="left", padx=(4, 10))
+        ttk.Label(coord_row, text="Долгота").pack(side="left")
+        ttk.Entry(coord_row, textvariable=self.lon, width=14).pack(side="left", padx=(4, 10))
+        btn_row = ttk.Frame(top)
+        btn_row.grid(row=6, column=0, columnspan=3, sticky="w", padx=8, pady=4)
+        ttk.Button(btn_row, text="Карта / выбрать точку", command=self.open_map_picker).pack(side="left")
+        ttk.Button(btn_row, text="Найти координаты по адресу", command=self.start_geocode).pack(side="left", padx=6)
+        ttk.Button(btn_row, text="Сохранить", command=self._persist_house_metadata).pack(side="left", padx=6)
+        ttk.Label(top, textvariable=self.geocode_result, foreground="#333", wraplength=900).grid(
+            row=7, column=0, columnspan=3, sticky="w", padx=8, pady=(2, 6)
+        )
+        ttk.Label(
+            top,
+            text="Границы ниже: ↔ историческое/современное, ↕ настройки/миниатюры. Правки сохраняются автоматически.",
             foreground="#555",
-        ).grid(row=1, column=0, columnspan=3, sticky="w", padx=8, pady=(0, 8))
+            wraplength=900,
+        ).grid(row=8, column=0, columnspan=3, sticky="w", padx=8, pady=(0, 8))
 
-        main_pane = ttk.Panedwindow(parent, orient="horizontal")
-        main_pane.grid(row=1, column=0, sticky="nsew", padx=8, pady=6)
-        left = ttk.LabelFrame(main_pane, text="B. Историческое фото: PastVu или файл")
-        right = ttk.LabelFrame(main_pane, text="C. Современное фото: файл, буфер или Wikimedia Commons")
+        main_pane = ttk.Panedwindow(body, orient="horizontal")
+        main_pane.grid(row=0, column=0, sticky="nsew")
+        left = ttk.LabelFrame(main_pane, text="Историческое фото: PastVu или файл")
+        right = ttk.LabelFrame(main_pane, text="Современное фото: файл, буфер или Wikimedia Commons")
         main_pane.add(left, weight=1)
         main_pane.add(right, weight=1)
 
-        # Historical pane with visible scrollbars.
         left.rowconfigure(0, weight=1)
         left.columnconfigure(0, weight=1)
         hist_pane = ttk.Panedwindow(left, orient="vertical")
         hist_pane.grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
-        hist_scroll = ScrollableFrame(hist_pane)
-        hist_controls = hist_scroll.inner
+        hist_controls_wrap = ttk.Frame(hist_pane)
         hist_preview = ttk.LabelFrame(hist_pane, text="Миниатюры PastVu — выберите похожий исторический ракурс фасада")
-        hist_pane.add(hist_scroll, weight=0)
-        hist_pane.add(hist_preview, weight=1)
+        hist_pane.add(hist_controls_wrap, weight=1)
+        hist_pane.add(hist_preview, weight=2)
+        hist_scroll = ScrollableFrame(hist_controls_wrap)
+        hist_scroll.pack(fill="both", expand=True)
+        hist_controls = hist_scroll.inner
         hist_controls.columnconfigure(1, weight=1)
+        self._configure_vertical_pane(hist_pane, hist_controls_wrap, hist_preview, top_minsize=240, bottom_minsize=120, initial_top=340)
 
-        ttk.Label(hist_controls, text="Адрес:").grid(row=0, column=0, sticky="w", padx=8, pady=6)
-        ttk.Entry(hist_controls, textvariable=self.address).grid(row=0, column=1, sticky="ew", padx=6, pady=6)
-        ttk.Button(hist_controls, text="Найти координаты", command=self.start_geocode).grid(row=0, column=2, padx=8, pady=6)
-        ttk.Label(hist_controls, text="Широта:").grid(row=1, column=0, sticky="w", padx=8, pady=4)
-        coord_frame = ttk.Frame(hist_controls)
-        coord_frame.grid(row=1, column=1, sticky="ew", padx=6, pady=4)
-        ttk.Entry(coord_frame, textvariable=self.lat, width=15).pack(side="left")
-        ttk.Label(coord_frame, text="  Долгота:").pack(side="left", padx=(8, 2))
-        ttk.Entry(coord_frame, textvariable=self.lon, width=15).pack(side="left")
-        ttk.Button(hist_controls, text="Карта / выбрать точку", command=self.open_map_picker).grid(row=1, column=2, padx=8, pady=4)
-        ttk.Label(hist_controls, textvariable=self.geocode_result, foreground="#555", wraplength=560).grid(row=2, column=0, columnspan=3, sticky="w", padx=8, pady=4)
+        ttk.Label(
+            hist_controls,
+            text="Адрес и координаты — в блоке «Данные дома» выше. Здесь — поиск PastVu по этим координатам.",
+            foreground="#555",
+            wraplength=560,
+        ).grid(row=0, column=0, columnspan=3, sticky="w", padx=8, pady=(8, 6))
 
         filters = ttk.Frame(hist_controls)
-        filters.grid(row=3, column=0, columnspan=3, sticky="ew", padx=8, pady=6)
+        filters.grid(row=1, column=0, columnspan=3, sticky="ew", padx=8, pady=6)
         ttk.Label(filters, text="Радиус PastVu, м:").pack(side="left")
         ttk.Entry(filters, textvariable=self.search_distance, width=6).pack(side="left", padx=(4, 12))
         ttk.Label(filters, text="Лимит:").pack(side="left")
@@ -4637,20 +6948,44 @@ class AppV13(AppV12):
         ttk.Entry(filters, textvariable=self.year_to, width=6).pack(side="left", padx=(4, 12))
 
         pastvu_search_line = ttk.Frame(hist_controls)
-        pastvu_search_line.grid(row=4, column=0, columnspan=3, sticky="ew", padx=8, pady=(0, 6))
+        pastvu_search_line.grid(row=2, column=0, columnspan=3, sticky="ew", padx=8, pady=(0, 6))
         ttk.Button(pastvu_search_line, text="Найти фото PastVu", command=self.start_pastvu_search, style="Big.TButton").pack(side="left", fill="x", expand=True)
 
         ttk.Checkbutton(
             hist_controls,
             text="Скрывать вероятные интерьеры / решётки / детали, не похожие на фасад",
             variable=self.exclude_nonfacade,
-        ).grid(row=5, column=0, columnspan=3, sticky="w", padx=8, pady=(0, 6))
+        ).grid(row=3, column=0, columnspan=3, sticky="w", padx=8, pady=(0, 6))
         hist_file = ttk.Frame(hist_controls)
-        hist_file.grid(row=6, column=0, columnspan=3, sticky="ew", padx=8, pady=(0, 6))
+        hist_file.grid(row=4, column=0, columnspan=3, sticky="ew", padx=8, pady=(0, 6))
         ttk.Button(hist_file, text="Или выбрать историческое фото с компьютера…", command=self.choose_historical_img).pack(side="left")
         ttk.Button(hist_file, text="Открыть выбранное PastVu", command=self.open_selected_pastvu_page).pack(side="left", padx=6)
-        ttk.Label(hist_controls, textvariable=self.selected_source_label, foreground="#555", wraplength=560).grid(row=7, column=0, columnspan=3, sticky="w", padx=8, pady=(0, 6))
-        ttk.Label(hist_controls, text="↓ Ниже миниатюры PastVu. Если часть скрыта, потяните границу блока или прокрутите.", foreground="#777").grid(row=8, column=0, columnspan=3, sticky="w", padx=8, pady=(0, 6))
+        ttk.Label(hist_controls, textvariable=self.selected_source_label, foreground="#555", wraplength=560).grid(row=5, column=0, columnspan=3, sticky="w", padx=8, pady=(0, 6))
+        ttk.Label(hist_controls, text="↓ Ниже миниатюры PastVu. Если часть скрыта, потяните границу блока или прокрутите.", foreground="#777").grid(row=6, column=0, columnspan=3, sticky="w", padx=8, pady=(0, 6))
+
+        hist_list = ttk.LabelFrame(
+            hist_controls,
+            text="Исторические фото для сравнения — можно добавить несколько, у каждого свои 4 угла",
+        )
+        hist_list.grid(row=7, column=0, columnspan=3, sticky="nsew", padx=8, pady=(0, 8))
+        hist_list.columnconfigure(0, weight=1)
+        cols = ("active", "label", "points", "source")
+        self.hist_sources_tree = ttk.Treeview(hist_list, columns=cols, show="headings", height=5, selectmode="browse")
+        self.hist_sources_tree.heading("active", text="")
+        self.hist_sources_tree.heading("label", text="Фото")
+        self.hist_sources_tree.heading("points", text="4 угла")
+        self.hist_sources_tree.heading("source", text="Источник")
+        self.hist_sources_tree.column("active", width=24, anchor="center")
+        self.hist_sources_tree.column("label", width=220, anchor="w")
+        self.hist_sources_tree.column("points", width=60, anchor="center")
+        self.hist_sources_tree.column("source", width=80, anchor="center")
+        self.hist_sources_tree.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+        hist_list_btns = ttk.Frame(hist_list)
+        hist_list_btns.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
+        ttk.Button(hist_list_btns, text="Указать 4 угла", command=self.pick_corners_for_selected_historical, style="Big.TButton").pack(side="left")
+        ttk.Button(hist_list_btns, text="Сделать активным", command=self.activate_selected_historical_source).pack(side="left", padx=6)
+        ttk.Button(hist_list_btns, text="Удалить из списка", command=self.remove_selected_historical_source).pack(side="left", padx=6)
+        self.hist_sources_tree.bind("<Double-1>", lambda _e: self.activate_selected_historical_source())
 
         self.thumb_area = ScrollableFrame(hist_preview)
         self.thumb_area.pack(fill="both", expand=True, padx=6, pady=6)
@@ -4660,12 +6995,16 @@ class AppV13(AppV12):
         right.columnconfigure(0, weight=1)
         modern_pane = ttk.Panedwindow(right, orient="vertical")
         modern_pane.grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
-        modern_scroll = ScrollableFrame(modern_pane)
-        modern_controls = modern_scroll.inner
+        modern_controls_wrap = ttk.Frame(modern_pane)
         modern_preview = ttk.LabelFrame(modern_pane, text="Миниатюры Wikimedia Commons — выберите современный ракурс, если своих фото нет")
-        modern_pane.add(modern_scroll, weight=0)
-        modern_pane.add(modern_preview, weight=1)
+        modern_pane.add(modern_controls_wrap, weight=1)
+        modern_pane.add(modern_preview, weight=2)
+        modern_scroll = ScrollableFrame(modern_controls_wrap)
+        modern_scroll.pack(fill="both", expand=True)
+        modern_controls = modern_scroll.inner
+        self._configure_vertical_pane(modern_pane, modern_controls_wrap, modern_preview, top_minsize=220, bottom_minsize=120, initial_top=300)
         modern_controls.columnconfigure(1, weight=1)
+        self._configure_vertical_pane(outer_pane, header, body, top_minsize=180, bottom_minsize=260, initial_top=260)
 
         ttk.Label(modern_controls, text="Историческое фото:").grid(row=0, column=0, sticky="w", padx=8, pady=5)
         ttk.Entry(modern_controls, textvariable=self.historical_img).grid(row=0, column=1, sticky="ew", padx=6, pady=5)
@@ -4704,8 +7043,12 @@ class AppV13(AppV12):
         self.modern_thumb_area = ScrollableFrame(modern_preview)
         self.modern_thumb_area.pack(fill="both", expand=True, padx=6, pady=6)
 
-        help_text = "Дальше переходите во вкладку 2: там оба фото будут показаны в одном окне, и вы отметите 4 одинаковых угла фасада."
+        help_text = (
+            "Добавьте одно или несколько исторических фото слева и современное справа. "
+            "Для каждого исторического фото нажмите «Указать 4 угла», затем вкладка «2. Выпрямление»."
+        )
         ttk.Label(modern_controls, text=help_text, wraplength=640, foreground="#333").grid(row=6, column=0, columnspan=3, sticky="w", padx=8, pady=6)
+        self.after(0, self._refresh_workflow_steps)
 
     # ---------------- rectification tab ----------------
 
@@ -4720,7 +7063,12 @@ class AppV13(AppV12):
 
         point_frame = ttk.LabelFrame(parent, text="4 угла фасада")
         point_frame.grid(row=1, column=0, columnspan=3, sticky="ew", padx=10, pady=8)
-        ttk.Label(point_frame, text="Откроется одно окно: старое фото слева, современное справа. Ставьте одни и те же 4 угла в одном порядке.", wraplength=980, foreground="#555").pack(anchor="w", padx=8, pady=(8, 4))
+        ttk.Label(
+            point_frame,
+            text="Активное историческое фото — из списка на вкладке «Источники». Современные 4 угла задаются один раз и повторно используются.",
+            wraplength=980,
+            foreground="#555",
+        ).pack(anchor="w", padx=8, pady=(8, 4))
         pf_btns = ttk.Frame(point_frame)
         pf_btns.pack(anchor="w", padx=8, pady=8)
         ttk.Button(pf_btns, text="Указать 4 угла на двух фото одновременно", command=self.pick_both_corners, style="Big.TButton").pack(side="left")
@@ -4730,7 +7078,17 @@ class AppV13(AppV12):
         slider_frame.grid(row=2, column=0, columnspan=3, sticky="ew", padx=10, pady=8)
         ttk.Label(slider_frame, textvariable=self.old_opacity_label).pack(anchor="w", padx=8, pady=(8, 0))
         tk.Scale(slider_frame, from_=0, to=100, orient="horizontal", variable=self.old_opacity, command=self._update_opacity_label, length=420, showvalue=False).pack(anchor="w", padx=8, pady=(0, 4))
-        ttk.Checkbutton(slider_frame, text="Не обрезать фото по 4 углам: оставить надстройки, пристройки и контекст вокруг фасада", variable=self.keep_context).pack(anchor="w", padx=8, pady=(0, 8))
+        ttk.Checkbutton(
+            slider_frame,
+            text="Показывать весь исходный снимок (4 угла только для наложения; рекомендуется)",
+            variable=self.keep_context,
+        ).pack(anchor="w", padx=8, pady=(0, 4))
+        ttk.Label(
+            slider_frame,
+            text="После выпрямления пустые белые поля по краям обрезаются автоматически — фасад крупнее на экране.",
+            foreground="#555",
+            wraplength=900,
+        ).pack(anchor="w", padx=8, pady=(0, 8))
 
         btns = ttk.Frame(parent)
         btns.grid(row=3, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
@@ -4791,10 +7149,26 @@ class AppV13(AppV12):
 
         view = ttk.LabelFrame(parent, text="Встроенный просмотр")
         view.grid(row=0, column=1, sticky="nsew", padx=(6, 8), pady=8)
-        view.rowconfigure(0, weight=1)
+        view.rowconfigure(1, weight=1)
         view.columnconfigure(0, weight=1)
+        thumbs = ttk.LabelFrame(view, text="Сравниваемые фото")
+        thumbs.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 6))
+        self.compare_thumb_caption = tk.StringVar(value="Миниатюры появятся после выбора фото и выпрямления")
+        ttk.Label(thumbs, textvariable=self.compare_thumb_caption, foreground="#555").pack(anchor="w", padx=8, pady=(6, 4))
+        thumb_row = ttk.Frame(thumbs)
+        thumb_row.pack(fill="x", padx=8, pady=(0, 8))
+        hist_box = ttk.Frame(thumb_row)
+        hist_box.pack(side="left", padx=(0, 16))
+        ttk.Label(hist_box, text="Историческое").pack(anchor="w")
+        self.compare_hist_thumb_label = ttk.Label(hist_box, text="(нет фото)", width=22, anchor="center")
+        self.compare_hist_thumb_label.pack(pady=4)
+        mod_box = ttk.Frame(thumb_row)
+        mod_box.pack(side="left")
+        ttk.Label(mod_box, text="Современное").pack(anchor="w")
+        self.compare_modern_thumb_label = ttk.Label(mod_box, text="(нет фото)", width=22, anchor="center")
+        self.compare_modern_thumb_label.pack(pady=4)
         self.compare_canvas = tk.Canvas(view, bg="#2e2e2e", highlightthickness=0)
-        self.compare_canvas.grid(row=0, column=0, sticky="nsew")
+        self.compare_canvas.grid(row=1, column=0, sticky="nsew")
         self.compare_canvas.bind("<Configure>", lambda _e: self._schedule_compare_refresh(save=False, delay=120))
         self.compare_canvas.bind("<Button-1>", self._compare_canvas_drag_split)
         self.compare_canvas.bind("<B1-Motion>", self._compare_canvas_drag_split)
@@ -5289,13 +7663,15 @@ class AppV14(AppV13):
         parent.rowconfigure(0, weight=1)
         main = ttk.LabelFrame(parent, text="Итог: номера на фасаде, подписи — в списке (наведите на область или строку)")
         main.grid(row=0, column=0, sticky="nsew", padx=(8, 6), pady=8)
-        main.rowconfigure(0, weight=1)
+        main.rowconfigure(1, weight=1)
         main.columnconfigure(0, weight=1)
+        self.result_house_header = ttk.Label(main, text="", wraplength=920, foreground="#222", font=("TkDefaultFont", 10, "bold"))
+        self.result_house_header.grid(row=0, column=0, sticky="ew", padx=8, pady=(6, 4))
         self.result_canvas = tk.Canvas(main, bg="#2e2e2e", highlightthickness=0)
-        self.result_canvas.grid(row=0, column=0, sticky="nsew")
+        self.result_canvas.grid(row=1, column=0, sticky="nsew")
         self.result_canvas.bind("<Configure>", lambda _e: self._schedule_result_refresh(delay=120))
         legend_box = ttk.LabelFrame(main, text="Легенда: номер · тип · комментарий")
-        legend_box.grid(row=1, column=0, sticky="ew", padx=0, pady=(6, 0))
+        legend_box.grid(row=2, column=0, sticky="ew", padx=0, pady=(6, 0))
         legend_row = ttk.Frame(legend_box)
         legend_row.pack(fill="both", expand=False, padx=8, pady=6)
         self.result_legend_list = tk.Listbox(legend_row, height=8, activestyle="dotbox")
@@ -5593,11 +7969,36 @@ class AppV14(AppV13):
             )
         self._draw_result_hover_overlay()
 
+    def _compose_result_pil_from_source(self):
+        if Image is None or cv is None:
+            raise RuntimeError("Pillow/OpenCV не установлены.")
+        project_path = self._project_json_path()
+        if project_path is None:
+            raise RuntimeError("Сначала подготовьте выпрямленную пару (вкладка 2).")
+        project = json.loads(project_path.read_text(encoding="utf-8"))
+        modern_path = Path(str(project.get("modern_image") or ""))
+        if not modern_path.exists():
+            fallback = Path(self.outdir.get()) / "07_marked_on_original_modern.png"
+            if fallback.exists():
+                return Image.open(fallback).convert("RGB")  # type: ignore[union-attr]
+            raise RuntimeError(f"Не найдено исходное современное фото: {modern_path}")
+        self._ensure_annotations_loaded()
+        modern_bgr = cv_read(modern_path)
+        anns = normalize_annotation_list(list(self.embedded_annotations))
+        if anns:
+            fb = str(getattr(self, "modern_crop_rect_text", "") or "")
+            if not fb:
+                fb = modern_crop_rect_from_metadata_near(Path(self.outdir.get()))
+            H = H_rect_to_full_modern_from_project(project, fallback_rect_text=fb)
+            modern_bgr = draw_polygons_on_image(modern_bgr, anns, transform=H, draw_indices=False)
+        return Image.fromarray(cv.cvtColor(modern_bgr, cv.COLOR_BGR2RGB))  # type: ignore[union-attr]
+
     def _refresh_result_canvas(self) -> None:
         if not hasattr(self, "result_canvas"):
             return
-        path = Path(self.outdir.get()) / "07_marked_on_original_modern.png"
-        if not path.exists():
+        self._update_result_house_header()
+        self._ensure_annotations_loaded()
+        if not self.embedded_annotations and not (Path(self.outdir.get()) / "07_marked_on_original_modern.png").exists():
             self._result_pil = None
             self.result_status.set("После сохранения разметки здесь появится итоговая картинка.")
             self._draw_canvas_message(
@@ -5610,7 +8011,7 @@ class AppV14(AppV13):
         try:
             if Image is None:
                 raise RuntimeError("Pillow не установлен.")
-            img = Image.open(path).convert("RGB")  # type: ignore[union-attr]
+            img = self._compose_result_pil_from_source()
             self._result_pil = img
             cw = max(10, self.result_canvas.winfo_width())
             ch = max(10, self.result_canvas.winfo_height())
@@ -5631,7 +8032,7 @@ class AppV14(AppV13):
             self._draw_result_labels_on_canvas()
             legend_file = Path(self.outdir.get()) / "08_marked_on_original_modern_labeled.png"
             extra = f"\nФайл с легендой снизу: {legend_file}" if legend_file.exists() else ""
-            self.result_status.set(f"Итоговая картинка готова: {path}{extra}")
+            self.result_status.set(f"Итог на полном исходном современном фото.{extra}")
             self._update_result_legend()
         except Exception as exc:
             self.result_status.set(str(exc))

@@ -3,10 +3,11 @@
 """Archiview CV v15 — вкладки «База домов / Фото / Сравнения»."""
 from __future__ import annotations
 
+import shutil
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
-from typing import Callable, List, Optional
+from typing import Callable, Dict, List, Optional
 
 try:
     from archiview_house_db import HouseDatabaseFrame, HouseRecord, open_system_path
@@ -151,10 +152,12 @@ class PhotosTabFrame(ttk.Frame):
         self,
         parent: tk.Widget,
         get_store: Callable[[], Optional[ProjectStore]],
+        on_photo_added: Optional[Callable[[PhotoSource], None]] = None,
         on_log: Optional[Callable[[str], None]] = None,
     ) -> None:
         super().__init__(parent)
         self.get_store = get_store
+        self.on_photo_added = on_photo_added
         self.on_log = on_log
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
@@ -219,6 +222,8 @@ class PhotosTabFrame(ttk.Frame):
         if path:
             photo = store.add_photo_from_file("historical", path)
             self._log(f"Добавлено историческое фото: {photo.photo_id}\n")
+            if self.on_photo_added:
+                self.on_photo_added(photo)
             self.refresh()
 
     def add_modern_file(self) -> None:
@@ -232,6 +237,8 @@ class PhotosTabFrame(ttk.Frame):
         if path:
             photo = store.add_photo_from_file("modern", path)
             self._log(f"Добавлено современное фото: {photo.photo_id}\n")
+            if self.on_photo_added:
+                self.on_photo_added(photo)
             self.refresh()
 
     def _fill_tree(self, tree: ttk.Treeview, photos: List[PhotoSource]) -> None:
@@ -403,3 +410,194 @@ class ComparisonsTabFrame(ttk.Frame):
     def _log(self, text: str) -> None:
         if self.on_log:
             self.on_log(text)
+
+
+class MyProjectsPanel(ttk.LabelFrame):
+    """Список проектов на диске — на вкладке «Источники»."""
+
+    PROTECTED_FOLDERS = frozenset({"new_house_project", "house_project"})
+
+    def __init__(
+        self,
+        parent: tk.Widget,
+        project_root: Path,
+        on_open_project: Callable[[Path], None],
+        on_new_project: Callable[[], None],
+        on_import_excel: Callable[[], None],
+        on_projects_deleted: Optional[Callable[[List[Path]], None]] = None,
+        on_log: Optional[Callable[[str], None]] = None,
+    ) -> None:
+        super().__init__(parent, text="Мои проекты")
+        self.project_root = Path(project_root)
+        self.on_open_project = on_open_project
+        self.on_new_project = on_new_project
+        self.on_import_excel = on_import_excel
+        self.on_projects_deleted = on_projects_deleted
+        self.on_log = on_log
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(1, weight=1)
+
+        top = ttk.Frame(self)
+        top.grid(row=0, column=0, sticky="ew", padx=8, pady=6)
+        ttk.Button(top, text="Открыть", command=self.open_selected).pack(side="left")
+        ttk.Button(top, text="Обновить", command=self.refresh).pack(side="left", padx=6)
+        ttk.Button(top, text="Новый дом…", command=self.on_new_project).pack(side="left", padx=6)
+        ttk.Button(top, text="Импорт Excel/CSV…", command=self.on_import_excel).pack(side="left", padx=6)
+        ttk.Button(top, text="Удалить выбранные…", command=self.delete_selected).pack(side="left", padx=(12, 0))
+        ttk.Button(top, text="Удалить без разметки…", command=self.delete_without_markup).pack(side="left", padx=6)
+
+        cols = ("site_id", "name", "address", "folder", "markup", "updated")
+        self.tree = ttk.Treeview(self, columns=cols, show="headings", height=4, selectmode="extended")
+        self.tree.heading("site_id", text="Код сайта")
+        self.tree.heading("name", text="Название дома")
+        self.tree.heading("address", text="Адрес")
+        self.tree.heading("folder", text="Папка")
+        self.tree.heading("markup", text="Разметка")
+        self.tree.heading("updated", text="Обновлено")
+        self.tree.column("site_id", width=90, anchor="center")
+        self.tree.column("name", width=160, anchor="w")
+        self.tree.column("address", width=220, anchor="w")
+        self.tree.column("folder", width=140, anchor="w")
+        self.tree.column("markup", width=70, anchor="center")
+        self.tree.column("updated", width=110, anchor="center")
+        self.tree.grid(row=1, column=0, sticky="nsew", padx=(8, 0), pady=(0, 8))
+        y = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
+        y.grid(row=1, column=1, sticky="ns", pady=(0, 8))
+        self.tree.configure(yscrollcommand=y.set)
+        self.tree.bind("<Double-1>", lambda _e: self.open_selected())
+
+        self._summaries: List[ProjectSummary] = []
+
+    def refresh(self) -> None:
+        self.tree.delete(*self.tree.get_children())
+        self._summaries = ProjectStore.scan_projects(self.project_root)
+        seen_codes: Dict[str, str] = {}
+        dup_lines: List[str] = []
+        for s in self._summaries:
+            code = (s.site_card_id or "").strip().upper()
+            if not code:
+                continue
+            folder = s.project_dir.name
+            if code in seen_codes and seen_codes[code] != folder:
+                dup_lines.append(f"  {code}: «{seen_codes[code]}» и «{folder}»")
+            else:
+                seen_codes[code] = folder
+        for i, s in enumerate(self._summaries):
+            site_id = s.site_card_id or "—"
+            name = s.display_title
+            address = s.address if s.address not in (s.project_dir.name, s.project_id, name) else "—"
+            markup = "Да" if s.has_markup else "—"
+            self.tree.insert(
+                "",
+                "end",
+                iid=str(i),
+                values=(
+                    site_id,
+                    name,
+                    address,
+                    s.project_dir.name,
+                    markup,
+                    (s.updated_at or "")[:19].replace("T", " "),
+                ),
+            )
+        if self.on_log:
+            self.on_log(f"Найдено проектов: {len(self._summaries)}\n")
+            if dup_lines:
+                self.on_log(
+                    "Внимание: один код сайта в нескольких папках (лишние можно удалить):\n"
+                    + "\n".join(dup_lines)
+                    + "\n"
+                )
+
+    def select_by_folder(self, folder_name: str) -> None:
+        for i, s in enumerate(self._summaries):
+            if s.project_dir.name == folder_name:
+                iid = str(i)
+                self.tree.selection_set(iid)
+                self.tree.focus(iid)
+                self.tree.see(iid)
+                return
+
+    def open_selected(self) -> None:
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showinfo("Проект не выбран", "Выберите дом в таблице или дважды щёлкните по строке.")
+            return
+        summary = self._summaries[int(sel[0])]
+        self.on_open_project(summary.project_dir)
+
+    def _selected_summaries(self) -> List[ProjectSummary]:
+        sel = self.tree.selection()
+        if not sel:
+            return []
+        out: List[ProjectSummary] = []
+        for item in sel:
+            idx = int(item)
+            if 0 <= idx < len(self._summaries):
+                out.append(self._summaries[idx])
+        return out
+
+    def _delete_summaries(self, summaries: List[ProjectSummary], *, prompt: str) -> None:
+        if not summaries:
+            messagebox.showinfo("Ничего не выбрано", "Выберите один или несколько домов в таблице (Ctrl+клик).")
+            return
+        lines = []
+        blocked = []
+        to_delete: List[ProjectSummary] = []
+        for s in summaries:
+            if s.project_dir.name in self.PROTECTED_FOLDERS:
+                blocked.append(s.project_dir.name)
+                continue
+            mark = " [есть разметка!]" if s.has_markup else ""
+            lines.append(f"• {s.project_dir.name}{mark}")
+            to_delete.append(s)
+        if blocked:
+            messagebox.showwarning(
+                "Служебные папки",
+                "Папки new_house_project и house_project не удаляются.\n\n" + "\n".join(blocked),
+            )
+        if not to_delete:
+            return
+        text = prompt + "\n\n" + "\n".join(lines[:20])
+        if len(lines) > 20:
+            text += f"\n… и ещё {len(lines) - 20}"
+        text += "\n\nПапки будут удалены с диска без корзины."
+        if not messagebox.askyesno("Подтвердите удаление", text):
+            return
+        deleted: List[Path] = []
+        errors: List[str] = []
+        for s in to_delete:
+            try:
+                shutil.rmtree(s.project_dir)
+                deleted.append(s.project_dir)
+            except Exception as exc:
+                errors.append(f"{s.project_dir.name}: {exc}")
+        if deleted and self.on_log:
+            self.on_log(f"Удалено проектов: {len(deleted)}\n")
+        if errors:
+            messagebox.showerror("Часть папок не удалена", "\n".join(errors))
+        elif deleted:
+            messagebox.showinfo("Готово", f"Удалено папок: {len(deleted)}")
+        self.refresh()
+        if deleted and self.on_projects_deleted:
+            self.on_projects_deleted(deleted)
+
+    def delete_selected(self) -> None:
+        self._delete_summaries(
+            self._selected_summaries(),
+            prompt="Удалить выбранные проекты?",
+        )
+
+    def delete_without_markup(self) -> None:
+        empty = [s for s in self._summaries if not s.has_markup and s.project_dir.name not in self.PROTECTED_FOLDERS]
+        if not empty:
+            messagebox.showinfo("Нечего удалять", "Нет проектов без разметки (или только служебные папки).")
+            return
+        names = ", ".join(s.project_dir.name for s in empty[:8])
+        extra = f" и ещё {len(empty) - 8}" if len(empty) > 8 else ""
+        if not messagebox.askyesno(
+            "Удалить экспериментальные?",
+            f"Найдено проектов без разметки: {len(empty)}.\n{names}{extra}\n\nУдалить все такие папки?",
+        ):
+            return
+        self._delete_summaries(empty, prompt="Удалить все проекты без разметки?")

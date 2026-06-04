@@ -3,7 +3,7 @@
 """Archiview CV v15 — модель проекта дома (много фото, много сравнений).
 
 Первый проход: хранение и миграция legacy-папок без ломания result/.
-Композиты (composites/) — только заготовка каталогов.
+Композиты (composites/) — заготовка каталогов на будущее.
 """
 from __future__ import annotations
 
@@ -47,6 +47,7 @@ def safe_id(prefix: str, existing: Sequence[str]) -> str:
 @dataclass
 class HouseProject:
     project_id: str = ""
+    site_card_id: str = ""
     address: str = ""
     lat: Optional[float] = None
     lon: Optional[float] = None
@@ -56,6 +57,8 @@ class HouseProject:
     notes: str = ""
     status: str = "draft"
     published: bool = False
+    project_slug: str = ""
+    workflow_steps: Dict[str, str] = field(default_factory=dict)
     schema_version: str = SCHEMA_VERSION
     created_at: str = ""
     updated_at: str = ""
@@ -75,6 +78,9 @@ class HouseProject:
         hp = cls(**kwargs)
         if isinstance(data.get("act_urls"), list):
             hp.act_urls = [str(x) for x in data["act_urls"]]
+        ws = data.get("workflow_steps")
+        if isinstance(ws, dict):
+            hp.workflow_steps = {str(k): str(v) for k, v in ws.items()}
         return hp
 
 
@@ -129,6 +135,8 @@ class ComparisonSession:
     modern_photo_id: str = ""
     historical_photo_ids: List[str] = field(default_factory=list)
     active_historical_photo_id: str = ""
+    historical_source_key: str = ""
+    modern_source_path: str = ""
     overlay_settings: Dict[str, Any] = field(default_factory=dict)
     annotation_count: int = 0
     status: str = "draft"
@@ -165,6 +173,8 @@ class ComparisonSession:
 class ProjectSummary:
     project_dir: Path
     project_id: str
+    site_card_id: str
+    object_name: str
     address: str
     historical_count: int
     modern_count: int
@@ -172,6 +182,19 @@ class ProjectSummary:
     status: str
     updated_at: str
     has_published: bool
+    has_markup: bool = False
+
+    @property
+    def display_title(self) -> str:
+        if self.object_name.strip():
+            return self.object_name.strip()
+        if self.site_card_id.strip():
+            name = website_display_name(self.site_card_id)
+            if name:
+                return name
+        if self.address.strip() and self.address.strip() not in (self.project_dir.name, self.project_id):
+            return self.address.strip()
+        return self.project_dir.name
 
 
 class ProjectStore:
@@ -237,9 +260,16 @@ class ProjectStore:
         hist = len(self.list_photos("historical"))
         mod = len(self.list_photos("modern"))
         published = any(c.status == "published" for c in self.comparisons.values())
+        site_card_id = normalize_site_card_id(self.house.site_card_id) or infer_site_card_id(
+            self.project_dir,
+            self.house.address,
+            self.house.object_name,
+        )
         return ProjectSummary(
             project_dir=self.project_dir,
             project_id=self.house.project_id or self.project_dir.name,
+            site_card_id=site_card_id,
+            object_name=self.house.object_name or "",
             address=self.house.address or self.project_dir.name,
             historical_count=hist,
             modern_count=mod,
@@ -247,6 +277,7 @@ class ProjectStore:
             status=self.house.status,
             updated_at=self.house.updated_at or "",
             has_published=published,
+            has_markup=project_has_markup(self.project_dir),
         )
 
     def ensure_v15_layout(self) -> None:
@@ -519,6 +550,34 @@ class ProjectStore:
         self.save()
         return photo
 
+    def find_comparison_for_sources(
+        self,
+        historical_source_key: str = "",
+        modern_source_path: str = "",
+    ) -> Optional[ComparisonSession]:
+        hist_key = str(Path(historical_source_key).resolve()) if historical_source_key else ""
+        mod_key = str(Path(modern_source_path).resolve()) if modern_source_path else ""
+        for cmp in self.list_comparisons():
+            cmp_hist = str(Path(cmp.historical_source_key).resolve()) if cmp.historical_source_key else ""
+            cmp_mod = str(Path(cmp.modern_source_path).resolve()) if cmp.modern_source_path else ""
+            if hist_key and cmp_hist == hist_key:
+                if not mod_key or not cmp_mod or cmp_mod == mod_key:
+                    return cmp
+            if mod_key and cmp_mod == mod_key and hist_key and cmp_hist == hist_key:
+                return cmp
+        return None
+
+    def ensure_photo_from_path(self, src: str | Path, kind: str, title: str = "") -> PhotoSource:
+        src_path = Path(src)
+        resolved = str(src_path.resolve()).lower()
+        for photo in self.photos.values():
+            if photo.kind != kind:
+                continue
+            for candidate in (photo.original_path, photo.preview_path, photo.rectified_path):
+                if candidate and str(Path(candidate).resolve()).lower() == resolved:
+                    return photo
+        return self.add_photo_from_file(kind, src_path, title=title or src_path.stem)
+
     def create_comparison(
         self,
         title: str,
@@ -526,6 +585,8 @@ class ProjectStore:
         historical_photo_ids: List[str],
         *,
         copy_as_new: bool = True,
+        historical_source_key: str = "",
+        modern_source_path: str = "",
     ) -> ComparisonSession:
         cmp_id = safe_id("cmp", list(self.comparisons.keys()))
         if not copy_as_new and self.active_comparison_id and self.active_comparison_id in self.comparisons:
@@ -537,6 +598,8 @@ class ProjectStore:
             modern_photo_id=modern_photo_id,
             historical_photo_ids=list(historical_photo_ids),
             active_historical_photo_id=active_hist,
+            historical_source_key=historical_source_key,
+            modern_source_path=modern_source_path,
             status="draft",
             is_legacy=False,
             work_dir=f"comparisons/{cmp_id}",
@@ -599,3 +662,391 @@ def _parse_float(value: Any) -> Optional[float]:
         return float(str(value).replace(",", "."))
     except ValueError:
         return None
+
+
+def _work_dir_has_markup(work_dir: Path) -> bool:
+    ann = work_dir / "annotations" / "manual_annotations.json"
+    if ann.exists():
+        try:
+            data = json.loads(ann.read_text(encoding="utf-8"))
+            anns = data.get("annotations", [])
+            if isinstance(anns, list) and len(anns) > 0:
+                return True
+        except Exception:
+            pass
+    return (work_dir / "07_marked_on_original_modern.png").exists()
+
+
+def project_has_markup(project_dir: Path) -> bool:
+    root = Path(project_dir)
+    if _work_dir_has_markup(root / "result"):
+        return True
+    cmp_root = root / "comparisons"
+    if cmp_root.exists():
+        for folder in cmp_root.iterdir():
+            if folder.is_dir() and _work_dir_has_markup(folder):
+                return True
+    return False
+
+
+_WEBSITE_BUILDINGS_CACHE: Optional[Dict[str, Dict[str, Any]]] = None
+
+
+def load_website_buildings_catalog(app_dir: Optional[Path] = None) -> Dict[str, Dict[str, Any]]:
+    global _WEBSITE_BUILDINGS_CACHE
+    if _WEBSITE_BUILDINGS_CACHE is not None:
+        return _WEBSITE_BUILDINGS_CACHE
+    candidates = []
+    if app_dir is not None:
+        candidates.append(Path(app_dir) / "website_buildings.json")
+    here = Path(__file__).resolve().parent
+    candidates.append(here / "website_buildings.json")
+    for path in candidates:
+        if path.exists():
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    _WEBSITE_BUILDINGS_CACHE = data
+                    return data
+            except Exception:
+                continue
+    _WEBSITE_BUILDINGS_CACHE = {}
+    return _WEBSITE_BUILDINGS_CACHE
+
+
+def website_display_name(site_card_id: str, app_dir: Optional[Path] = None) -> str:
+    card = normalize_site_card_id(site_card_id)
+    if not card:
+        return ""
+    entry = load_website_buildings_catalog(app_dir).get(card, {})
+    if isinstance(entry, dict):
+        return str(entry.get("displayName") or entry.get("name") or "").strip()
+    return ""
+
+
+_SITE_CARD_RE = re.compile(r"MOSCOW_(\d{3})", re.IGNORECASE)
+
+
+def normalize_site_card_id(value: str) -> str:
+    """Только MOSCOW_001 … MOSCOW_999 — не buildingId и не MOSCOW_001_KUMANIN."""
+    s = str(value or "").strip().upper()
+    if not s:
+        return ""
+    m = _SITE_CARD_RE.search(s.replace("-", "_"))
+    if not m:
+        return ""
+    return f"MOSCOW_{m.group(1)}"
+
+
+def _catalog_slug(building_id: str, card_id: str) -> str:
+    bid = str(building_id or "").strip().lower()
+    cid = str(card_id or "").strip().lower()
+    if bid.startswith(f"{cid}_"):
+        return bid[len(cid) + 1 :]
+    return bid
+
+
+def _text_matches_catalog(
+    *,
+    card_id: str,
+    entry: Dict[str, Any],
+    address: str,
+    object_name: str,
+    folder_name: str,
+) -> bool:
+    display = str(entry.get("displayName") or entry.get("name") or "").strip().lower()
+    building_id = str(entry.get("buildingId") or "").strip().lower()
+    slug = _catalog_slug(building_id, card_id)
+    addr_l = str(address or "").lower()
+    name_l = str(object_name or "").lower()
+    folder_l = str(folder_name or "").lower().replace("-", "_")
+
+    if display:
+        if display in addr_l or display in name_l or name_l in display:
+            return True
+        for chunk in re.split(r"[\s/(),]+", display):
+            if len(chunk) >= 5 and chunk in name_l:
+                return True
+    if slug and len(slug) >= 4:
+        if slug in folder_l or slug in name_l.replace(" ", "_"):
+            return True
+    if building_id and building_id in folder_l.replace(" ", "_"):
+        return True
+    keywords: Dict[str, List[str]] = {
+        "MOSCOW_001": ("куманин", "ордынк", "ардов", "kumanin"),
+        "MOSCOW_002": ("тургенев", "читальн", "turgenev"),
+        "MOSCOW_003": ("звер", "чистопруд", "zver", "so_zver"),
+        "MOSCOW_004": ("кривоколен", "krivokol"),
+    }
+    for kw in keywords.get(str(card_id).upper(), []):
+        if kw in name_l or kw in addr_l or kw in folder_l:
+            return True
+    return False
+
+
+def infer_site_card_id(
+    project_dir: Path,
+    address: str = "",
+    object_name: str = "",
+    app_dir: Optional[Path] = None,
+) -> str:
+    """Код карточки сайта MOSCOW_NNN из каталога website_buildings.json."""
+    app = app_dir or Path(__file__).resolve().parent
+    folder_name = project_dir.name
+    stored = ""
+    house_json = project_dir / "house.json"
+    if house_json.exists():
+        try:
+            data = json.loads(house_json.read_text(encoding="utf-8"))
+            stored = normalize_site_card_id(str(data.get("site_card_id") or ""))
+        except Exception:
+            stored = ""
+    if stored:
+        return stored
+
+    catalog = load_website_buildings_catalog(app)
+    for card_id, entry in catalog.items():
+        cid = normalize_site_card_id(str(card_id))
+        if not cid or not isinstance(entry, dict):
+            continue
+        if _text_matches_catalog(
+            card_id=cid,
+            entry=entry,
+            address=address,
+            object_name=object_name,
+            folder_name=folder_name,
+        ):
+            return cid
+
+    folder_u = folder_name.upper()
+    m = re.match(r"^(MOSCOW_\d{3})", folder_u)
+    if m:
+        return m.group(1)
+    return ""
+
+
+_BUILDING_TYPE_WORDS = frozenset(
+    {
+        "yes",
+        "house",
+        "residential",
+        "commercial",
+        "retail",
+        "apartments",
+        "industrial",
+        "garage",
+        "school",
+        "church",
+        "roof",
+    }
+)
+
+_HOUSE_PART_RE = re.compile(r"^\s*(\d+[\w/\-]*)\s*$", re.IGNORECASE)
+
+
+def house_number_from_nominatim(addr: Dict[str, Any]) -> str:
+    """Номер дома и строение из ответа Nominatim (OSM address)."""
+    hn = str(addr.get("house_number") or addr.get("housenumber") or "").strip()
+    unit = str(addr.get("unit") or addr.get("addr:unit") or "").strip()
+    bld = str(addr.get("building") or "").strip()
+    if bld.lower() in _BUILDING_TYPE_WORDS:
+        bld = ""
+    if hn and unit:
+        if unit.startswith(("с", "к", "стр", "/")) and not hn.endswith(unit.lstrip("сск/")):
+            return f"{hn}{unit}" if unit[0].isdigit() or unit[0] in "сск/" else f"{hn}, {unit}"
+        if unit not in hn:
+            return f"{hn}, {unit}"
+    if hn and bld and bld not in hn:
+        if len(bld) <= 6 and any(ch.isdigit() for ch in bld):
+            if bld[0].isdigit() or bld.startswith(("с", "к")):
+                return f"{hn}{bld}" if not hn[-1].isalpha() else f"{hn}, {bld}"
+    if hn:
+        return hn
+    if bld and any(ch.isdigit() for ch in bld):
+        return bld
+    return ""
+
+
+def osm_tags_to_address_dict(tags: Dict[str, Any]) -> Dict[str, str]:
+    """Теги здания OSM (Overpass) → поля как у Nominatim."""
+    return {
+        "house_number": str(tags.get("addr:housenumber") or tags.get("housenumber") or "").strip(),
+        "road": str(
+            tags.get("addr:street")
+            or tags.get("addr:place")
+            or tags.get("addr:road")
+            or tags.get("name")
+            or ""
+        ).strip(),
+        "city": str(tags.get("addr:city") or tags.get("addr:state") or "Москва").strip(),
+        "unit": str(tags.get("addr:unit") or tags.get("addr:flats") or "").strip(),
+        "building": str(tags.get("building:part") or "").strip(),
+    }
+
+
+def format_nominatim_short_address(addr: Dict[str, Any], *, default_city: str = "Москва") -> str:
+    city = str(
+        addr.get("city")
+        or addr.get("town")
+        or addr.get("village")
+        or addr.get("municipality")
+        or addr.get("state")
+        or default_city
+    ).strip()
+    street = str(
+        addr.get("road")
+        or addr.get("pedestrian")
+        or addr.get("footway")
+        or addr.get("street")
+        or addr.get("residential")
+        or ""
+    ).strip()
+    house = house_number_from_nominatim(addr)
+    parts: List[str] = []
+    if city:
+        parts.append(city)
+    if street:
+        line = street if not house else f"{street}, {house}"
+        parts.append(line)
+    elif house:
+        parts.append(house)
+    return ", ".join(parts)
+
+
+def _merge_house_fragments(fragments: List[str]) -> str:
+    if not fragments:
+        return ""
+    best = ""
+    for frag in fragments:
+        f = frag.strip()
+        if len(f) > len(best):
+            best = f
+    return best
+
+
+def normalize_address_dedupe(address: str) -> str:
+    """Один адрес без повторов города/улицы/номера дома."""
+    text = " ".join((address or "").split()).strip()
+    if not text:
+        return ""
+    parts = [p.strip() for p in text.replace(";", ",").split(",") if p.strip()]
+    unique: List[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        key = part.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(part)
+    if not unique:
+        return ""
+    rebuilt: List[str] = []
+    house_buf: List[str] = []
+    for part in unique:
+        if _HOUSE_PART_RE.match(part) or (part and part[0].isdigit()):
+            house_buf.append(part)
+            continue
+        if house_buf:
+            rebuilt.append(_merge_house_fragments(house_buf))
+            house_buf = []
+        rebuilt.append(part)
+    if house_buf:
+        rebuilt.append(_merge_house_fragments(house_buf))
+    return ", ".join(rebuilt)
+
+
+def address_location_key(address: str) -> str:
+    """Ключ для поиска дублей адреса между папками проектов."""
+    norm = normalize_address_dedupe(address).casefold()
+    if not norm:
+        return ""
+    parts = [p.strip() for p in norm.split(",") if p.strip()]
+    if parts and parts[0] in ("москва", "moscow", "г москва"):
+        parts = parts[1:]
+    return ", ".join(parts)
+
+
+def merge_map_address(existing: str, new_from_map: str) -> str:
+    """Адрес с карты + уже введённый номер дома (если клик был по улице)."""
+    old = normalize_address_dedupe(existing)
+    new = normalize_address_dedupe(new_from_map)
+    if not old:
+        return new
+    if not new:
+        return old
+
+    def house_token(text: str) -> str:
+        for part in reversed([p.strip() for p in text.split(",") if p.strip()]):
+            if _HOUSE_PART_RE.match(part) or (part and part[0].isdigit()):
+                return part
+        return ""
+
+    def street_key(text: str) -> str:
+        parts = [p.strip() for p in text.split(",") if p.strip()]
+        for part in parts:
+            if not (_HOUSE_PART_RE.match(part) or (part and part[0].isdigit())):
+                if part.casefold() not in ("москва", "moscow", "г москва"):
+                    return part.casefold()
+        return ""
+
+    sk_old = street_key(old)
+    sk_new = street_key(new)
+    if sk_new and sk_old and sk_new != sk_old:
+        return new
+    h_old = house_token(old)
+    h_new = house_token(new)
+    if h_old and not h_new and (not sk_new or sk_new == sk_old or sk_new in sk_old):
+        if h_old not in new:
+            return normalize_address_dedupe(f"{new}, {h_old}")
+        return old
+    return new if len(new) >= len(old) else old
+
+
+try:
+    from archiview_house_db import safe_slug
+except Exception:
+
+    def safe_slug(text: str, max_len: int = 90) -> str:  # type: ignore[misc]
+        s = re.sub(r"[^a-zA-Z0-9]+", "_", str(text or "").strip().lower())
+        s = re.sub(r"_+", "_", s).strip("_")
+        return (s or "house_project")[:max_len]
+
+
+def propose_project_slug(object_name: str = "", address: str = "", fallback: str = "house_project") -> str:
+    """Имя папки на диске: «дом_со_зверями» или «moscow_chistoprudny_14s3»."""
+    name = str(object_name or "").strip()
+    if name and name.lower() not in ("дом", "объект", "house"):
+        slug = safe_slug(name)
+        if slug and slug != "house_project":
+            return slug
+    addr = str(address or "").strip()
+    if addr:
+        slug = safe_slug(addr)
+        if slug and slug != "house_project":
+            return slug
+    return safe_slug(fallback)
+
+
+def next_site_card_id(app_dir: Optional[Path] = None) -> str:
+    """Следующий свободный MOSCOW_NNN для нового дома на сайте."""
+    catalog = load_website_buildings_catalog(app_dir)
+    nums: List[int] = []
+    for key in catalog.keys():
+        m = re.match(r"MOSCOW_(\d+)", str(key).upper())
+        if m:
+            nums.append(int(m.group(1)))
+    n = max(nums, default=0) + 1
+    return f"MOSCOW_{n:03d}"
+
+
+def propose_site_card_id(
+    project_dir: Path,
+    address: str = "",
+    object_name: str = "",
+    app_dir: Optional[Path] = None,
+) -> str:
+    """Код карточки сайта: из каталога или новый MOSCOW_NNN."""
+    existing = infer_site_card_id(project_dir, address, object_name, app_dir)
+    if existing:
+        return existing
+    return next_site_card_id(app_dir)
