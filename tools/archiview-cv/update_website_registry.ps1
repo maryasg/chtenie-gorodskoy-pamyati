@@ -36,7 +36,19 @@ function Escape-Regex([string]$s) {
 $assetsFile = Join-Path $RepoRoot 'src\data\explorer\archiviewAssets.ts'
 
 $explorerDir = Join-Path $RepoRoot ("public\explorer\{0}" -f $CardId)
-$hasSideBySide = Test-Path -LiteralPath (Join-Path $explorerDir 'side-by-side-marked.png')
+$hasSideBySide = $false
+$annPath = Join-Path $explorerDir 'annotations.json'
+if (Test-Path -LiteralPath $annPath) {
+    try {
+        $annData = Get-Content -LiteralPath $annPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ([string]$annData.labeling_layout -eq 'side_by_side') {
+            $hasSideBySide = $true
+        }
+    } catch { }
+}
+if (-not $hasSideBySide) {
+    $hasSideBySide = Test-Path -LiteralPath (Join-Path $explorerDir 'side-by-side-marked.png')
+}
 
 $histLine = if ($histYear) { "    historicalPhotoYear: '$histYear'," } else { $null }
 $markedUrlLine = if ($hasSideBySide) {

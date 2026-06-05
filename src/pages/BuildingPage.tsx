@@ -82,27 +82,9 @@ export function BuildingPage() {
       </Section>
 
       {archiview ? (
-        <>
-          <Section title="Фасад и подсветка" kicker="Archiview">
-            <ArchiviewFacadePanel assets={archiview} />
-          </Section>
-          <Section title="Две реальности" kicker="История ↔ сегодня">
-            <FacadeBeforeAfterSlider
-              historicalUrl={archiview.historicalRectifiedUrl}
-              modernUrl={archiview.modernRectifiedUrl}
-              historicalYear={archiview.historicalPhotoYear}
-              modernYear={archiview.modernPhotoYear}
-            />
-          </Section>
-          <p>
-            <Link
-              to={`/building/${building.id}/ar`}
-              className="inline-flex items-center gap-1 rounded-full border border-arch-line bg-arch-surface px-4 py-2 text-sm font-medium text-arch-green-deep hover:border-arch-green/40 hover:bg-arch-green-soft"
-            >
-              AR-preview: слои времени на фасаде →
-            </Link>
-          </p>
-        </>
+        <Section title="Фасад и подсветка" kicker="Archiview">
+          <ArchiviewFacadePanel assets={archiview} />
+        </Section>
       ) : (
         <Section title="Фасад и подсветка">
           <FacadeHotspotViewer building={building} />
@@ -114,10 +96,6 @@ export function BuildingPage() {
           </Link>
         </Section>
       )}
-
-      <Section title="Этапы трансформации">
-        <TransformationTimeline stages={building.timeline} />
-      </Section>
 
       <Section title="Следы памяти">
         <ul className="space-y-3">
@@ -135,6 +113,31 @@ export function BuildingPage() {
             </li>
           ))}
         </ul>
+      </Section>
+
+      {archiview ? (
+        <>
+          <Section title="Две реальности" kicker="История ↔ сегодня">
+            <FacadeBeforeAfterSlider
+              historicalUrl={archiview.historicalRectifiedUrl}
+              modernUrl={archiview.modernRectifiedUrl}
+              historicalYear={archiview.historicalPhotoYear}
+              modernYear={archiview.modernPhotoYear}
+            />
+          </Section>
+          <p>
+            <Link
+              to={`/building/${building.id}/ar`}
+              className="inline-flex items-center gap-1 rounded-full border border-arch-line bg-arch-surface px-4 py-2 text-sm font-medium text-arch-green-deep hover:border-arch-green/40 hover:bg-arch-green-soft"
+            >
+              AR-preview: слои времени на фасаде →
+            </Link>
+          </p>
+        </>
+      ) : null}
+
+      <Section title="Этапы трансформации">
+        <TransformationTimeline stages={building.timeline} />
       </Section>
 
       {building.artifacts.length > 0 && (

@@ -1141,3 +1141,88 @@ def propose_site_card_id(
     if existing:
         return existing
     return next_site_card_id(app_dir)
+
+
+def project_dir_from_result(result_dir: Path) -> Optional[Path]:
+    """Папка проекта Archiview из result/ или comparisons/cmp_XXX/."""
+    p = Path(result_dir).resolve()
+    if p.name == "result":
+        return p.parent
+    if p.parent.name == "comparisons":
+        return p.parent.parent
+    return None
+
+
+def site_card_id_from_result(result_dir: Path, app_dir: Optional[Path] = None) -> str:
+    """Код MOSCOW_NNN из house.json проекта, к которому относится экспорт."""
+    proj = project_dir_from_result(result_dir)
+    if proj is None:
+        return ""
+    address = ""
+    object_name = ""
+    house_json = proj / "house.json"
+    if house_json.exists():
+        try:
+            data = json.loads(house_json.read_text(encoding="utf-8"))
+            stored = normalize_site_card_id(str(data.get("site_card_id") or ""))
+            if stored:
+                return stored
+            address = str(data.get("address") or "")
+            object_name = str(data.get("object_name") or "")
+        except Exception:
+            pass
+    return infer_site_card_id(proj, address=address, object_name=object_name, app_dir=app_dir)
+
+
+def export_matches_site_card(
+    result_dir: Path,
+    card_id: str,
+    app_dir: Optional[Path] = None,
+) -> tuple[bool, str]:
+    """Проверка: экспорт из папки result относится к нужному MOSCOW_NNN."""
+    expected = normalize_site_card_id(card_id)
+    if not expected:
+        return False, "Не указан CardId (MOSCOW_001 …)."
+    actual = site_card_id_from_result(result_dir, app_dir)
+    if actual:
+        if actual == expected:
+            return True, ""
+        display = website_display_name(actual, app_dir) or actual
+        want = website_display_name(expected, app_dir) or expected
+        return (
+            False,
+            f"Экспорт из проекта «{display}» ({actual}), а выбран «{want}» ({expected}).\n"
+            "Откройте нужный дом в Archiview (звёздочка на сравнении) и повторите «На сайт».",
+        )
+    ann_path = Path(result_dir) / "annotations" / "manual_annotations.json"
+    if ann_path.exists():
+        try:
+            data = json.loads(ann_path.read_text(encoding="utf-8"))
+            image_ref = str(data.get("image") or "").lower()
+            catalog = load_website_buildings_catalog(app_dir)
+            entry = catalog.get(expected, {})
+            if isinstance(entry, dict):
+                for kw in keywords_for_site_card(expected):
+                    if kw and kw in image_ref:
+                        return True, ""
+                slug = _catalog_slug(str(entry.get("buildingId") or ""), expected)
+                if slug and slug.replace("_", "") in image_ref.replace("_", "").replace("-", ""):
+                    return True, ""
+        except Exception:
+            pass
+    return (
+        False,
+        f"Не удалось подтвердить, что экспорт относится к {expected}. "
+        "Укажите «Код на сайте» в «Данные дома» и сохраните проект.",
+    )
+
+
+def keywords_for_site_card(card_id: str) -> List[str]:
+    return list(
+        {
+            "MOSCOW_001": ("куманин", "ордынк", "ардов", "kumanin", "ordynk"),
+            "MOSCOW_002": ("тургенев", "читальн", "turgenev"),
+            "MOSCOW_003": ("звер", "чистопруд", "zver", "so_zver"),
+            "MOSCOW_004": ("кривоколен", "falkevich", "falkev", "krivokol"),
+        }.get(normalize_site_card_id(card_id), ())
+    )

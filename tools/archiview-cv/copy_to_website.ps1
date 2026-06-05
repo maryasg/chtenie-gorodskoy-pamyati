@@ -10,16 +10,27 @@ $ErrorActionPreference = 'Stop'
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
+function Normalize-CardId([string]$Value) {
+    if (-not $Value) { return '' }
+    if ($Value -match 'MOSCOW_(\d{3})') { return "MOSCOW_$($Matches[1])" }
+    return $Value.Trim().ToUpper()
+}
+
 if (-not $CardId -and -not $NoPrompt) {
     Write-Host ''
     Write-Host 'Building ID for the website (see website_buildings.json):'
+    Write-Host '  MOSCOW_001 - Dom Kumaninykh / Ordynka 17'
     Write-Host '  MOSCOW_003 - Dom so zveryami'
-    Write-Host '  MOSCOW_001 - Ordynka 17'
     Write-Host '  MOSCOW_004 - Dom s vyveskoy Falkevicha (Krivokolennyy)'
     Write-Host '  MOSCOW_002 - when added to json'
-    $CardId = Read-Host 'CardId (Enter = MOSCOW_003)'
+    $CardId = Read-Host 'CardId (required — no default)'
 }
-if (-not $CardId) { $CardId = 'MOSCOW_003' }
+$CardId = Normalize-CardId $CardId
+if (-not $CardId) {
+    Write-Host 'ERROR: CardId is required (MOSCOW_001, MOSCOW_003, …).'
+    if (-not $NoPrompt) { Read-Host 'Press Enter to close' }
+    exit 1
+}
 
 $Web = Join-Path $RepoRoot ("public\explorer\{0}" -f $CardId)
 
@@ -36,63 +47,102 @@ function Test-HasExportFiles([string]$Dir) {
     return $false
 }
 
-function Find-ResultFolder {
-    param([string]$StartDir, [string]$ProjectFolder, [string]$Explicit)
-    if ($Explicit -and (Test-Path -LiteralPath $Explicit)) { return $Explicit }
+function Get-ProjectDirFromResult([string]$Dir) {
+    $p = Get-Item -LiteralPath $Dir
+    if ($p.Name -eq 'result') { return $p.Parent.FullName }
+    if ($p.Parent.Name -eq 'comparisons') { return $p.Parent.Parent.FullName }
+    return $null
+}
 
-    $direct = Join-Path $StartDir "archiview_projects\$ProjectFolder\result"
-    if (Test-HasExportFiles $direct) { return $direct }
+function Get-SiteCardFromResult([string]$Dir) {
+    $proj = Get-ProjectDirFromResult $Dir
+    if (-not $proj) { return '' }
+    $house = Join-Path $proj 'house.json'
+    if (-not (Test-Path -LiteralPath $house)) { return '' }
+    try {
+        $h = Get-Content -LiteralPath $house -Raw -Encoding UTF8 | ConvertFrom-Json
+        return (Normalize-CardId ([string]$h.site_card_id))
+    } catch {
+        return ''
+    }
+}
+
+function Test-ExportMatchesCardId([string]$Dir, [string]$ExpectedCardId) {
+    $expected = Normalize-CardId $ExpectedCardId
+    $actual = Get-SiteCardFromResult $Dir
+    if ($actual) {
+        if ($actual -eq $expected) { return $true }
+        Write-Host "BLOCKED: export is from project $actual, but CardId=$expected"
+        return $false
+    }
+    $ann = Join-Path $Dir 'annotations\manual_annotations.json'
+    if (Test-Path -LiteralPath $ann) {
+        try {
+            $data = Get-Content -LiteralPath $ann -Raw -Encoding UTF8 | ConvertFrom-Json
+            $imageRef = ([string]$data.image).ToLower()
+            $keywords = @{
+                'MOSCOW_001' = @('kumanin', 'ordynk', 'ardov', 'ordynka', 'bolshaya_ordynka')
+                'MOSCOW_003' = @('zver', 'chistoprud', 'so_zver', 'dom_so_zver')
+                'MOSCOW_004' = @('krivokol', 'falkev', 'falkevich', 'krivokolenny')
+            }
+            foreach ($kw in $keywords[$expected]) {
+                if ($imageRef -like "*$kw*") { return $true }
+            }
+        } catch {
+            # fall through
+        }
+    }
+    Write-Host "BLOCKED: cannot verify export belongs to $expected (set site_card_id in house.json)."
+    return $false
+}
+
+function Find-ResultFolder {
+    param([string]$StartDir, [string]$ProjectFolder, [string]$Explicit, [string]$CardId)
+    if ($Explicit -and (Test-Path -LiteralPath $Explicit)) {
+        if (Test-ExportMatchesCardId $Explicit $CardId) { return $Explicit }
+        return $null
+    }
 
     $projectsRoot = Join-Path $StartDir 'archiview_projects'
-    if (Test-Path -LiteralPath $projectsRoot) {
-        $candidates = New-Object System.Collections.Generic.List[string]
-        Get-ChildItem -LiteralPath $projectsRoot -Directory -ErrorAction SilentlyContinue | ForEach-Object {
-            $proj = $_.FullName
-            $indexPath = Join-Path $proj 'comparisons\index.json'
-            if (Test-Path -LiteralPath $indexPath) {
-                try {
-                    $idx = Get-Content -LiteralPath $indexPath -Raw -Encoding UTF8 | ConvertFrom-Json
-                    $activeId = [string]$idx.active_comparison_id
-                    if ($activeId) {
-                        $cmpDir = Join-Path $proj ("comparisons\{0}" -f $activeId)
-                        if (Test-Path -LiteralPath $cmpDir) { [void]$candidates.Add($cmpDir) }
-                    }
-                } catch {
-                    # ignore broken index.json
+    if (-not (Test-Path -LiteralPath $projectsRoot)) { return $null }
+
+    $candidates = New-Object System.Collections.Generic.List[string]
+    Get-ChildItem -LiteralPath $projectsRoot -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+        $proj = $_.FullName
+        $projCard = ''
+        $house = Join-Path $proj 'house.json'
+        if (Test-Path -LiteralPath $house) {
+            try {
+                $h = Get-Content -LiteralPath $house -Raw -Encoding UTF8 | ConvertFrom-Json
+                $projCard = Normalize-CardId ([string]$h.site_card_id)
+            } catch { }
+        }
+        if ($projCard -and $projCard -ne (Normalize-CardId $CardId)) { return }
+
+        $indexPath = Join-Path $proj 'comparisons\index.json'
+        if (Test-Path -LiteralPath $indexPath) {
+            try {
+                $idx = Get-Content -LiteralPath $indexPath -Raw -Encoding UTF8 | ConvertFrom-Json
+                $activeId = [string]$idx.active_comparison_id
+                if ($activeId) {
+                    $cmpDir = Join-Path $proj ("comparisons\{0}" -f $activeId)
+                    if (Test-Path -LiteralPath $cmpDir) { [void]$candidates.Add($cmpDir) }
                 }
-            }
-            $legacy = Join-Path $proj 'result'
-            if (Test-Path -LiteralPath $legacy) { [void]$candidates.Add($legacy) }
-            Get-ChildItem -LiteralPath (Join-Path $proj 'comparisons') -Directory -ErrorAction SilentlyContinue |
-                ForEach-Object { [void]$candidates.Add($_.FullName) }
+            } catch { }
         }
-        $sorted = $candidates | Sort-Object { (Get-Item -LiteralPath $_).LastWriteTime } -Descending -Unique
-        foreach ($dir in $sorted) {
-            if (Test-HasExportFiles $dir) { return $dir }
-        }
+        $legacy = Join-Path $proj 'result'
+        if (Test-Path -LiteralPath $legacy) { [void]$candidates.Add($legacy) }
     }
 
-    $cultTech = Join-Path $env:USERPROFILE 'Desktop\Cult Tech'
-    if (Test-Path -LiteralPath $cultTech) {
-        $matches = Get-ChildItem -LiteralPath $cultTech -Recurse -Directory -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -eq 'result' -and $_.Parent.Name -eq $ProjectFolder } |
-            Select-Object -First 1
-        if ($matches -and (Test-HasExportFiles $matches.FullName)) { return $matches.FullName }
-    }
-
-    if (Test-Path -LiteralPath (Join-Path $StartDir 'archiview_projects')) {
-        $latest = Get-ChildItem -LiteralPath (Join-Path $StartDir 'archiview_projects') -Directory -ErrorAction SilentlyContinue |
-            Sort-Object LastWriteTime -Descending |
-            Select-Object -First 1
-        if ($latest) {
-            $candidate = Join-Path $latest.FullName 'result'
-            if (Test-HasExportFiles $candidate) { return $candidate }
-        }
+    $sorted = $candidates | Sort-Object { (Get-Item -LiteralPath $_).LastWriteTime } -Descending -Unique
+    foreach ($dir in $sorted) {
+        if (-not (Test-HasExportFiles $dir)) { continue }
+        if (Test-ExportMatchesCardId $dir $CardId) { return $dir }
     }
     return $null
 }
 
-$Result = Find-ResultFolder -StartDir $ScriptDir -ProjectFolder $ProjectFolder -Explicit $ResultDir
+$Result = Find-ResultFolder -StartDir $ScriptDir -ProjectFolder $ProjectFolder -Explicit $ResultDir -CardId $CardId
 
 Write-Host ''
 Write-Host 'FROM (Archiview result):'
@@ -103,8 +153,9 @@ Write-Host "CardId: $CardId"
 Write-Host ''
 
 if (-not $Result) {
-    Write-Host 'ERROR: result folder not found.'
-    Write-Host 'Tip: in Archiview use active comparison (star) or pass -ResultDir path to cmp folder.'
+    Write-Host 'ERROR: result folder not found or CardId mismatch.'
+    Write-Host 'Tip: open the correct house in Archiview, star the comparison, use "Na sait" from the app.'
+    Write-Host 'Or: copy_to_website.bat with matching CardId and active project.'
     if (-not $NoPrompt) { Read-Host 'Press Enter to close' }
     exit 1
 }

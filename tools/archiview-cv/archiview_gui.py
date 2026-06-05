@@ -80,6 +80,7 @@ try:
         propose_site_card_id,
         next_site_card_id,
         website_display_name,
+        export_matches_site_card,
     )
     from archiview_project_ui import CombinedHousesTab, ComparisonsTabFrame, MyProjectsPanel, PhotosTabFrame
 except Exception:
@@ -96,6 +97,7 @@ except Exception:
     propose_project_slug = None  # type: ignore[assignment,misc]
     propose_site_card_id = None  # type: ignore[assignment,misc]
     next_site_card_id = None  # type: ignore[assignment,misc]
+    export_matches_site_card = None  # type: ignore[assignment,misc]
     osm_tags_to_address_dict = None  # type: ignore[assignment,misc]
     CombinedHousesTab = None  # type: ignore[assignment,misc]
     PhotosTabFrame = None  # type: ignore[assignment,misc]
@@ -507,11 +509,21 @@ def annotation_polygon_rectified(ann: dict, project: dict) -> List[List[float]]:
     poly = ann.get("polygon") or []
     if not poly:
         return []
+    if not project_is_side_by_side(project):
+        return [[float(x), float(y)] for x, y in poly]
     if str(ann.get("coordinate_space") or "") == "rectified":
         return [[float(x), float(y)] for x, y in poly]
     if str(ann.get("coordinate_space") or "") == "comparison":
         return comparison_polygon_to_rectified(poly, side, project)
     return comparison_polygon_to_rectified(poly, side, project)
+
+
+def overlay_labeling_image_path(outdir: Path, project: dict) -> Path:
+    p05 = outdir / "05_comparison_for_labeling.png"
+    if p05.exists():
+        return p05
+    outputs = project.get("outputs") or {}
+    return Path(outputs.get("modern_rectified", outdir / "04_modern_rectified.png"))
 
 
 def annotations_for_side(annotations: List[dict], side: str, project: dict) -> List[dict]:
@@ -2193,6 +2205,8 @@ def save_annotations_and_exports(outdir: Path, annotations: List[dict]) -> Dict[
                 item["coordinate_space"] = "comparison"
                 comp_poly = [[float(x), float(y)] for x, y in ann.get("polygon", [])]
             comparison_draw.append({**item, "polygon": comp_poly})
+        else:
+            item["coordinate_space"] = "rectified"
         export_annotations.append(item)
 
     payload["annotations"] = export_annotations
@@ -2214,7 +2228,9 @@ def save_annotations_and_exports(outdir: Path, annotations: List[dict]) -> Dict[
         )
         marked_src = draw_polygons_on_image(modern_src, hist_anns_modern, transform=None, draw_indices=False)
     else:
-        marked_rect = draw_polygons_on_image(modern_rect, annotations, transform=None, draw_indices=False)
+        labeling_path = overlay_labeling_image_path(outdir, project)
+        rect_base = cv_read(labeling_path if labeling_path.exists() else modern_rect_path)
+        marked_rect = draw_polygons_on_image(rect_base, annotations, transform=None, draw_indices=True)
         marked_src = draw_polygons_on_image(
             modern_src,
             annotations,
@@ -3674,6 +3690,8 @@ class App(tk.Tk):
         if self._is_side_by_side_project():
             ann["image_side"] = side or self._markup_active_image_side()
             ann["coordinate_space"] = "rectified"
+        else:
+            ann["coordinate_space"] = "rectified"
         return ann
 
     def _migrate_side_by_side_annotations(self) -> None:
@@ -3716,6 +3734,39 @@ class App(tk.Tk):
         if not path.exists():
             raise RuntimeError("Сначала нажмите «Подготовить» на вкладке 2 (разные ракурсы).")
         return Image.open(path).convert("RGB")  # type: ignore[union-attr]
+
+    def _labeling_image_ready(self) -> bool:
+        return not self._is_side_by_side_project() and self._comparison_panel_path().exists()
+
+    def _compose_markup_view(self, mode: Optional[str] = None):
+        if Image is None:
+            raise RuntimeError("Pillow не установлен.")
+        if self._is_side_by_side_project():
+            view_mode = mode
+            if view_mode is None and hasattr(self, "markup_background_mode"):
+                view_mode = self.markup_background_mode.get()
+            if self._markup_uses_comparison_canvas() or view_mode in ("side_by_side", "overlay", "before_after", None):
+                return self._comparison_panel_pil()
+            old, modern = self._load_rectified_images()
+            if view_mode == "historical":
+                return self._prepared_old_pil(old)
+            if view_mode == "modern":
+                return self._prepared_modern_pil(modern)
+            return self._comparison_panel_pil()
+        path = self._comparison_panel_path()
+        if path.exists():
+            return Image.open(path).convert("RGB")  # type: ignore[union-attr]
+        return self._compose_current_view(mode=mode or "overlay")
+
+    def _sync_overlay_markup_canvas(self) -> None:
+        if not self._labeling_image_ready():
+            return
+        if hasattr(self, "markup_background_mode"):
+            self.markup_background_mode.set("overlay")
+        if hasattr(self, "markup_zoom"):
+            self.markup_zoom = 1.0
+            self.markup_pan_x = 0.0
+            self.markup_pan_y = 0.0
 
     def _markup_uses_dual_panels(self) -> bool:
         return bool(self._is_side_by_side_project())
@@ -3775,6 +3826,7 @@ class App(tk.Tk):
 
     def _prepare_markup_for_side_by_side(self) -> None:
         if not self._is_side_by_side_project():
+            self._sync_overlay_markup_canvas()
             return
         self._sync_side_by_side_view_modes()
 
@@ -3807,8 +3859,10 @@ class App(tk.Tk):
                 return [[float(x), float(y)] for x, y in (ann.get("polygon") or [])]
             rect_poly = annotation_polygon_rectified(ann, project)
             return rectified_polygon_to_comparison(rect_poly, side, project)
+        if not project_is_side_by_side(project):
+            return annotation_polygon_rectified(ann, project)
         side = annotation_image_side(ann, project)
-        if project_is_side_by_side(project) and side == "historical":
+        if side == "historical":
             return []
         return annotation_polygon_on_full_source(ann, project)
 
@@ -6442,6 +6496,16 @@ map.on('click',e=>{{
                     "Укажите «Код на сайте» (MOSCOW_001 …) в «Данные дома» и сохраните.",
                 )
             return False
+        result_path = Path(self.outdir.get())
+        if export_matches_site_card is not None:
+            ok, err = export_matches_site_card(result_path, card_id, APP_DIR)  # type: ignore[misc]
+            if not ok:
+                if not quiet:
+                    messagebox.showerror(
+                        "Неверный дом для экспорта",
+                        err or f"Экспорт не совпадает с {card_id}.",
+                    )
+                return False
         script = APP_DIR / "copy_to_website.ps1"
         if not script.exists():
             if not quiet:
@@ -7253,11 +7317,15 @@ class AppV11(App):
                         f"Сейчас рисуете на {side_ru} фото."
                     )
                 )
+            elif self._labeling_image_ready():
+                self._markup_side_hint.configure(
+                    text="Разметка всегда по картинке подготовки (вкладка 2). Координаты не смещаются при смене фона."
+                )
             else:
                 self._markup_side_hint.configure(text="")
         try:
             mode = self.markup_background_mode.get()
-            img = self._compose_current_view(mode=mode)
+            img = self._compose_markup_view(mode=mode)
             self._show_pil_on_canvas(self.markup_canvas, img, "_markup_photo_ref", "markup_display")
             self._draw_markup_vectors()
             self.markup_status.set(f"Областей: {len(self.embedded_annotations)}. Точек в текущей области: {len(self.current_markup_points)}.")
@@ -7754,14 +7822,18 @@ class AppV12(AppV11):
                         f"Сейчас рисуете на {side_ru} фото."
                     )
                 )
+            elif self._labeling_image_ready():
+                self._markup_side_hint.configure(
+                    text="Разметка всегда по картинке подготовки (вкладка 2). Координаты не смещаются при смене фона."
+                )
             else:
                 self._markup_side_hint.configure(text="")
         try:
             mode = self.markup_background_mode.get()
             if mode not in {"overlay", "before_after", "modern", "historical", "side_by_side"}:
                 mode = "overlay"
-            if self._is_side_by_side_project():
-                img = self._compose_current_view(mode=mode)
+            if self._is_side_by_side_project() or self._labeling_image_ready():
+                img = self._compose_markup_view(mode=mode)
                 self._show_pil_on_canvas(self.markup_canvas, img, "_markup_photo_ref", "markup_display")
             else:
                 img, display = self._compose_preview_for_canvas(self.markup_canvas, mode)
@@ -8771,6 +8843,8 @@ class AppV13(AppV12):
     def _markup_current_full_size(self) -> Tuple[int, int]:
         if self._is_side_by_side_project() and self._markup_uses_comparison_canvas():
             return self._comparison_panel_pil().size
+        if self._labeling_image_ready() or not self._is_side_by_side_project():
+            return self._compose_markup_view().size
         old, _modern = self._load_rectified_images()
         return old.size
 
@@ -8845,13 +8919,17 @@ class AppV13(AppV12):
                 self._markup_side_hint.configure(
                     text=f"Разные ракурсы: сейчас фон — только {side_ru} кадр."
                 )
+            elif self._labeling_image_ready():
+                self._markup_side_hint.configure(
+                    text="Разметка всегда по картинке подготовки (вкладка 2). Координаты не смещаются при смене фона."
+                )
             else:
                 self._markup_side_hint.configure(text="")
         try:
             mode = self.markup_background_mode.get()
             if mode not in {"overlay", "before_after", "modern", "historical", "side_by_side"}:
                 mode = "overlay"
-            full = self._compose_current_view(mode=mode)
+            full = self._compose_markup_view(mode=mode)
             cw = max(10, self.markup_canvas.winfo_width())
             ch = max(10, self.markup_canvas.winfo_height())
             base = min(cw / float(full.width), ch / float(full.height), 1.0)
@@ -9492,29 +9570,33 @@ class AppV14(AppV13):
             comp = outdir / "06_marked_rectified.png"
             if comp.exists():
                 return Image.open(comp).convert("RGB")  # type: ignore[union-attr]
+        self._ensure_annotations_loaded()
+        anns = normalize_annotation_list(list(self.embedded_annotations))
+        if not project_is_side_by_side(project):
+            labeling_path = overlay_labeling_image_path(outdir, project)
+            if not labeling_path.exists():
+                raise RuntimeError(
+                    "Не найдена картинка для разметки (05_comparison_for_labeling.png). "
+                    "Сначала подготовьте overlay на вкладке 2."
+                )
+            base_bgr = cv_read(labeling_path)
+            if anns:
+                base_bgr = draw_polygons_on_image(base_bgr, anns, transform=None, draw_indices=True)
+            return Image.fromarray(cv.cvtColor(base_bgr, cv.COLOR_BGR2RGB))  # type: ignore[union-attr]
         modern_path = Path(str(project.get("modern_image") or ""))
         if not modern_path.exists():
             fallback = outdir / "07_marked_on_original_modern.png"
             if fallback.exists():
                 return Image.open(fallback).convert("RGB")  # type: ignore[union-attr]
             raise RuntimeError(f"Не найдено исходное современное фото: {modern_path}")
-        self._ensure_annotations_loaded()
         modern_bgr = cv_read(modern_path)
-        anns = normalize_annotation_list(list(self.embedded_annotations))
         if anns:
-            if project_is_side_by_side(project):
-                modern_bgr = draw_polygons_on_image(
-                    modern_bgr,
-                    annotations_for_side(anns, "modern", project),
-                    transform=None,
-                    draw_indices=False,
-                )
-            else:
-                fb = str(getattr(self, "modern_crop_rect_text", "") or "")
-                if not fb:
-                    fb = modern_crop_rect_from_metadata_near(outdir)
-                H = H_rect_to_full_modern_from_project(project, fallback_rect_text=fb)
-                modern_bgr = draw_polygons_on_image(modern_bgr, anns, transform=H, draw_indices=False)
+            modern_bgr = draw_polygons_on_image(
+                modern_bgr,
+                annotations_for_side(anns, "modern", project),
+                transform=None,
+                draw_indices=False,
+            )
         return Image.fromarray(cv.cvtColor(modern_bgr, cv.COLOR_BGR2RGB))  # type: ignore[union-attr]
 
     def _refresh_result_canvas(self) -> None:
@@ -9563,6 +9645,11 @@ class AppV14(AppV13):
             extra = f"\nФайл с легендой снизу: {legend_file}" if legend_file.exists() else ""
             if self._result_display_uses_comparison_panel():
                 self.result_status.set(f"Итог: два фото рядом с номерами.{extra}")
+            elif not project_is_side_by_side(self._project_json_dict() or {}):
+                self.result_status.set(
+                    f"Итог на картинке подготовки (как во вкладке разметки). "
+                    f"07_marked_on_original_modern.png — для сайта на полном фасаде.{extra}"
+                )
             else:
                 self.result_status.set(f"Итог на полном исходном современном фото.{extra}")
             self._update_result_legend()
@@ -9690,7 +9777,10 @@ class AppV15(AppV14):
             self._dual_markup_container.grid_remove()
             self.markup_canvas.grid()
             if hasattr(self, "_markup_bg_box"):
-                self._markup_bg_box.grid()
+                if self._labeling_image_ready():
+                    self._markup_bg_box.grid_remove()
+                else:
+                    self._markup_bg_box.grid()
             parent = self.markup_canvas.master
             if isinstance(parent, ttk.LabelFrame):
                 parent.configure(
