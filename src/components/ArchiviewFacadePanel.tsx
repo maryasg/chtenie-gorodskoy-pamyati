@@ -59,6 +59,29 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
     return assets.markedFacadeUrl
   }, [assets])
 
+  const buildRegionsRectified = useCallback(
+    (annotations: ArchiviewAnnotation[], width: number, height: number) => {
+      const list: DisplayRegion[] = []
+      annotations.forEach((ann, i) => {
+        const raw = ann.polygon as Point[] | undefined
+        if (!raw || raw.length < 3) return
+        const pct = toPercentPoints(raw, width, height)
+        const [cx, cy] = polygonCentroid(pct)
+        list.push({
+          idx: i + 1,
+          cls: ann.class,
+          label: ann.label_ru || ann.class,
+          comment: (ann.comment || '').trim(),
+          polygonPct: pct,
+          cx,
+          cy,
+        })
+      })
+      setRegions(list)
+    },
+    [],
+  )
+
   const buildRegionsOverlay = useCallback(
     (annotations: ArchiviewAnnotation[], H: number[][], width: number, height: number) => {
       const list: DisplayRegion[] = []
@@ -165,7 +188,7 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
     return () => {
       cancelled = true
     }
-  }, [assets, buildRegionsOverlay, buildRegionsSideBySide, displayImageUrl])
+  }, [assets, buildRegionsOverlay, buildRegionsRectified, buildRegionsSideBySide, displayImageUrl])
 
   const active = hoverIdx !== null ? regions.find((r) => r.idx === hoverIdx) : null
 

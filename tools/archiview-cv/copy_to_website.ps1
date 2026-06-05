@@ -173,6 +173,15 @@ $Pairs = @(
     ,@('10_side_by_side_marked.png', 'side-by-side-marked.png')
 )
 
+$isSideBySide = $false
+$annExport = Join-Path $Result 'annotations\manual_annotations.json'
+if (Test-Path -LiteralPath $annExport) {
+    try {
+        $annData = Get-Content -LiteralPath $annExport -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ([string]$annData.labeling_layout -eq 'side_by_side') { $isSideBySide = $true }
+    } catch { }
+}
+
 foreach ($pair in $Pairs) {
     $src = Join-Path $Result $pair[0]
     $dst = Join-Path $Web $pair[1]
@@ -184,6 +193,14 @@ foreach ($pair in $Pairs) {
     }
     Copy-Item -LiteralPath $src -Destination $dst -Force
     Write-Host "OK: $($pair[1])"
+}
+
+if (-not $isSideBySide) {
+    $marked06 = Join-Path $Result '06_marked_rectified.png'
+    if (Test-Path -LiteralPath $marked06) {
+        Copy-Item -LiteralPath $marked06 -Destination (Join-Path $Web 'marked-facade.png') -Force
+        Write-Host 'OK: marked-facade.png (from 06_labeling_canvas, same as markup tab)'
+    }
 }
 
 $ProjectJson = Join-Path $Result 'project_v8.json'

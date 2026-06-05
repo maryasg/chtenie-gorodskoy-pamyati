@@ -1,10 +1,16 @@
 param(
     [Parameter(Mandatory = $true)][string]$CardId,
     [Parameter(Mandatory = $true)][string]$RepoRoot,
-    [string]$ScriptDir = $PSScriptRoot
+    [string]$ScriptDir = ''
 )
 
 $ErrorActionPreference = 'Stop'
+if (-not $ScriptDir) {
+    $ScriptDir = $PSScriptRoot
+}
+if (-not $ScriptDir) {
+    $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+}
 
 $configPath = Join-Path $ScriptDir 'website_buildings.json'
 if (-not (Test-Path -LiteralPath $configPath)) {
@@ -50,22 +56,24 @@ if (-not $hasSideBySide) {
     $hasSideBySide = Test-Path -LiteralPath (Join-Path $explorerDir 'side-by-side-marked.png')
 }
 
-$histLine = if ($histYear) { "    historicalPhotoYear: '$histYear'," } else { $null }
+$histLine = if ($histYear) { ('    historicalPhotoYear: ''{0}'',' -f $histYear) } else { $null }
 $markedUrlLine = if ($hasSideBySide) {
     ('    markedFacadeUrl: `${base}explorer/{0}/side-by-side-marked.png`,' -f $CardId)
 } else {
     ('    markedFacadeUrl: `${base}explorer/{0}/marked-facade.png`,' -f $CardId)
 }
 $entryLines = @(
-    "  ${buildingId}: {"
-    "    buildingId: '$buildingId',"
-    "    cardId: '$CardId',"
+    ('  {0}: {' -f $buildingId)
+    ('    buildingId: ''{0}'',' -f $buildingId)
+    ('    cardId: ''{0}'',' -f $CardId)
     $markedUrlLine
     ('    labeledFacadeUrl: `${base}explorer/{0}/marked-facade-labeled.png`,' -f $CardId)
 )
 if ($hasSideBySide) {
     $entryLines += ('    sideBySideMarkedUrl: `${base}explorer/{0}/side-by-side-marked.png`,' -f $CardId)
-    $entryLines += "    labelingLayout: 'side_by_side',"
+    $entryLines += '    labelingLayout: ''side_by_side'','
+} else {
+    $entryLines += '    labelingLayout: ''overlay'','
 }
 $entryLines += @(
     ('    historicalRectifiedUrl: `${base}explorer/{0}/historical-rectified.png`,' -f $CardId)
@@ -73,22 +81,24 @@ $entryLines += @(
 )
 if ($histLine) { $entryLines += $histLine }
 $entryLines += @(
-    "    modernPhotoYear: '$modYear',"
+    ('    modernPhotoYear: ''{0}'',' -f $modYear)
     ('    annotationsUrl: `${base}explorer/{0}/annotations.json`,' -f $CardId)
     ('    facadeProjectUrl: `${base}explorer/{0}/facade-project.json`,' -f $CardId)
     '  },'
 )
 $entry = $entryLines -join "`n"
+$entryReplacement = $entry + "`n"
 
 $content = Get-Content -LiteralPath $assetsFile -Raw -Encoding UTF8
 $idPattern = "(?ms)^  $(Escape-Regex $buildingId): \{.*?\r?\n  \},\r?\n"
+$replacer = [System.Text.RegularExpressions.MatchEvaluator]{ param($m) $entryReplacement }
 if ([regex]::IsMatch($content, $idPattern)) {
-    $content = [regex]::Replace($content, $idPattern, "$entry`n")
+    $content = [regex]::Replace($content, $idPattern, $replacer)
 } else {
     $content = [regex]::Replace(
         $content,
         '(?ms)(export const ARCHIVIEW_ASSETS[^{]+\{\r?\n)',
-        "`$1$entry`n"
+        [System.Text.RegularExpressions.MatchEvaluator]{ param($m) $m.Value + $entryReplacement }
     )
 }
 Set-Content -LiteralPath $assetsFile -Value $content -Encoding UTF8 -NoNewline
@@ -96,8 +106,8 @@ Write-Host "OK: archiviewAssets.ts -> $buildingId"
 
 try {
 # --- moscow00X.ts verification ---
-$num = $CardId -replace '^MOSCOW_', ''
-$buildingFile = Join-Path $RepoRoot ("src\data\buildings\moscow{0}.ts" -f $num.ToLower())
+$num = ($CardId -replace '^MOSCOW_', '').ToLower()
+$buildingFile = Join-Path $RepoRoot ('src\data\buildings\moscow' + $num + '.ts')
 if (-not (Test-Path -LiteralPath $buildingFile)) {
     Write-Host "SKIP: building file not found: $buildingFile"
 } else {

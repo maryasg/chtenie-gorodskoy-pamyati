@@ -1,4 +1,22 @@
 ﻿{
+    "side_by_side":  {
+                         "layout":  "side_by_side",
+                         "split_x":  1101,
+                         "historical_width":  1101,
+                         "modern_offset_x":  1141,
+                         "gap":  40,
+                         "label_bar_height":  36,
+                         "panel_height":  2000,
+                         "historical_crop_size":  [
+                                                      394,
+                                                      716
+                                                  ],
+                         "modern_crop_size":  [
+                                                  2993,
+                                                  2585
+                                              ],
+                         "no_rectification":  true
+                     },
     "H_rect_to_modern":  [
                              [
                                  1.0,
@@ -15,5 +33,10 @@
                                  0.0,
                                  1.0
                              ]
-                         ]
+                         ],
+    "rectified_size":  {
+                           "width":  3457,
+                           "height":  2036
+                       },
+    "labeling_layout":  "side_by_side"
 }

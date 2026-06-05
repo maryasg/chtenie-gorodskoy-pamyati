@@ -34,6 +34,7 @@ export const ARCHIVIEW_ASSETS: Record<string, ArchiviewBuildingAssets> = {
     cardId: 'MOSCOW_001',
     markedFacadeUrl: `${base}explorer/MOSCOW_001/marked-facade.png`,
     labeledFacadeUrl: `${base}explorer/MOSCOW_001/marked-facade-labeled.png`,
+    labelingLayout: 'overlay',
     historicalRectifiedUrl: `${base}explorer/MOSCOW_001/historical-rectified.png`,
     modernRectifiedUrl: `${base}explorer/MOSCOW_001/modern-rectified.png`,
     modernPhotoYear: '2026',
