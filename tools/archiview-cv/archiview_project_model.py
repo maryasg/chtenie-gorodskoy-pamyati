@@ -24,7 +24,22 @@ COMPARISON_STATUSES = (
     "published",
     "needs_update",
     "archived",
+    "discarded",
 )
+
+COMPARISON_STATUS_LABELS: Dict[str, str] = {
+    "draft": "Черновик",
+    "reviewed": "Проверено",
+    "ready_for_site": "Готово к сайту",
+    "published": "На сайте",
+    "needs_update": "Нужно обновить",
+    "archived": "В архиве",
+    "discarded": "К удалению",
+}
+
+
+def comparison_status_label(status: str) -> str:
+    return COMPARISON_STATUS_LABELS.get(status, status or "Черновик")
 
 PHOTO_KINDS = ("historical", "modern")
 
@@ -390,8 +405,12 @@ class ProjectStore:
 
     def _load_comparisons(self) -> None:
         self.comparisons.clear()
+        self.active_comparison_id = None
         if self.comparisons_index.exists():
             data = json.loads(self.comparisons_index.read_text(encoding="utf-8"))
+            active = data.get("active_comparison_id")
+            if isinstance(active, str) and active.strip():
+                self.active_comparison_id = active.strip()
             for item in data.get("comparisons", []):
                 cmp = ComparisonSession.from_json(item)
                 self.comparisons[cmp.comparison_id] = cmp
@@ -412,6 +431,24 @@ class ProjectStore:
                     self.comparisons[folder.name] = ComparisonSession.from_json(
                         json.loads(cmp_json.read_text(encoding="utf-8"))
                     )
+        self.refresh_comparison_stats()
+        if self.active_comparison_id and self.active_comparison_id not in self.comparisons:
+            self.active_comparison_id = None
+
+    def refresh_comparison_stats(self) -> None:
+        for cmp in self.comparisons.values():
+            work = cmp.work_path(self.project_dir)
+            ann = work / "annotations" / "manual_annotations.json"
+            count = 0
+            if ann.exists():
+                try:
+                    data = json.loads(ann.read_text(encoding="utf-8"))
+                    anns = data.get("annotations", [])
+                    if isinstance(anns, list):
+                        count = len(anns)
+                except Exception:
+                    pass
+            cmp.annotation_count = count
 
     def _migrate_legacy_comparison(self) -> None:
         result = self.project_dir / "result"
@@ -492,7 +529,15 @@ class ProjectStore:
         cmp_items = [c.to_json() for c in self.comparisons.values()]
         self.comparisons_index.parent.mkdir(parents=True, exist_ok=True)
         self.comparisons_index.write_text(
-            json.dumps({"schema_version": SCHEMA_VERSION, "comparisons": cmp_items}, ensure_ascii=False, indent=2),
+            json.dumps(
+                {
+                    "schema_version": SCHEMA_VERSION,
+                    "active_comparison_id": self.active_comparison_id or "",
+                    "comparisons": cmp_items,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
             encoding="utf-8",
         )
         for cmp in self.comparisons.values():
@@ -627,9 +672,55 @@ class ProjectStore:
     def set_active_comparison(self, comparison_id: str) -> ComparisonSession:
         if comparison_id not in self.comparisons:
             raise KeyError(comparison_id)
+        cmp = self.comparisons[comparison_id]
+        if cmp.status == "discarded":
+            raise ValueError("discarded_comparison")
         self.active_comparison_id = comparison_id
+        if cmp.status == "draft":
+            cmp.status = "reviewed"
+            cmp.touch()
         self.save()
-        return self.comparisons[comparison_id]
+        return cmp
+
+    def set_comparison_status(self, comparison_id: str, status: str) -> ComparisonSession:
+        if comparison_id not in self.comparisons:
+            raise KeyError(comparison_id)
+        if status not in COMPARISON_STATUSES:
+            status = "draft"
+        cmp = self.comparisons[comparison_id]
+        if cmp.is_legacy and status == "discarded":
+            raise ValueError("legacy_protected")
+        cmp.status = status
+        cmp.touch()
+        if status == "discarded" and self.active_comparison_id == comparison_id:
+            self.active_comparison_id = None
+            for other in reversed(self.list_comparisons()):
+                if other.comparison_id != comparison_id and other.status != "discarded":
+                    self.active_comparison_id = other.comparison_id
+                    break
+        self.save()
+        return cmp
+
+    def delete_comparison(self, comparison_id: str) -> None:
+        cmp = self.comparisons.get(comparison_id)
+        if not cmp:
+            raise KeyError(comparison_id)
+        if cmp.is_legacy:
+            raise ValueError("legacy_protected")
+        if cmp.status != "discarded":
+            raise ValueError("not_marked_discarded")
+        work = cmp.work_path(self.project_dir)
+        if work.exists() and work.is_dir() and not cmp.is_legacy:
+            shutil.rmtree(work)
+        del self.comparisons[comparison_id]
+        if self.active_comparison_id == comparison_id:
+            self.active_comparison_id = None
+            for other in reversed(self.list_comparisons()):
+                if other.status != "discarded":
+                    self.active_comparison_id = other.comparison_id
+                    break
+        self._sync_photo_usage()
+        self.save()
 
     def work_dir_for_active(self) -> Path:
         cmp = self.get_active_comparison()

@@ -1,6 +1,23 @@
 @import 'tailwindcss';
 @import 'leaflet/dist/leaflet.css';
 
+/* ARCHIVIEW / «Память стен» — тёмно-зелёная архивная тема */
+@theme {
+  --color-arch-bg: #f4f1ea;
+  --color-arch-surface: #fbfaf7;
+  --color-arch-surface-2: #ebe6dc;
+  --color-arch-ink: #10100f;
+  --color-arch-muted: #6f6a61;
+  --color-arch-line: #d7d0c3;
+  --color-arch-green: #1a4d3a;
+  --color-arch-green-deep: #123528;
+  --color-arch-green-light: #2d6b52;
+  --color-arch-green-soft: #e8f0eb;
+  --color-arch-accent: #c45a2c;
+  --color-arch-gold: #b8860b;
+  --font-arch: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
 html,
 body,
 #root {
@@ -8,6 +25,62 @@ body,
   margin: 0;
 }
 
+body {
+  font-family: var(--font-arch);
+  color: var(--color-arch-ink);
+  background:
+    linear-gradient(90deg, rgba(16, 16, 15, 0.04) 1px, transparent 1px) 0 0 / 72px 72px,
+    linear-gradient(180deg, rgba(16, 16, 15, 0.03) 1px, transparent 1px) 0 0 / 72px 72px,
+    var(--color-arch-bg);
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 78% 6%, rgba(26, 77, 58, 0.1), transparent 32%),
+    radial-gradient(circle at 8% 22%, rgba(16, 16, 15, 0.05), transparent 20%);
+}
+
 .leaflet-container {
   font-family: inherit;
+}
+
+/* Утилиты карточек (секции здания) */
+.arch-section {
+  border-radius: 1.25rem;
+  border: 1px solid var(--color-arch-line);
+  background: var(--color-arch-surface);
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 1px 0 rgba(16, 16, 15, 0.04);
+}
+
+.arch-section-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--color-arch-green-deep);
+}
+
+.arch-kicker {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-arch-green-light);
+}
+
+.arch-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  border: 1px solid var(--color-arch-line);
+  background: rgba(251, 250, 247, 0.9);
+  padding: 0.2rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-arch-muted);
 }

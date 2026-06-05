@@ -8,6 +8,28 @@ import { FacadeHotspotViewer } from '../components/FacadeHotspotViewer'
 import { TransformationTimeline } from '../components/TransformationTimeline'
 import { getArchiviewAssets } from '../data/explorer/archiviewAssets'
 
+import type { ReactNode } from 'react'
+
+function Section({
+  title,
+  kicker,
+  children,
+  className = '',
+}: {
+  title: string
+  kicker?: string
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <section className={`arch-section ${className}`}>
+      {kicker ? <p className="arch-kicker mb-1">{kicker}</p> : null}
+      <h2 className="arch-section-title mb-3">{title}</h2>
+      {children}
+    </section>
+  )
+}
+
 export function BuildingPage() {
   const { id } = useParams<{ id: string }>()
   const building = id ? getBuildingById(id) : undefined
@@ -15,29 +37,32 @@ export function BuildingPage() {
 
   if (!building) {
     return (
-      <p>
-        Здание не найдено. <Link to="/">На карту</Link>
+      <p className="text-arch-muted">
+        Здание не найдено. <Link to="/" className="font-medium text-arch-green underline">На карту</Link>
       </p>
     )
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <Link to="/" className="text-sm text-stone-500 hover:text-stone-800">
-          ← Карта
+    <div className="space-y-6">
+      <header className="arch-section border-arch-green/20 bg-gradient-to-br from-arch-green-soft to-arch-surface">
+        <Link
+          to="/"
+          className="text-sm font-medium text-arch-green-light hover:text-arch-green-deep"
+        >
+          ← Карта пилота
         </Link>
-        <div className="mt-2 flex flex-wrap items-start gap-2">
-          <h1 className="text-2xl font-semibold">{building.name}</h1>
+        <div className="mt-3 flex flex-wrap items-start gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight text-arch-green-deep">{building.name}</h1>
           {building.cardStatus === 'pilot_in_progress' && (
-            <span className="rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-800">
+            <span className="arch-pill border-arch-green/30 bg-arch-green-soft text-arch-green">
               Пилот v{building.cardVersion ?? '0.1'}
             </span>
           )}
         </div>
-        <p className="text-stone-600">{building.address}</p>
-        <p className="mt-2 text-sm text-stone-700">{building.headline}</p>
-        <div className="mt-2 flex flex-wrap gap-2 text-sm text-stone-500">
+        <p className="mt-1 text-arch-muted">{building.address}</p>
+        <p className="mt-3 text-sm leading-relaxed text-arch-ink/90">{building.headline}</p>
+        <div className="mt-3 flex flex-wrap gap-2 text-sm text-arch-muted">
           <span>{building.style}</span>
           <span>·</span>
           <span>{building.yearBuilt}</span>
@@ -48,97 +73,99 @@ export function BuildingPage() {
             </>
           )}
         </div>
-      </div>
+      </header>
 
       {building.verification && <BuildingVerificationBanner verification={building.verification} />}
 
-      <section>
-        <h2 className="mb-2 text-lg font-semibold">Интерпретация</h2>
-        <p className="text-sm leading-relaxed text-stone-700">{building.summary}</p>
-      </section>
+      <Section title="Интерпретация" kicker="Карточка здания">
+        <p className="text-sm leading-relaxed text-arch-ink/85">{building.summary}</p>
+      </Section>
 
       {archiview ? (
-        <section className="space-y-8">
-          <div>
-            <h2 className="mb-3 text-lg font-semibold">Фасад и подсветка (Archiview)</h2>
+        <>
+          <Section title="Фасад и подсветка" kicker="Archiview">
             <ArchiviewFacadePanel assets={archiview} />
-          </div>
-          <div>
-            <h2 className="mb-3 text-lg font-semibold">Две реальности (история ↔ сегодня)</h2>
+          </Section>
+          <Section title="Две реальности" kicker="История ↔ сегодня">
             <FacadeBeforeAfterSlider
               historicalUrl={archiview.historicalRectifiedUrl}
               modernUrl={archiview.modernRectifiedUrl}
               historicalYear={archiview.historicalPhotoYear}
               modernYear={archiview.modernPhotoYear}
             />
-          </div>
-          <Link
-            to={`/building/${building.id}/ar`}
-            className="inline-block text-sm font-medium text-stone-800 underline"
-          >
-            AR-preview: слои времени на фасаде →
-          </Link>
-        </section>
+          </Section>
+          <p>
+            <Link
+              to={`/building/${building.id}/ar`}
+              className="inline-flex items-center gap-1 rounded-full border border-arch-line bg-arch-surface px-4 py-2 text-sm font-medium text-arch-green-deep hover:border-arch-green/40 hover:bg-arch-green-soft"
+            >
+              AR-preview: слои времени на фасаде →
+            </Link>
+          </p>
+        </>
       ) : (
-        <section>
-          <h2 className="mb-3 text-lg font-semibold">Фасад и подсветка</h2>
+        <Section title="Фасад и подсветка">
           <FacadeHotspotViewer building={building} />
           <Link
             to={`/building/${building.id}/ar`}
-            className="mt-3 inline-block text-sm font-medium text-stone-800 underline"
+            className="mt-3 inline-block text-sm font-medium text-arch-green underline"
           >
             Симуляция AR-preview →
           </Link>
-        </section>
+        </Section>
       )}
 
-      <section>
-        <h2 className="mb-3 text-lg font-semibold">Этапы трансформации</h2>
+      <Section title="Этапы трансформации">
         <TransformationTimeline stages={building.timeline} />
-      </section>
+      </Section>
 
-      <section>
-        <h2 className="mb-3 text-lg font-semibold">Следы памяти</h2>
-        <ul className="space-y-4">
+      <Section title="Следы памяти">
+        <ul className="space-y-3">
           {building.memoryTraces.map((t) => (
-            <li key={t.id} className="rounded-lg border border-stone-200 bg-white p-4">
+            <li
+              key={t.id}
+              className="rounded-xl border border-arch-line bg-arch-surface-2/50 p-4"
+            >
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="font-medium">{t.title}</h3>
+                <h3 className="font-medium text-arch-ink">{t.title}</h3>
                 <ConfidenceBadge level={t.confidence} />
-                <span className="text-xs text-stone-500">{t.period}</span>
+                <span className="text-xs text-arch-muted">{t.period}</span>
               </div>
-              <p className="mt-2 text-sm text-stone-700">{t.userMessage}</p>
+              <p className="mt-2 text-sm text-arch-ink/80">{t.userMessage}</p>
             </li>
           ))}
         </ul>
-      </section>
+      </Section>
 
       {building.artifacts.length > 0 && (
-        <section>
-          <h2 className="mb-3 text-lg font-semibold">Сохранившиеся артефакты</h2>
+        <Section title="Сохранившиеся артефакты">
           <ul className="space-y-2">
             {building.artifacts.map((a) => (
               <li key={a.id} className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="font-medium">{a.title}</span>
                 <ConfidenceBadge level={a.confidence} />
-                <span className="text-stone-500">{a.period}</span>
+                <span className="text-arch-muted">{a.period}</span>
               </li>
             ))}
           </ul>
-        </section>
+        </Section>
       )}
 
-      <section>
-        <h2 className="mb-3 text-lg font-semibold">Визуальные материалы</h2>
+      <Section title="Визуальные материалы">
         <ul className="space-y-2 text-sm">
           {building.photos.map((p) => (
             <li key={p.id}>
               {p.url ? (
-                <a href={p.url} target="_blank" rel="noreferrer" className="text-blue-700 underline">
+                <a
+                  href={p.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-arch-green underline decoration-arch-green/30"
+                >
                   {p.description}
                 </a>
               ) : (
-                <span>
+                <span className="text-arch-muted">
                   {p.description}
                   {p.status ? ` (${p.status})` : ''}
                 </span>
@@ -146,15 +173,19 @@ export function BuildingPage() {
             </li>
           ))}
         </ul>
-      </section>
+      </Section>
 
-      <section>
-        <h2 className="mb-2 text-lg font-semibold">Источники</h2>
-        <ul className="list-inside list-disc text-sm text-stone-700">
+      <Section title="Источники">
+        <ul className="list-inside list-disc space-y-1 text-sm text-arch-ink/80">
           {building.sources.map((s) => (
             <li key={s.id}>
               {s.url ? (
-                <a href={s.url} target="_blank" rel="noreferrer" className="underline">
+                <a
+                  href={s.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-arch-green underline"
+                >
                   {s.name}
                 </a>
               ) : (
@@ -163,7 +194,7 @@ export function BuildingPage() {
             </li>
           ))}
         </ul>
-      </section>
+      </Section>
     </div>
   )
 }

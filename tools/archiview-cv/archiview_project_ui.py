@@ -16,7 +16,13 @@ except Exception:
     HouseRecord = None  # type: ignore[assignment,misc]
     open_system_path = None  # type: ignore[assignment,misc]
 
-from archiview_project_model import ComparisonSession, PhotoSource, ProjectStore, ProjectSummary
+from archiview_project_model import (
+    ComparisonSession,
+    PhotoSource,
+    ProjectStore,
+    ProjectSummary,
+    comparison_status_label,
+)
 
 
 class ProjectsOverviewPanel(ttk.LabelFrame):
@@ -295,7 +301,10 @@ class ComparisonsTabFrame(ttk.Frame):
 
         ttk.Label(
             self,
-            text="Каждое сравнение — отдельная папка. Существующая разметка в result/ сохраняется как cmp_legacy_001.",
+            text=(
+                "У дома одно активное сравнение (★) — с него идут углы, выпрямление и разметка. "
+                "Старую папку result/ не трогаем (cmp_legacy_001). Лишние cmp_XXX можно пометить «К удалению» и удалить."
+            ),
             wraplength=920,
             foreground="#555",
         ).grid(row=0, column=0, sticky="w", padx=10, pady=(10, 6))
@@ -327,6 +336,10 @@ class ComparisonsTabFrame(ttk.Frame):
         ttk.Button(btm, text="Открыть сравнение", command=self.open_selected).pack(side="left", padx=6)
         ttk.Button(btm, text="Создать новое…", command=self.create_new).pack(side="left", padx=6)
         ttk.Button(btm, text="Дублировать", command=self.duplicate_selected).pack(side="left", padx=6)
+        ttk.Button(btm, text="Сделать текущим ★", command=self.make_active).pack(side="left", padx=6)
+        ttk.Button(btm, text="Пометить «к удалению»", command=self.mark_discarded).pack(side="left", padx=6)
+        ttk.Button(btm, text="Снять пометку", command=self.unmark_discarded).pack(side="left", padx=6)
+        ttk.Button(btm, text="Удалить помеченные…", command=self.delete_discarded).pack(side="left", padx=6)
 
         self._items: List[ComparisonSession] = []
 
@@ -342,19 +355,22 @@ class ComparisonsTabFrame(ttk.Frame):
         self._items = []
         if not store:
             return
+        store.refresh_comparison_stats()
         self._items = store.list_comparisons()
+        active = store.active_comparison_id
         for i, c in enumerate(self._items):
-            mark = " (legacy)" if c.is_legacy else ""
+            prefix = "★ " if c.comparison_id == active else ""
+            suffix = " (legacy)" if c.is_legacy else ""
             self.tree.insert(
                 "",
                 "end",
                 iid=str(i),
                 values=(
-                    c.comparison_id + mark,
+                    prefix + c.comparison_id + suffix,
                     c.modern_photo_id or "—",
                     ", ".join(c.historical_photo_ids) or "—",
                     c.annotation_count,
-                    c.status,
+                    comparison_status_label(c.status),
                     (c.updated_at or "")[:19].replace("T", " "),
                     c.title,
                 ),
@@ -405,6 +421,81 @@ class ComparisonsTabFrame(ttk.Frame):
             return
         new_cmp = store.duplicate_comparison(cmp.comparison_id)
         self._log(f"Создана копия: {new_cmp.comparison_id}\n")
+        self.refresh()
+
+    def make_active(self) -> None:
+        store = self._require_store()
+        cmp = self._selected()
+        if not store or not cmp:
+            messagebox.showwarning("Не выбрано", "Выберите сравнение в таблице.")
+            return
+        if cmp.status == "discarded":
+            messagebox.showwarning("Нельзя", "Сначала снимите пометку «К удалению».")
+            return
+        try:
+            store.set_active_comparison(cmp.comparison_id)
+        except ValueError:
+            messagebox.showwarning("Нельзя", "Это сравнение помечено к удалению.")
+            return
+        self._log(f"Текущее сравнение: {cmp.comparison_id} (вкладки 2–5 работают с его папкой).\n")
+        self.refresh()
+        self.on_open_comparison(cmp)
+
+    def mark_discarded(self) -> None:
+        store = self._require_store()
+        cmp = self._selected()
+        if not store or not cmp:
+            messagebox.showwarning("Не выбрано", "Выберите сравнение.")
+            return
+        if cmp.is_legacy:
+            messagebox.showwarning("Защищено", "Старую разметку в result/ (legacy) удалять нельзя.")
+            return
+        if cmp.annotation_count > 0:
+            if not messagebox.askyesno(
+                "Есть разметка",
+                f"В {cmp.comparison_id} уже {cmp.annotation_count} зон разметки.\n"
+                "Всё равно пометить «К удалению»?",
+                parent=self,
+            ):
+                return
+        store.set_comparison_status(cmp.comparison_id, "discarded")
+        self._log(f"Помечено к удалению: {cmp.comparison_id}\n")
+        self.refresh()
+
+    def unmark_discarded(self) -> None:
+        store = self._require_store()
+        cmp = self._selected()
+        if not store or not cmp:
+            messagebox.showwarning("Не выбрано", "Выберите сравнение.")
+            return
+        if cmp.status != "discarded":
+            messagebox.showinfo("Не помечено", "Статус не «К удалению».")
+            return
+        store.set_comparison_status(cmp.comparison_id, "draft")
+        self._log(f"Пометка снята: {cmp.comparison_id}\n")
+        self.refresh()
+
+    def delete_discarded(self) -> None:
+        store = self._require_store()
+        if not store:
+            return
+        doomed = [c for c in store.list_comparisons() if c.status == "discarded" and not c.is_legacy]
+        if not doomed:
+            messagebox.showinfo("Нет помеченных", "Сначала пометьте лишние сравнения «К удалению».")
+            return
+        names = ", ".join(c.comparison_id for c in doomed)
+        if not messagebox.askyesno(
+            "Удалить папки",
+            f"Безвозвратно удалить {len(doomed)} сравнение(й) и их папки?\n{names}",
+            parent=self,
+        ):
+            return
+        for c in doomed:
+            try:
+                store.delete_comparison(c.comparison_id)
+                self._log(f"Удалено: {c.comparison_id}\n")
+            except ValueError as exc:
+                self._log(f"Не удалось удалить {c.comparison_id}: {exc}\n")
         self.refresh()
 
     def _log(self, text: str) -> None:

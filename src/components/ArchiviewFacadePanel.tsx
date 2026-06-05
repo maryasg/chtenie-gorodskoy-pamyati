@@ -26,6 +26,12 @@ const CLASS_COLORS: Record<string, string> = {
   new_balcony: '#d08a00',
   changed_entrance: '#786cff',
   lost_decor: '#aa50ff',
+  historical_signage: '#2896c8',
+  lost_signage: '#c83c78',
+  signage_rediscovered: '#ffc800',
+  restored_signage: '#3cc83c',
+  new_signage: '#ff8200',
+  memorial_plaque: '#a07850',
   technical_artifact: '#7a8a00',
   other_artifact: '#8a8a00',
   check_manually: '#b000b0',
@@ -99,13 +105,13 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-stone-600">
+      <p className="text-sm text-arch-muted">
         Наведите на <strong>номер или область</strong> на фото — сверху появится название. Список
         справа синхронизирован с подсветкой.
       </p>
 
       {!imageOk && (
-        <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-4 text-sm text-stone-600">
+        <p className="rounded-lg border border-dashed border-arch-line bg-arch-surface-2/60 p-4 text-sm text-arch-muted">
           Файл разметки пока не на сайте. Экспортируйте из Archiview → <code>copy_to_website.bat</code>{' '}
           → Push.
         </p>
@@ -120,7 +126,7 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
                 alt="Фасад с разметкой Archiview"
                 width={imgSize.w}
                 height={imgSize.h}
-                className="block max-h-[min(78vh,820px)] w-full rounded-xl border border-stone-200 object-contain"
+                className="block max-h-[min(78vh,820px)] w-full rounded-xl border border-arch-line object-contain shadow-sm"
               />
               {regions.length > 0 && (
                 <svg
@@ -166,17 +172,17 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
               )}
               {active && (
                 <div
-                  className="pointer-events-none absolute z-20 max-w-[min(92%,280px)] rounded-md border border-amber-500 bg-amber-50 px-2.5 py-1.5 text-center text-xs font-semibold leading-snug text-amber-950 shadow-lg"
+                  className="pointer-events-none absolute z-20 max-w-[min(92%,280px)] rounded-md border border-arch-gold bg-arch-surface px-2.5 py-1.5 text-center text-xs font-semibold leading-snug text-arch-ink shadow-lg"
                   style={{
                     left: `${active.cx}%`,
                     top: `${active.cy}%`,
                     transform: 'translate(-50%, calc(-100% - 8px))',
                   }}
                 >
-                  <span className="text-[11px] font-bold text-amber-800">{active.idx}.</span>{' '}
+                  <span className="text-[11px] font-bold text-arch-green">{active.idx}.</span>{' '}
                   {active.label}
                   {active.comment ? (
-                    <span className="mt-0.5 block text-[10px] font-normal text-stone-700">
+                    <span className="mt-0.5 block text-[10px] font-normal text-arch-muted">
                       {active.comment}
                     </span>
                   ) : null}
@@ -200,8 +206,8 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
                       onBlur={() => setHoverIdx(null)}
                       className={`flex w-full gap-2 rounded-lg border px-2.5 py-2 text-left transition ${
                         on
-                          ? 'border-amber-400 bg-amber-50 shadow-sm'
-                          : 'border-stone-200 bg-white hover:border-stone-300'
+                          ? 'border-arch-green/50 bg-arch-green-soft shadow-sm'
+                          : 'border-arch-line bg-arch-surface hover:border-arch-green/30'
                       }`}
                     >
                       <span
@@ -211,11 +217,11 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
                         {r.idx}
                       </span>
                       <span className="min-w-0">
-                        <span className="block font-medium leading-tight text-stone-900">
+                        <span className="block font-medium leading-tight text-arch-ink">
                           {r.label}
                         </span>
                         {r.comment ? (
-                          <span className="mt-0.5 block text-xs text-stone-600">{r.comment}</span>
+                          <span className="mt-0.5 block text-xs text-arch-muted">{r.comment}</span>
                         ) : null}
                       </span>
                     </button>

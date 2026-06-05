@@ -63,11 +63,20 @@ export interface OfficialExpertise {
   issuedAt?: string
 }
 
+export interface MediaReport {
+  title: string
+  url: string
+  outlet?: string
+  issuedAt?: string
+}
+
 export interface BuildingVerification {
   historicalPhoto: boolean
   historicalPhotoYear?: string
   modernPhotoYear?: string
   officialExpertise?: OfficialExpertise[]
+  /** Публикации СМИ как подтверждение фактов (не официальная экспертиза) */
+  mediaReports?: MediaReport[]
 }
 
 export interface Building {

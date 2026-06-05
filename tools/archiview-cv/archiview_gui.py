@@ -32,7 +32,7 @@ import webbrowser
 import zipfile
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 from urllib.parse import urlencode, urlparse, parse_qs
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
@@ -142,6 +142,12 @@ CLASS_LABELS = {
     "new_balcony": "Новый балкон / устройство балкона",
     "changed_entrance": "Изменённый вход",
     "lost_decor": "Утраченный декор",
+    "historical_signage": "Историческая вывеска (на старом фото)",
+    "lost_signage": "Утраченная вывеска",
+    "signage_rediscovered": "Обнаруженная при реставрации вывеска",
+    "restored_signage": "Восстановленная вывеска",
+    "new_signage": "Новая вывеска (не историческая)",
+    "memorial_plaque": "Мемориальная / памятная табличка",
     "technical_artifact": "Новый технический элемент",
     "other_artifact": "Другой артефакт / другое изменение",
     "check_manually": "Проверить вручную",
@@ -157,6 +163,12 @@ CLASS_COLORS = {
     "new_balcony": (40, 170, 255),
     "changed_entrance": (120, 120, 255),
     "lost_decor": (170, 80, 255),
+    "historical_signage": (200, 150, 40),
+    "lost_signage": (120, 60, 200),
+    "signage_rediscovered": (0, 200, 255),
+    "restored_signage": (60, 200, 60),
+    "new_signage": (0, 130, 255),
+    "memorial_plaque": (80, 120, 160),
     "technical_artifact": (80, 170, 170),
     "other_artifact": (190, 190, 60),
     "check_manually": (180, 0, 180),
@@ -171,6 +183,12 @@ TK_COLORS = {
     "new_balcony": "#d08a00",
     "changed_entrance": "#786cff",
     "lost_decor": "#aa50ff",
+    "historical_signage": "#2896c8",
+    "lost_signage": "#c83c78",
+    "signage_rediscovered": "#ffc800",
+    "restored_signage": "#3cc83c",
+    "new_signage": "#ff8200",
+    "memorial_plaque": "#a07850",
     "technical_artifact": "#7a8a00",
     "other_artifact": "#8a8a00",
     "check_manually": "#b000b0",
@@ -215,6 +233,16 @@ def safe_filename(text: str, default: str = "photo") -> str:
 
 def points_to_cli(points: List[Point]) -> str:
     return ";".join(f"{x:.1f},{y:.1f}" for x, y in points)
+
+
+def image_corners_quad(img: np.ndarray) -> np.ndarray:
+    """Углы кадра (для режима «разные ракурсы» без выпрямления)."""
+    h, w = int(img.shape[0]), int(img.shape[1])
+    wm, hm = max(w - 1, 0), max(h - 1, 0)
+    return np.asarray(
+        [[0.0, 0.0], [float(wm), 0.0], [float(wm), float(hm)], [0.0, float(hm)]],
+        dtype=np.float32,
+    )
 
 
 def parse_four_points(text: str) -> np.ndarray:
@@ -344,6 +372,134 @@ def H_rect_to_full_modern_from_project(project: dict, *, fallback_rect_text: str
     H = np.asarray(project.get("H_rect_to_modern"), dtype=np.float64)
     off = _modern_crop_offset_resolved(project, fallback_rect_text=fallback_rect_text)
     return homography_rect_to_full_source(H, off)
+
+
+def H_rect_to_full_historical_from_project(project: dict) -> np.ndarray:
+    H = np.asarray(project.get("H_old_to_rect"), dtype=np.float64)
+    off = source_crop_offset_from_project(project, side="old")
+    return homography_rect_to_full_source(H, off)
+
+
+def project_is_side_by_side(project: dict) -> bool:
+    return str(project.get("labeling_layout") or "") == "side_by_side" or bool(project.get("no_rectification"))
+
+
+def annotation_image_side(ann: dict, project: dict) -> str:
+    side = str(ann.get("image_side") or "")
+    if side in ("historical", "modern"):
+        return side
+    sb = project.get("side_by_side") or {}
+    hw = float(sb.get("historical_width") or 0)
+    pts = ann.get("polygon") or []
+    if not pts or hw <= 0:
+        return "modern"
+    cx = sum(float(p[0]) for p in pts) / len(pts)
+    return "historical" if cx < hw else "modern"
+
+
+def _side_by_side_panel_height(project: dict) -> float:
+    sb = project.get("side_by_side") or {}
+    ph = float(sb.get("panel_height") or 0)
+    if ph > 0:
+        return ph
+    label_h = float(sb.get("label_bar_height") or 0)
+    rs = project.get("rectified_size") or {}
+    comp_h = float(rs.get("height") or 0)
+    if comp_h > label_h:
+        return comp_h - label_h
+    return 0.0
+
+
+def rectified_polygon_to_full_source(
+    polygon: Sequence[Sequence[float]],
+    side: str,
+    project: dict,
+) -> List[List[float]]:
+    off = source_crop_offset_from_project(project, side="old" if side == "historical" else "modern")
+    dx, dy = float(off[0]), float(off[1])
+    return [[float(x) + dx, float(y) + dy] for x, y in polygon]
+
+
+def comparison_polygon_to_rectified(
+    polygon: Sequence[Sequence[float]],
+    side: str,
+    project: dict,
+) -> List[List[float]]:
+    sb = project.get("side_by_side") or {}
+    label_h = float(sb.get("label_bar_height") or 0)
+    panel_h = _side_by_side_panel_height(project)
+    crop_key = "historical_crop_size" if side == "historical" else "modern_crop_size"
+    crop_size = sb.get(crop_key) or [0, 0]
+    cw, ch = float(crop_size[0]), float(crop_size[1])
+    if panel_h <= 0 or ch <= 0:
+        return [[float(x), float(y)] for x, y in polygon]
+    scale = panel_h / ch
+    modern_x = float(sb.get("modern_offset_x") or 0)
+    out: List[List[float]] = []
+    for x, y in polygon:
+        y_panel = float(y) - label_h
+        px = float(x) - (modern_x if side == "modern" else 0.0)
+        out.append([px / scale, y_panel / scale])
+    return out
+
+
+def rectified_polygon_to_comparison(
+    polygon: Sequence[Sequence[float]],
+    side: str,
+    project: dict,
+) -> List[List[float]]:
+    sb = project.get("side_by_side") or {}
+    label_h = float(sb.get("label_bar_height") or 0)
+    panel_h = _side_by_side_panel_height(project)
+    crop_key = "historical_crop_size" if side == "historical" else "modern_crop_size"
+    crop_size = sb.get(crop_key) or [0, 0]
+    ch = float(crop_size[1] if crop_size else 0)
+    if panel_h <= 0 or ch <= 0:
+        return [[float(x), float(y)] for x, y in polygon]
+    scale = panel_h / ch
+    modern_x = float(sb.get("modern_offset_x") or 0)
+    out: List[List[float]] = []
+    for x, y in polygon:
+        px = float(x) * scale + (modern_x if side == "modern" else 0.0)
+        py = float(y) * scale + label_h
+        out.append([px, py])
+    return out
+
+
+def annotation_polygon_on_full_source(ann: dict, project: dict) -> List[List[float]]:
+    side = annotation_image_side(ann, project)
+    poly = ann.get("polygon") or []
+    if not poly:
+        return []
+    if project_is_side_by_side(project):
+        if str(ann.get("coordinate_space") or "") == "comparison":
+            rect_poly = comparison_polygon_to_rectified(poly, side, project)
+            return rectified_polygon_to_full_source(rect_poly, side, project)
+        if str(ann.get("coordinate_space") or "") == "rectified" or ann.get("image_side"):
+            return rectified_polygon_to_full_source(
+                [[float(x), float(y)] for x, y in poly],
+                side,
+                project,
+            )
+        rect_poly = comparison_polygon_to_rectified(poly, side, project)
+        return rectified_polygon_to_full_source(rect_poly, side, project)
+    H = H_rect_to_full_modern_from_project(project)
+    pts = np.asarray(poly, dtype=np.float32).reshape(-1, 1, 2)
+    out = cv.perspectiveTransform(pts, H).reshape(-1, 2)
+    return [[float(x), float(y)] for x, y in out]
+
+
+def annotations_for_side(annotations: List[dict], side: str, project: dict) -> List[dict]:
+    out: List[dict] = []
+    for ann in annotations:
+        if annotation_image_side(ann, project) != side:
+            continue
+        item = dict(ann)
+        src_poly = annotation_polygon_on_full_source(ann, project)
+        item["polygon"] = src_poly
+        item["polygon_source"] = src_poly
+        out.append(item)
+    return out
 
 
 def modern_crop_rect_from_metadata_near(outdir: Path) -> str:
@@ -1280,6 +1436,19 @@ def download_pastvu_photo(photo: PastVuPhoto, folder: Path, prefer_original: boo
 # Geometry, rectification, outputs
 # ---------------------------------------------------------------------------
 
+def facade_core_size_from_quad(pts: np.ndarray, max_dim: int = 4200) -> Tuple[int, int]:
+    """Размер выпрямленного фасада по длинам сторон четырёхугольника (без искажения пропорций)."""
+    tl, tr, br, bl = pts.astype(np.float64)
+    width_top = float(np.linalg.norm(tr - tl))
+    width_bottom = float(np.linalg.norm(br - bl))
+    height_left = float(np.linalg.norm(bl - tl))
+    height_right = float(np.linalg.norm(br - tr))
+    out_w = max(2, int(round(max(width_top, width_bottom))))
+    out_h = max(2, int(round(max(height_left, height_right))))
+    scale = min(1.0, float(max_dim) / max(out_w, out_h))
+    return max(2, int(round(out_w * scale))), max(2, int(round(out_h * scale)))
+
+
 def facade_output_size(old_pts: np.ndarray, new_pts: np.ndarray, max_dim: int = 2600) -> Tuple[int, int]:
     def size(pts: np.ndarray) -> Tuple[float, float]:
         tl, tr, br, bl = pts.astype(np.float64)
@@ -1304,6 +1473,44 @@ def warp_facade_to_rect(img: np.ndarray, pts: np.ndarray, out_w: int, out_h: int
     warped = cv.warpPerspective(img, H, (out_w, out_h), flags=cv.INTER_CUBIC, borderMode=cv.BORDER_REPLICATE)
     return warped, H
 
+
+def warp_facade_keep_full_image(
+    img: np.ndarray,
+    pts: np.ndarray,
+    out_w: int,
+    out_h: int,
+    margin: int = 80,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Выпрямление плоскости фасада без обрезки исходного кадра.
+
+    Четыре угла (1–4) задают плоскость «к нам»: верх 1→2 горизонтально, левый край 1→4 вертикально.
+    Весь снимок остаётся в кадре; чёрные поля только там, где не было пикселей.
+    """
+    dst = np.array([[0, 0], [out_w - 1, 0], [out_w - 1, out_h - 1], [0, out_h - 1]], dtype=np.float32)
+    H_core = cv.getPerspectiveTransform(pts.astype(np.float32), dst)
+    h, w = img.shape[:2]
+    corners = np.array([[[0, 0]], [[w - 1, 0]], [[w - 1, h - 1]], [[0, h - 1]]], dtype=np.float32)
+    bounds = cv.perspectiveTransform(corners, H_core).reshape(-1, 2)
+    all_pts = np.vstack([bounds, dst.astype(np.float32)])
+    min_xy = np.floor(all_pts.min(axis=0) - margin).astype(float)
+    max_xy = np.ceil(all_pts.max(axis=0) + margin).astype(float)
+    canvas_w = int(max(2, max_xy[0] - min_xy[0]))
+    canvas_h = int(max(2, max_xy[1] - min_xy[1]))
+    max_side = 5200
+    scale = min(1.0, max_side / float(max(canvas_w, canvas_h)))
+    T = np.array([[scale, 0, -min_xy[0] * scale], [0, scale, -min_xy[1] * scale], [0, 0, 1]], dtype=np.float64)
+    canvas_w = int(max(2, round(canvas_w * scale)))
+    canvas_h = int(max(2, round(canvas_h * scale)))
+    H = T @ H_core
+    warped = cv.warpPerspective(
+        img,
+        H,
+        (canvas_w, canvas_h),
+        flags=cv.INTER_CUBIC,
+        borderMode=cv.BORDER_CONSTANT,
+        borderValue=(0, 0, 0),
+    )
+    return warped, H
 
 
 def _expand_facade_quad(pts: np.ndarray, expand_ratio: float = 0.45) -> np.ndarray:
@@ -1533,6 +1740,56 @@ s.oninput=()=>{{n.style.clipPath='inset(0 0 0 '+s.value+'%)'; val.textContent=s.
     out_path.write_text(html, encoding="utf-8")
 
 
+def create_side_by_side_labeling(
+    old_img: np.ndarray,
+    new_img: np.ndarray,
+    *,
+    gap: int = 40,
+    target_h: int = 2000,
+) -> Tuple[np.ndarray, Dict[str, object]]:
+    """Два выпрямленных кадра рядом — разметка без геометрического наложения."""
+
+    def fit_height(img: np.ndarray, height: int) -> np.ndarray:
+        ih, iw = img.shape[:2]
+        if ih == height:
+            return img
+        scale = height / max(ih, 1)
+        nw = max(2, int(round(iw * scale)))
+        return cv.resize(img, (nw, height), interpolation=cv.INTER_AREA)
+
+    th = min(max(target_h, 800), 2400, max(old_img.shape[0], new_img.shape[0]))
+    left = fit_height(old_img, th)
+    right = fit_height(new_img, th)
+    gap_col = np.full((th, gap, 3), 235, dtype=np.uint8)
+    panel = np.hstack([left, gap_col, right])
+    labels_h = 36
+    bar = np.full((labels_h, panel.shape[1], 3), 245, dtype=np.uint8)
+    cv.putText(bar, "Historical", (12, 26), cv.FONT_HERSHEY_SIMPLEX, 0.7, (40, 40, 40), 2, cv.LINE_AA)
+    cv.putText(
+        bar,
+        "Modern",
+        (int(left.shape[1] + gap + 12), 26),
+        cv.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        (40, 40, 40),
+        2,
+        cv.LINE_AA,
+    )
+    panel = np.vstack([bar, panel])
+    meta: Dict[str, object] = {
+        "layout": "side_by_side",
+        "split_x": int(left.shape[1]),
+        "historical_width": int(left.shape[1]),
+        "modern_offset_x": int(left.shape[1] + gap),
+        "gap": gap,
+        "label_bar_height": labels_h,
+        "panel_height": int(th),
+        "historical_crop_size": [int(old_img.shape[1]), int(old_img.shape[0])],
+        "modern_crop_size": [int(new_img.shape[1]), int(new_img.shape[0])],
+    }
+    return panel, meta
+
+
 def prepare_rectified_project(
     old_path: Path,
     modern_path: Path,
@@ -1546,41 +1803,56 @@ def prepare_rectified_project(
     crop_white: bool = True,
     old_crop_rect_text: str = "",
     modern_crop_rect_text: str = "",
+    labeling_mode: str = "overlay",
 ) -> Dict[str, object]:
     if cv is None:
         raise RuntimeError("OpenCV не установлен.")
     outdir.mkdir(parents=True, exist_ok=True)
     old_img = cv_read(old_path)
     modern_img = cv_read(modern_path)
-    old_pts = parse_four_points(old_points_text)
-    modern_pts = parse_four_points(modern_points_text)
     old_img, old_off = apply_source_crop(old_img, old_crop_rect_text)
     modern_img, modern_off = apply_source_crop(modern_img, modern_crop_rect_text)
-    old_pts = shift_points_after_crop(old_pts, old_off)
-    modern_pts = shift_points_after_crop(modern_pts, modern_off)
-    out_w, out_h = facade_output_size(old_pts, modern_pts)
-
-    if keep_context:
-        old_rect, modern_rect, H_old_to_rect, H_modern_to_rect = warp_pair_keep_context(
-            old_img, old_pts, modern_img, modern_pts, out_w, out_h
-        )
-    else:
-        old_rect, H_old_to_rect = warp_facade_to_rect(old_img, old_pts, out_w, out_h)
-        modern_rect, H_modern_to_rect = warp_facade_to_rect(modern_img, modern_pts, out_w, out_h)
-    H_rect_to_modern = np.linalg.inv(H_modern_to_rect)
+    side_by_side = labeling_mode == "side_by_side"
+    side_meta: Dict[str, object] = {}
+    identity_h = np.eye(3, dtype=np.float64)
     crop_offset = (0, 0)
-    # С контекстом исходника не обрезаем выпрямленные файлы — 4 угла только для геометрии наложения.
-    if crop_white and not keep_context:
-        old_rect, modern_rect, crop_offset = crop_white_margins_pair(old_rect, modern_rect)
-        if crop_offset != (0, 0):
-            dx, dy = crop_offset
-            H_old_to_rect = _translate_homography(H_old_to_rect, dx, dy)
-            H_modern_to_rect = _translate_homography(H_modern_to_rect, dx, dy)
-            H_rect_to_modern = np.linalg.inv(H_modern_to_rect)
 
-    alpha_old = max(0, min(100, int(old_opacity_percent))) / 100.0
-    overlay = cv.addWeighted(modern_rect, 1.0 - alpha_old, old_rect, alpha_old, 0)
-    comparison = create_comparison_for_labeling(old_rect, modern_rect)
+    if side_by_side:
+        old_pts = image_corners_quad(old_img)
+        modern_pts = image_corners_quad(modern_img)
+        old_rect = old_img
+        modern_rect = modern_img
+        H_old_to_rect = identity_h.copy()
+        H_modern_to_rect = identity_h.copy()
+        H_rect_to_modern = identity_h.copy()
+        comparison, side_meta = create_side_by_side_labeling(old_rect, modern_rect)
+        side_meta["no_rectification"] = True
+        overlay = comparison.copy()
+    else:
+        old_pts = parse_four_points(old_points_text)
+        modern_pts = parse_four_points(modern_points_text)
+        old_pts = shift_points_after_crop(old_pts, old_off)
+        modern_pts = shift_points_after_crop(modern_pts, modern_off)
+        out_w, out_h = facade_output_size(old_pts, modern_pts)
+        if keep_context:
+            old_rect, modern_rect, H_old_to_rect, H_modern_to_rect = warp_pair_keep_context(
+                old_img, old_pts, modern_img, modern_pts, out_w, out_h
+            )
+        else:
+            old_rect, H_old_to_rect = warp_facade_to_rect(old_img, old_pts, out_w, out_h)
+            modern_rect, H_modern_to_rect = warp_facade_to_rect(modern_img, modern_pts, out_w, out_h)
+        H_rect_to_modern = np.linalg.inv(H_modern_to_rect)
+        if crop_white and not keep_context:
+            old_rect, modern_rect, crop_offset = crop_white_margins_pair(old_rect, modern_rect)
+            if crop_offset != (0, 0):
+                dx, dy = crop_offset
+                H_old_to_rect = _translate_homography(H_old_to_rect, dx, dy)
+                H_modern_to_rect = _translate_homography(H_modern_to_rect, dx, dy)
+                H_rect_to_modern = np.linalg.inv(H_modern_to_rect)
+
+        alpha_old = max(0, min(100, int(old_opacity_percent))) / 100.0
+        overlay = cv.addWeighted(modern_rect, 1.0 - alpha_old, old_rect, alpha_old, 0)
+        comparison = create_comparison_for_labeling(old_rect, modern_rect)
 
     paths = {
         "overlay_png": outdir / "01_overlay.png",
@@ -1607,9 +1879,15 @@ def prepare_rectified_project(
         "modern_source": modern_meta or {},
         "old_points_tl_tr_br_bl": old_pts.tolist(),
         "modern_points_tl_tr_br_bl": modern_pts.tolist(),
-        "rectified_size": {"width": int(old_rect.shape[1]), "height": int(old_rect.shape[0])},
-        "keep_context_outside_four_points": bool(keep_context),
-        "crop_white_margins": bool(crop_white),
+        "rectified_size": {
+            "width": int(comparison.shape[1] if side_by_side else old_rect.shape[1]),
+            "height": int(comparison.shape[0] if side_by_side else old_rect.shape[0]),
+        },
+        "labeling_layout": "side_by_side" if side_by_side else "overlay",
+        "no_rectification": bool(side_by_side),
+        "side_by_side": side_meta,
+        "keep_context_outside_four_points": bool(keep_context) or side_by_side,
+        "crop_white_margins": bool(crop_white) and not side_by_side,
         "crop_offset_xy": list(crop_offset),
         "old_crop_rect_text": old_crop_rect_text,
         "modern_crop_rect_text": modern_crop_rect_text,
@@ -1690,7 +1968,7 @@ def draw_polygons_on_image(
     out = img.copy()
     overlay = out.copy()
     for idx, ann in enumerate(annotations, start=1):
-        cls = ann.get("class", "added_architecture")
+        cls = ann.get("class", "other_artifact")
         color = CLASS_COLORS.get(cls, (0, 190, 0))
         pts = np.asarray(ann.get("polygon", []), dtype=np.float32)
         if pts.shape[0] < 3:
@@ -1703,7 +1981,7 @@ def draw_polygons_on_image(
     out = cv.addWeighted(overlay, 0.22, out, 0.78, 0)
     # Draw outlines one more time over the fill.
     for idx, ann in enumerate(annotations, start=1):
-        cls = ann.get("class", "added_architecture")
+        cls = ann.get("class", "other_artifact")
         color = CLASS_COLORS.get(cls, (0, 190, 0))
         pts = np.asarray(ann.get("polygon", []), dtype=np.float32)
         if pts.shape[0] < 3:
@@ -1714,7 +1992,7 @@ def draw_polygons_on_image(
         cv.polylines(out, [pts_i], True, color, 4, cv.LINE_AA)
     if draw_indices:
         for idx, ann in enumerate(annotations, start=1):
-            cls = ann.get("class", "added_architecture")
+            cls = ann.get("class", "other_artifact")
             color = CLASS_COLORS.get(cls, (0, 190, 0))
             pts = np.asarray(ann.get("polygon", []), dtype=np.float32)
             if pts.shape[0] < 3:
@@ -1751,21 +2029,90 @@ def save_annotations_and_exports(outdir: Path, annotations: List[dict]) -> Dict[
         "version": APP_VERSION,
         "image": str(comparison_path),
         "rectified_size": project.get("rectified_size"),
+        "labeling_layout": project.get("labeling_layout", "overlay"),
+        "side_by_side": project.get("side_by_side"),
         "annotations": annotations,
         "classes": CLASS_LABELS,
     }
+    annotations = normalize_annotation_list(annotations)
+    is_sb = project_is_side_by_side(project)
+    historical_src_path = Path(project.get("historical_image") or "")
+    historical_rect_path = Path(outputs.get("historical_rectified", outdir / "03_historical_rectified.png"))
+
+    export_annotations: List[dict] = []
+    comparison_draw: List[dict] = []
+    for ann in annotations:
+        item = dict(ann)
+        side = annotation_image_side(ann, project)
+        item["image_side"] = side
+        src_poly = annotation_polygon_on_full_source(ann, project)
+        item["polygon_source"] = src_poly
+        if is_sb:
+            if str(ann.get("coordinate_space") or "") == "rectified" or ann.get("image_side"):
+                item["coordinate_space"] = "rectified"
+                comp_poly = rectified_polygon_to_comparison(
+                    [[float(x), float(y)] for x, y in ann.get("polygon", [])],
+                    side,
+                    project,
+                )
+            else:
+                item["coordinate_space"] = "comparison"
+                comp_poly = [[float(x), float(y)] for x, y in ann.get("polygon", [])]
+            comparison_draw.append({**item, "polygon": comp_poly})
+        export_annotations.append(item)
+
+    payload["annotations"] = export_annotations
     manual_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    annotations = normalize_annotation_list(annotations)
     modern_rect = cv_read(modern_rect_path)
     modern_src = cv_read(modern_src_path)
-    marked_rect = draw_polygons_on_image(modern_rect, annotations, transform=None, draw_indices=False)
-    marked_src = draw_polygons_on_image(modern_src, annotations, transform=H_rect_to_modern, draw_indices=False)
+    hist_anns_modern = annotations_for_side(annotations, "modern", project)
+    hist_anns_historical = annotations_for_side(annotations, "historical", project)
+
+    if is_sb:
+        marked_rect = draw_polygons_on_image(
+            cv_read(comparison_path),
+            comparison_draw or export_annotations,
+            transform=None,
+            draw_indices=False,
+        )
+        marked_src = draw_polygons_on_image(modern_src, hist_anns_modern, transform=None, draw_indices=False)
+    else:
+        marked_rect = draw_polygons_on_image(modern_rect, annotations, transform=None, draw_indices=False)
+        marked_src = draw_polygons_on_image(
+            modern_src,
+            annotations,
+            transform=H_rect_to_modern,
+            draw_indices=False,
+        )
 
     marked_rect_path = outdir / "06_marked_rectified.png"
     marked_src_path = outdir / "07_marked_on_original_modern.png"
+    marked_hist_path = outdir / "09_marked_on_original_historical.png"
+    side_by_side_result_path = outdir / "10_side_by_side_marked.png"
     cv_write(marked_rect_path, marked_rect)
     cv_write(marked_src_path, marked_src)
+
+    extra_outputs: Dict[str, str] = {}
+    if is_sb and historical_src_path.exists():
+        marked_hist = draw_polygons_on_image(
+            cv_read(historical_src_path),
+            hist_anns_historical,
+            transform=None,
+            draw_indices=False,
+        )
+        cv_write(marked_hist_path, marked_hist)
+        extra_outputs["marked_on_original_historical"] = str(marked_hist_path)
+        if historical_rect_path.exists() and modern_rect_path.exists():
+            try:
+                sb_panel, _sb_meta = create_side_by_side_labeling(
+                    draw_polygons_on_image(cv_read(historical_rect_path), hist_anns_historical, transform=None, draw_indices=False),
+                    draw_polygons_on_image(cv_read(modern_rect_path), hist_anns_modern, transform=None, draw_indices=False),
+                )
+                cv_write(side_by_side_result_path, sb_panel)
+                extra_outputs["side_by_side_marked"] = str(side_by_side_result_path)
+            except Exception:
+                pass
 
     coco_root = outdir / "roboflow_export"
     images_dir = coco_root / "images"
@@ -1787,7 +2134,7 @@ def save_annotations_and_exports(outdir: Path, annotations: List[dict]) -> Dict[
         if len(pts) < 3:
             continue
         flat = [coord for pt in pts for coord in pt]
-        cls = ann.get("class", "added_architecture")
+        cls = ann.get("class", "other_artifact")
         coco_annotations.append(
             {
                 "id": ann_id,
@@ -1820,6 +2167,7 @@ def save_annotations_and_exports(outdir: Path, annotations: List[dict]) -> Dict[
         "manual_json": str(manual_json),
         "marked_rectified": str(marked_rect_path),
         "marked_on_original_modern": str(marked_src_path),
+        **extra_outputs,
         "coco": str(coco_path),
         "roboflow_zip": str(zip_path),
     }
@@ -2025,7 +2373,9 @@ class AnnotationWindow(tk.Toplevel):
         self.on_saved = on_saved
         self.annotations: List[dict] = []
         self.current_points: List[Point] = []
-        self.class_var = tk.StringVar(value="added_architecture")
+        self.class_var = tk.StringVar(value="restored_signage")
+        self.labeling_layout = "overlay"
+        self.side_by_side_split_x: Optional[float] = None
 
         self.image_path = outdir / "05_comparison_for_labeling.png"
         if not self.image_path.exists():
@@ -2044,17 +2394,37 @@ class AnnotationWindow(tk.Toplevel):
             self.destroy()
             return
 
+        pj = outdir / "project_v8.json"
+        if pj.exists():
+            try:
+                pdata = json.loads(pj.read_text(encoding="utf-8"))
+                self.labeling_layout = str(pdata.get("labeling_layout") or "overlay")
+                sb = pdata.get("side_by_side") or {}
+                if isinstance(sb, dict) and sb.get("historical_width") is not None:
+                    self.side_by_side_split_x = float(sb["historical_width"])
+                elif isinstance(sb, dict) and sb.get("split_x") is not None:
+                    self.side_by_side_split_x = float(sb["split_x"])
+            except Exception:
+                pass
+
         self._build_ui()
         self._load_existing()
         self._redraw()
         self.grab_set()
 
     def _build_ui(self) -> None:
-        intro = (
-            "Размечайте только действительно важные новые/изменённые архитектурные элементы. "
-            "Левый клик — добавить точку полигона. Enter или двойной клик — закончить область. "
-            "Backspace — отменить точку."
-        )
+        if self.labeling_layout == "side_by_side":
+            intro = (
+                "Режим «разные ракурсы»: слева историческое фото, справа современное. "
+                "Обводите области на каждой половине отдельно (вывеска на старом отсутствует — на новом есть). "
+                "Левый клик — точка полигона. Enter — закончить область."
+            )
+        else:
+            intro = (
+                "Размечайте только действительно важные новые/изменённые архитектурные элементы. "
+                "Левый клик — добавить точку полигона. Enter или двойной клик — закончить область. "
+                "Backspace — отменить точку."
+            )
         ttk.Label(self, text=intro, wraplength=1120).pack(anchor="w", padx=12, pady=(10, 4))
 
         top = ttk.Frame(self)
@@ -2089,8 +2459,8 @@ class AnnotationWindow(tk.Toplevel):
         ttk.Button(btns, text="Закрыть", command=self.destroy).pack(side="left", padx=6)
 
         legend = (
-            "Совет: для первой модели Roboflow лучше чаще использовать один класс added_architecture: "
-            "всё, что появилось и важно. Позже классы можно разделить."
+            "Совет: для вывесок — «Утраченная» на старом кадре, «Восстановленная» или «Обнаруженная при реставрации» "
+            "на новом. Для прочих изменений — окна, декор, «Другой артефакт»."
         )
         ttk.Label(self, text=legend, wraplength=1120, foreground="#555").pack(anchor="w", padx=12, pady=(0, 8))
 
@@ -2115,14 +2485,26 @@ class AnnotationWindow(tk.Toplevel):
     def _to_disp(self, pt: Point) -> Point:
         return (pt[0] * self.scale, pt[1] * self.scale)
 
+    def _polygon_image_side(self, pts: List[Point]) -> str:
+        if self.side_by_side_split_x is None:
+            return "both"
+        xs = [p[0] for p in pts]
+        cx = sum(xs) / len(xs)
+        project = {"side_by_side": {"historical_width": self.side_by_side_split_x}}
+        return annotation_image_side({"polygon": [[x, y] for x, y in pts]}, project)
+
     def _redraw(self) -> None:
         self.canvas.delete("ann")
+        self.canvas.delete("split")
+        if self.side_by_side_split_x is not None:
+            sx = self.side_by_side_split_x * self.scale
+            self.canvas.create_line(sx, 0, sx, self.disp_h, fill="#888888", dash=(6, 4), width=2, tags="split")
         # Saved polygons.
         for idx, ann in enumerate(self.annotations, start=1):
             pts = ann.get("polygon", [])
             if len(pts) < 3:
                 continue
-            cls = ann.get("class", "added_architecture")
+            cls = ann.get("class", "other_artifact")
             color = TK_COLORS.get(cls, "#00aa00")
             flat: List[float] = []
             for p in pts:
@@ -2155,12 +2537,15 @@ class AnnotationWindow(tk.Toplevel):
             messagebox.showinfo("Нужно больше точек", "Для области нужно минимум 3 точки.", parent=self)
             return
         cls = self.class_var.get()
-        self.annotations.append({
+        ann: Dict[str, object] = {
             "id": len(self.annotations) + 1,
             "class": cls,
             "label_ru": CLASS_LABELS.get(cls, cls),
             "polygon": [[float(x), float(y)] for x, y in self.current_points],
-        })
+        }
+        if self.labeling_layout == "side_by_side":
+            ann["image_side"] = self._polygon_image_side(self.current_points)
+        self.annotations.append(ann)
         self.current_points = []
         self._redraw()
 
@@ -2240,14 +2625,16 @@ class DualFacadePointPicker(tk.Toplevel):
         initial_modern_points_text: str = "",
         initial_modern_crop_rect_text: str = "",
         lock_modern_when_complete: bool = False,
+        crop_only: bool = False,
     ) -> None:
         super().__init__(parent)
-        self.title("Углы фасада и рамка обрезки")
+        self.crop_only = bool(crop_only)
+        self.title("Обрезка кадров" if self.crop_only else "Углы фасада и рамка обрезки")
         self.geometry("1280x900")
         self.minsize(1040, 720)
         self.callback = callback
         self.hist_sources = list(historical_sources) if historical_sources else []
-        self.tool_mode = tk.StringVar(value="corners")
+        self.tool_mode = tk.StringVar(value="crop_old" if self.crop_only else "corners")
         self.modern_crop_rect_text = str(initial_modern_crop_rect_text or "")
         self._crop_drag: Optional[Tuple[str, float, float]] = None
         if not self.hist_sources:
@@ -2270,15 +2657,22 @@ class DualFacadePointPicker(tk.Toplevel):
             return
 
         intro = (
-            "Слева — исторические фото (ползунок), справа — современное. "
-            "Режим «4 угла»: клики 1–4 на обоих фото для наложения. "
-            "Режим «Рамка»: потяните мышью прямоугольник — что останется из исходника перед выпрямлением."
+            "Слева — историческое, справа — современное. "
+            "Выберите инструмент «Рамка обрезки» и потяните мышью прямоугольник на каждом фото. "
+            "В разметку попадёт только выделенная область (или весь кадр, если рамку не ставить)."
+            if self.crop_only
+            else (
+                "Слева — исторические фото (ползунок), справа — современное. "
+                "Режим «4 угла»: клики 1–4 на обоих фото для наложения. "
+                "Режим «Рамка»: потяните мышью прямоугольник — что останется из исходника перед выпрямлением."
+            )
         )
         ttk.Label(self, text=intro, wraplength=1220).pack(anchor="w", padx=12, pady=(10, 4))
         tools = ttk.Frame(self)
         tools.pack(anchor="w", padx=12, pady=(0, 4))
         ttk.Label(tools, text="Инструмент:").pack(side="left")
-        ttk.Radiobutton(tools, text="4 угла фасада", variable=self.tool_mode, value="corners", command=self._redraw).pack(side="left", padx=6)
+        if not self.crop_only:
+            ttk.Radiobutton(tools, text="4 угла фасада", variable=self.tool_mode, value="corners", command=self._redraw).pack(side="left", padx=6)
         ttk.Radiobutton(tools, text="Рамка обрезки (историческое)", variable=self.tool_mode, value="crop_old", command=self._redraw).pack(side="left", padx=6)
         ttk.Radiobutton(tools, text="Рамка обрезки (современное)", variable=self.tool_mode, value="crop_modern", command=self._redraw).pack(side="left", padx=6)
 
@@ -2322,19 +2716,21 @@ class DualFacadePointPicker(tk.Toplevel):
 
         btns = ttk.Frame(self)
         btns.pack(anchor="w", padx=12, pady=(6, 12))
-        ttk.Button(btns, text="Отменить последний клик", command=self.undo).pack(side="left")
-        ttk.Button(btns, text="Очистить все", command=self.clear_all).pack(side="left", padx=(8, 2))
-        ttk.Button(btns, text="Только историческое", command=self.clear_old).pack(side="left", padx=2)
-        ttk.Button(btns, text="Только современное", command=self.clear_modern).pack(side="left", padx=2)
+        if not self.crop_only:
+            ttk.Button(btns, text="Отменить последний клик", command=self.undo).pack(side="left")
+            ttk.Button(btns, text="Очистить все", command=self.clear_all).pack(side="left", padx=(8, 2))
+            ttk.Button(btns, text="Только историческое", command=self.clear_old).pack(side="left", padx=2)
+            ttk.Button(btns, text="Только современное", command=self.clear_modern).pack(side="left", padx=2)
         ttk.Button(btns, text="Сбросить рамку слева", command=self.clear_crop_old).pack(side="left", padx=(8, 2))
         ttk.Button(btns, text="Сбросить рамку справа", command=self.clear_crop_modern).pack(side="left", padx=2)
-        self.lock_var = tk.BooleanVar(value=self.lock_modern)
-        ttk.Checkbutton(
-            btns,
-            text="Не трогать современное (замок)",
-            variable=self.lock_var,
-            command=self._toggle_lock_modern,
-        ).pack(side="left", padx=8)
+        if not self.crop_only:
+            self.lock_var = tk.BooleanVar(value=self.lock_modern)
+            ttk.Checkbutton(
+                btns,
+                text="Не трогать современное (замок)",
+                variable=self.lock_var,
+                command=self._toggle_lock_modern,
+            ).pack(side="left", padx=8)
         ttk.Button(btns, text="Готово", command=self.done).pack(side="left", padx=8)
         ttk.Button(btns, text="Закрыть", command=self.destroy).pack(side="left", padx=8)
 
@@ -2632,6 +3028,10 @@ class DualFacadePointPicker(tk.Toplevel):
 
     def done(self) -> None:
         self._save_current_historical_points()
+        if self.crop_only:
+            self.callback("", "", list(self.hist_sources), self.modern_crop_rect_text)
+            self.destroy()
+            return
         if any(p is None for p in self.old_points) or any(p is None for p in self.modern_points):
             messagebox.showinfo(
                 "Нужны все точки",
@@ -2660,12 +3060,11 @@ class DualFacadePointPicker(tk.Toplevel):
         rm = self._quad_aspect_ratio(modern)
         if ro > 0 and rm > 0 and (ro / rm > 2.8 or rm / ro > 2.8):
             if not messagebox.askyesno(
-                "Проверьте углы",
-                "Выделения на историческом и современном фото сильно разной формы "
-                "(узкая полоска с одной стороны и широкая с другой).\n\n"
-                "Точка 1 должна совпасть с точкой 1 на том же углу здания, и так далее. "
-                "Иначе выпрямление «рвёт» картинку.\n\n"
-                "Всё равно сохранить эти углы?",
+                "Разные ракурсы",
+                "Углы на историческом и современном фото сильно разной формы — "
+                "наложение, скорее всего, не сойдётся.\n\n"
+                "На вкладке «2. Выпрямление» вверху выберите «Разные ракурсы».\n\n"
+                "Всё равно сохранить углы для режима наложения?",
                 parent=self,
             ):
                 return
@@ -2876,9 +3275,12 @@ class App(tk.Tk):
         self.old_points_text = ""
         self.modern_points_text = ""
         self.modern_crop_rect_text = ""
+        self.old_crop_rect_text = ""
         self.historical_sources: List[HistoricalSourceItem] = []
         self.active_historical_key = ""
         self.points_status = tk.StringVar(value="Углы фасада ещё не выбраны.")
+        self.old_crop_status = tk.StringVar(value="весь кадр")
+        self.modern_crop_status = tk.StringVar(value="весь кадр")
         self.old_opacity = tk.IntVar(value=75)
         self.old_opacity_label = tk.StringVar(value="Видимость старого фото в overlay: 75%")
         self.keep_context = tk.BooleanVar(value=True)
@@ -2890,6 +3292,10 @@ class App(tk.Tk):
         self.straight_out = tk.StringVar(value=str(APP_DIR / "straightened.png"))
         self.straight_points = ""
         self.straight_points_status = tk.StringVar(value="4 угла фасада не выбраны.")
+        self.straight_keep_full = tk.BooleanVar(value=True)
+        self.straight_tight_crop = tk.BooleanVar(value=False)
+        self.comparison_rakurs = tk.StringVar(value="similar")
+        self.independent_labeling = tk.BooleanVar(value=False)
 
         self._map_server = None
         self._map_server_thread = None
@@ -3073,42 +3479,320 @@ class App(tk.Tk):
         )
         ttk.Label(modern_controls, text=help_text, wraplength=640, foreground="#333").grid(row=5, column=0, columnspan=3, sticky="w", padx=8, pady=6)
 
+    def _labeling_mode_from_rakurs(self) -> str:
+        return "side_by_side" if self.comparison_rakurs.get() == "different" else "overlay"
+
+    def _is_different_rakurs(self) -> bool:
+        return self.comparison_rakurs.get() == "different"
+
+    def _project_json_dict(self) -> Optional[dict]:
+        outdir = Path(self.outdir.get())
+        for name in ("project_v8.json", "project_v7.json", "project_v6.json"):
+            path = outdir / name
+            if path.exists():
+                try:
+                    return json.loads(path.read_text(encoding="utf-8"))
+                except Exception:
+                    return None
+        return None
+
+    def _is_side_by_side_project(self) -> bool:
+        project = self._project_json_dict()
+        return project_is_side_by_side(project) if project else False
+
+    def _markup_active_image_side(self) -> str:
+        if self._is_side_by_side_project():
+            mode = self.markup_background_mode.get()
+            return "historical" if mode == "historical" else "modern"
+        return "modern"
+
+    def _should_show_markup_annotation(self, ann: dict) -> bool:
+        if not self._is_side_by_side_project():
+            return True
+        if self._markup_uses_comparison_canvas():
+            return True
+        side = str(ann.get("image_side") or "")
+        if not side:
+            return True
+        return side == self._markup_active_image_side()
+
+    def _decorate_markup_annotation(self, ann: dict) -> dict:
+        if self._is_side_by_side_project():
+            if self._markup_uses_comparison_canvas():
+                ann["coordinate_space"] = "comparison"
+                poly = ann.get("polygon") or []
+                if len(poly) >= 3:
+                    xs = [float(p[0]) for p in poly]
+                    ann["image_side"] = self._polygon_side_from_comparison_xy(sum(xs) / len(xs), 0.0)
+            else:
+                ann["image_side"] = self._markup_active_image_side()
+                ann["coordinate_space"] = "rectified"
+        return ann
+
+    def _migrate_side_by_side_annotations(self) -> None:
+        project = self._project_json_dict()
+        if not project or not project_is_side_by_side(project):
+            return
+        changed = False
+        for ann in self.embedded_annotations:
+            if str(ann.get("coordinate_space") or "") == "comparison":
+                if not ann.get("image_side"):
+                    ann["image_side"] = annotation_image_side(ann, project)
+                    changed = True
+                continue
+            if str(ann.get("coordinate_space") or "") == "rectified":
+                if not ann.get("image_side"):
+                    ann["image_side"] = annotation_image_side(ann, project)
+                    changed = True
+                continue
+            side = annotation_image_side(ann, project)
+            poly = ann.get("polygon") or []
+            if poly:
+                ann["polygon"] = comparison_polygon_to_rectified(poly, side, project)
+            ann["image_side"] = side
+            ann["coordinate_space"] = "rectified"
+            changed = True
+        if changed and hasattr(self, "_mark_dirty"):
+            self._mark_dirty()
+
+    def _comparison_panel_path(self) -> Path:
+        return Path(self.outdir.get()) / "05_comparison_for_labeling.png"
+
+    def _comparison_panel_pil(self):
+        if Image is None:
+            raise RuntimeError("Pillow не установлен.")
+        path = self._comparison_panel_path()
+        if not path.exists():
+            raise RuntimeError("Сначала нажмите «Подготовить» на вкладке 2 (разные ракурсы).")
+        return Image.open(path).convert("RGB")  # type: ignore[union-attr]
+
+    def _markup_uses_comparison_canvas(self) -> bool:
+        if not self._is_side_by_side_project():
+            return False
+        mode = self.markup_background_mode.get()
+        return mode in ("side_by_side", "overlay", "before_after")
+
+    def _polygon_side_from_comparison_xy(self, x: float, y: float) -> str:
+        project = self._project_json_dict() or {}
+        sb = project.get("side_by_side") or {}
+        hw = float(sb.get("historical_width") or 0)
+        if hw <= 0:
+            return "modern"
+        return "historical" if float(x) < hw else "modern"
+
+    def _polygon_points_for_markup_display(self, ann: dict) -> List[List[float]]:
+        poly = ann.get("polygon") or []
+        if not poly:
+            return []
+        project = self._project_json_dict() or {}
+        if not self._is_side_by_side_project():
+            return [[float(x), float(y)] for x, y in poly]
+        if self._markup_uses_comparison_canvas():
+            if str(ann.get("coordinate_space") or "") == "comparison":
+                return [[float(x), float(y)] for x, y in poly]
+            side = str(ann.get("image_side") or annotation_image_side(ann, project))
+            return rectified_polygon_to_comparison(poly, side, project)
+        side = self._markup_active_image_side()
+        if str(ann.get("coordinate_space") or "") == "rectified":
+            if str(ann.get("image_side") or side) != side:
+                return []
+            return [[float(x), float(y)] for x, y in poly]
+        if str(ann.get("coordinate_space") or "") == "comparison":
+            return comparison_polygon_to_rectified(poly, side, project)
+        if str(ann.get("image_side") or side) == side:
+            return [[float(x), float(y)] for x, y in poly]
+        return []
+
+    def _sync_side_by_side_view_modes(self) -> None:
+        if not self._is_side_by_side_project():
+            return
+        if hasattr(self, "markup_background_mode"):
+            if self.markup_background_mode.get() in ("overlay", "before_after"):
+                self.markup_background_mode.set("side_by_side")
+        if hasattr(self, "compare_mode"):
+            if self.compare_mode.get() in ("overlay", "before_after"):
+                self.compare_mode.set("side_by_side")
+
+    def _prepare_markup_for_side_by_side(self) -> None:
+        if not self._is_side_by_side_project():
+            return
+        self._sync_side_by_side_view_modes()
+
+    def _on_comparison_rakurs_changed(self, *_args: object) -> None:
+        different = self._is_different_rakurs()
+        self.independent_labeling.set(different)
+        if hasattr(self, "_corners_frame") and hasattr(self, "_corners_frame_row"):
+            if different:
+                self._corners_frame.grid_remove()
+            else:
+                self._corners_frame.grid(
+                    row=self._corners_frame_row,
+                    column=0,
+                    columnspan=3,
+                    sticky="ew",
+                    padx=10,
+                    pady=8,
+                )
+        if hasattr(self, "rakurs_hint_label"):
+            if different:
+                self.rakurs_hint_label.configure(
+                    text=(
+                        "Дальше: при необходимости обрежьте кадры → «Подготовить» → «Разметка». "
+                        "Углы не нужны — снимки ставятся рядом как есть."
+                    ),
+                    foreground="#7a4b00",
+                )
+            else:
+                self.rakurs_hint_label.configure(
+                    text=(
+                        "Дальше: 4 угла на одном здании → overlay → разметка. "
+                        "Когда снимки с похожего места."
+                    ),
+                    foreground="#333333",
+                )
+        if hasattr(self, "_overlay_options_frame"):
+            state = "disabled" if different else "normal"
+            for child in self._overlay_options_frame.winfo_children():
+                try:
+                    child.configure(state=state)
+                except tk.TclError:
+                    pass
+        if hasattr(self, "prepare_main_btn"):
+            self.prepare_main_btn.configure(
+                text="Подготовить → к разметке (два фото рядом)"
+                if different
+                else "Подготовить → overlay и разметка"
+            )
+        if different and hasattr(self, "markup_background_mode"):
+            self.markup_background_mode.set("side_by_side")
+        if different and hasattr(self, "compare_mode"):
+            self.compare_mode.set("side_by_side")
+
+    def _build_rakurs_mode_block(self, parent: ttk.Frame, row: int) -> int:
+        box = ttk.LabelFrame(parent, text="Шаг 1 — похожие или разные ракурсы?")
+        box.grid(row=row, column=0, columnspan=3, sticky="ew", padx=10, pady=(10, 8))
+        inner = ttk.Frame(box)
+        inner.pack(fill="x", padx=12, pady=10)
+        ttk.Radiobutton(
+            inner,
+            text="Похожие ракурсы — наложение (overlay), одна общая разметка",
+            variable=self.comparison_rakurs,
+            value="similar",
+            command=self._on_comparison_rakurs_changed,
+        ).pack(anchor="w")
+        ttk.Radiobutton(
+            inner,
+            text="Разные ракурсы — два фото рядом, разметка на каждом отдельно",
+            variable=self.comparison_rakurs,
+            value="different",
+            command=self._on_comparison_rakurs_changed,
+        ).pack(anchor="w", pady=(8, 0))
+        self.rakurs_hint_label = ttk.Label(inner, wraplength=960, font=("TkDefaultFont", 10, "bold"))
+        self.rakurs_hint_label.pack(anchor="w", pady=(10, 0))
+        self._on_comparison_rakurs_changed()
+        return row + 1
+
+    def _crop_status_label(self, crop_text: str) -> str:
+        box = parse_crop_rect(crop_text)
+        if box is None:
+            return "весь кадр"
+        x0, y0, x1, y1 = box
+        return f"рамка {int(x1 - x0)}×{int(y1 - y0)} px"
+
+    def _refresh_crop_status_labels(self) -> None:
+        item = self._get_active_historical_item() if hasattr(self, "_get_active_historical_item") else None
+        old_crop = ""
+        if item:
+            old_crop = item.crop_rect_text or ""
+        elif getattr(self, "old_crop_rect_text", ""):
+            old_crop = self.old_crop_rect_text
+        if hasattr(self, "old_crop_status"):
+            self.old_crop_status.set(self._crop_status_label(old_crop))
+        if hasattr(self, "modern_crop_status"):
+            self.modern_crop_status.set(self._crop_status_label(self.modern_crop_rect_text))
+
+    def _build_rectify_crop_block(self, parent: ttk.Frame, row: int) -> int:
+        self._crop_frame = ttk.LabelFrame(parent, text="Шаг 3 — обрезка кадров (необязательно)")
+        self._crop_frame_row = row
+        self._crop_frame.grid(row=row, column=0, columnspan=3, sticky="ew", padx=10, pady=8)
+        inner = ttk.Frame(self._crop_frame)
+        inner.pack(fill="x", padx=8, pady=8)
+        ttk.Label(
+            inner,
+            text=(
+                "Выделите, какая часть каждого снимка попадёт в пару для разметки. "
+                "Если обрезка не нужна — оставьте «весь кадр» и сразу нажмите «Подготовить»."
+            ),
+            wraplength=960,
+            foreground="#555",
+        ).pack(anchor="w", pady=(0, 8))
+        row_btns = ttk.Frame(inner)
+        row_btns.pack(anchor="w", fill="x")
+        ttk.Button(row_btns, text="Обрезать оба фото в одном окне", command=self.pick_both_crops).pack(side="left")
+        ttk.Button(row_btns, text="Только историческое", command=self.pick_crop_historical).pack(side="left", padx=6)
+        ttk.Button(row_btns, text="Только современное", command=self.pick_crop_modern).pack(side="left", padx=6)
+        row2 = ttk.Frame(inner)
+        row2.pack(anchor="w", pady=(8, 0))
+        ttk.Label(row2, text="Историческое:").pack(side="left")
+        ttk.Label(row2, textvariable=self.old_crop_status, foreground="#1a6b1a").pack(side="left", padx=(4, 16))
+        ttk.Label(row2, text="Современное:").pack(side="left")
+        ttk.Label(row2, textvariable=self.modern_crop_status, foreground="#1a6b1a").pack(side="left", padx=4)
+        ttk.Button(row2, text="Сбросить обрезку", command=self.clear_all_crops).pack(side="left", padx=12)
+        return row + 1
+
     def _build_rectify_tab(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(1, weight=1)
-        box = ttk.LabelFrame(parent, text="Обязательный шаг: выпрямить оба фото по одной и той же плоскости фасада")
-        box.grid(row=0, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
+        row = self._build_rakurs_mode_block(parent, 0)
+        box = ttk.LabelFrame(parent, text="Шаг 2 — фото и папка результата")
+        box.grid(row=row, column=0, columnspan=3, sticky="ew", padx=10, pady=6)
         box.columnconfigure(1, weight=1)
         self._row_file(box, "Историческое фото:", self.historical_img, self.choose_historical_img, 0)
         self._row_file(box, "Современное фото:", self.modern_img, self.choose_modern_img, 1)
         self._row_folder(box, "Папка результата:", self.outdir, self.choose_result_dir, 2)
+        row += 1
 
-        point_frame = ttk.LabelFrame(parent, text="4 угла фасада")
-        point_frame.grid(row=1, column=0, columnspan=3, sticky="ew", padx=10, pady=8)
+        row = self._build_rectify_crop_block(parent, row)
+
+        self._corners_frame = ttk.LabelFrame(parent, text="Шаг 4 — 4 угла фасада (только для похожих ракурсов)")
+        self._corners_frame_row = row
+        self._corners_frame.grid(row=row, column=0, columnspan=3, sticky="ew", padx=10, pady=8)
+        row += 1
         ttk.Label(
-            point_frame,
+            self._corners_frame,
             text="Нажмите кнопку ниже. Откроется одно окно: старое фото слева, современное справа. Так меньше шансов перепутать точки.",
             wraplength=980,
             foreground="#555",
         ).pack(anchor="w", padx=8, pady=(8, 4))
-        pf_btns = ttk.Frame(point_frame)
+        pf_btns = ttk.Frame(self._corners_frame)
         pf_btns.pack(anchor="w", padx=8, pady=8)
         ttk.Button(pf_btns, text="Указать 4 угла на двух фото одновременно", command=self.pick_both_corners).pack(side="left")
         ttk.Label(pf_btns, textvariable=self.points_status, foreground="#555").pack(side="left", padx=10)
 
-        slider_frame = ttk.LabelFrame(parent, text="Overlay")
-        slider_frame.grid(row=2, column=0, columnspan=3, sticky="ew", padx=10, pady=8)
-        ttk.Label(slider_frame, textvariable=self.old_opacity_label).pack(anchor="w", padx=8, pady=(8, 0))
-        tk.Scale(slider_frame, from_=0, to=100, orient="horizontal", variable=self.old_opacity,
-                 command=self._update_opacity_label, length=420, showvalue=False).pack(anchor="w", padx=8, pady=(0, 4))
+        self._overlay_options_frame = ttk.LabelFrame(parent, text="Шаг 5 — наложение (только для похожих ракурсов)")
+        self._overlay_options_frame.grid(row=row, column=0, columnspan=3, sticky="ew", padx=10, pady=8)
+        row += 1
+        ttk.Label(self._overlay_options_frame, textvariable=self.old_opacity_label).pack(anchor="w", padx=8, pady=(8, 0))
+        tk.Scale(
+            self._overlay_options_frame,
+            from_=0,
+            to=100,
+            orient="horizontal",
+            variable=self.old_opacity,
+            command=self._update_opacity_label,
+            length=420,
+            showvalue=False,
+        ).pack(anchor="w", padx=8, pady=(0, 4))
         ttk.Checkbutton(
-            slider_frame,
-            text="Показывать весь исходный снимок (4 угла только для наложения; рекомендуется)",
+            self._overlay_options_frame,
+            text="Показывать весь исходный снимок (рекомендуется)",
             variable=self.keep_context,
         ).pack(anchor="w", padx=8, pady=(0, 8))
 
         btns = ttk.Frame(parent)
-        btns.grid(row=3, column=0, columnspan=3, sticky="w", padx=10, pady=10)
-        ttk.Button(btns, text="Подготовить выпрямленные фото и overlay", command=self.start_prepare_project).pack(side="left")
+        btns.grid(row=row, column=0, columnspan=3, sticky="w", padx=10, pady=10)
+        row += 1
+        self.prepare_main_btn = ttk.Button(btns, text="Подготовить → overlay и разметка", command=self.start_prepare_project)
+        self.prepare_main_btn.pack(side="left")
         ttk.Button(btns, text="Открыть overlay", command=self.open_overlay).pack(side="left", padx=6)
         ttk.Button(btns, text="Открыть до/после", command=self.open_before_after).pack(side="left", padx=6)
         ttk.Button(btns, text="Открыть папку результата", command=lambda: open_path(Path(self.outdir.get()))).pack(side="left", padx=6)
@@ -3119,13 +3803,18 @@ class App(tk.Tk):
             variable=self.auto_export_website,
         ).pack(side="left", padx=8)
 
-        ttk.Label(parent, textvariable=self.rectified_status, font=("TkDefaultFont", 10, "bold")).grid(row=4, column=0, columnspan=3, sticky="w", padx=10, pady=8)
-        warning = (
-            "Важно: 4 точки должны быть одной и той же плоскостью здания. Не берите выступающий козырёк, дерево, забор, "
-            "балкон с объёмом или разные боковые фасады. Включённый расширенный холст не обрезает всё за пределами этих 4 точек — "
-            "поэтому надстройка или пристройка останется видимой, даже если её не было на старом фото."
+        ttk.Label(parent, textvariable=self.rectified_status, font=("TkDefaultFont", 10, "bold")).grid(
+            row=row, column=0, columnspan=3, sticky="w", padx=10, pady=8
         )
-        ttk.Label(parent, text=warning, wraplength=980, foreground="#6b4a00").grid(row=5, column=0, columnspan=3, sticky="w", padx=10, pady=8)
+        row += 1
+        warning = (
+            "Похожие ракурсы: обрезка (по желанию), 4 угла и выпрямление. "
+            "Разные ракурсы: обрежьте кадры при необходимости — углы не нужны, два снимка рядом."
+        )
+        ttk.Label(parent, text=warning, wraplength=980, foreground="#6b4a00").grid(
+            row=row, column=0, columnspan=3, sticky="w", padx=10, pady=8
+        )
+        self._on_comparison_rakurs_changed()
 
     def _build_analyze_tab(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(0, weight=1)
@@ -3188,15 +3877,27 @@ class App(tk.Tk):
         ttk.Label(
             parent,
             text=(
-                "Все 4 точки — только на одном фасаде (не в небе и не на соседнем здании). "
-                "Точка 2 — верхний правый угол того же дома, что точка 1. "
-                "Основное сравнение двух фото — вкладки 1 → 2 → 3."
+                "4 угла задают плоскость фасада «к нам»: 1 верх-лево, 2 верх-право, 3 низ-право, 4 низ-лево. "
+                "Так выпрямляются и вертикали, и горизонтали (перспектива в фасад). "
+                "По умолчанию весь кадр сохраняется, без обрезки и без поворота файла."
             ),
             wraplength=900,
             foreground="#555",
         ).grid(row=3, column=0, columnspan=3, sticky="w", padx=10, pady=8)
+        opt = ttk.Frame(parent)
+        opt.grid(row=4, column=0, columnspan=3, sticky="w", padx=10, pady=4)
+        ttk.Checkbutton(
+            opt,
+            text="Сохранить весь исходный кадр (рекомендуется)",
+            variable=self.straight_keep_full,
+        ).pack(anchor="w")
+        ttk.Checkbutton(
+            opt,
+            text="Дополнительно обрезать пустые поля по краям",
+            variable=self.straight_tight_crop,
+        ).pack(anchor="w")
         btns = ttk.Frame(parent)
-        btns.grid(row=4, column=0, columnspan=3, sticky="w", padx=10, pady=10)
+        btns.grid(row=5, column=0, columnspan=3, sticky="w", padx=10, pady=10)
         ttk.Button(btns, text="Выпрямить по 4 углам", command=self.run_straighten_manual).pack(side="left")
         ttk.Button(btns, text="Открыть папку результата", command=lambda: open_path(Path(self.straight_out.get()).parent)).pack(side="left", padx=8)
 
@@ -4273,6 +4974,12 @@ class App(tk.Tk):
         if not self.project_store:
             return
         try:
+            if comparison.status == "discarded":
+                messagebox.showwarning(
+                    "Помечено к удалению",
+                    "Сначала снимите пометку во вкладке «Сравнения» или удалите папку.",
+                )
+                return
             self.project_store.set_active_comparison(comparison.comparison_id)
             work = self.project_store.work_dir_for_active()
             self.outdir.set(str(work))
@@ -5095,6 +5802,7 @@ map.on('click',e=>{{
             self.points_status.set(f"Активно: {item.label}. Углы ещё не выбраны.")
         self._refresh_historical_sources_tree()
         self._switch_session_for_historical(item)
+        self._refresh_crop_status_labels()
         if save:
             self._save_historical_sources()
 
@@ -5233,6 +5941,105 @@ map.on('click',e=>{{
 
     # ----------------------------- Points and rectification -------------
 
+    def _historical_crop_path(self) -> Optional[str]:
+        item = self._get_active_historical_item()
+        if item and Path(item.path).exists():
+            return item.path
+        path = self.historical_img.get()
+        if path and Path(path).exists():
+            return path
+        return None
+
+    def _set_historical_crop_rect(self, crop_text: str) -> None:
+        item = self._get_active_historical_item()
+        if item:
+            item.crop_rect_text = crop_text
+            self._save_historical_sources()
+        else:
+            self.old_crop_rect_text = crop_text
+
+    def pick_crop_historical(self) -> None:
+        path = self._historical_crop_path()
+        if not path:
+            messagebox.showinfo("Нужно историческое фото", "Сначала выберите историческое фото.")
+            return
+
+        def receive(bbox: Tuple[int, int, int, int]) -> None:
+            self._set_historical_crop_rect(crop_rect_to_text(*bbox))
+            self._refresh_crop_status_labels()
+            self._log(f"Рамка обрезки исторического фото: {bbox}\n")
+
+        CropWindow(self, path, "Обрезка исторического фото", receive)
+
+    def pick_crop_modern(self) -> None:
+        path = self.modern_img.get()
+        if not path or not Path(path).exists():
+            messagebox.showinfo("Нужно современное фото", "Сначала выберите современное фото.")
+            return
+
+        def receive(bbox: Tuple[int, int, int, int]) -> None:
+            self.modern_crop_rect_text = crop_rect_to_text(*bbox)
+            self._refresh_crop_status_labels()
+            self._log(f"Рамка обрезки современного фото: {bbox}\n")
+
+        CropWindow(self, path, "Обрезка современного фото", receive)
+
+    def clear_all_crops(self) -> None:
+        self._set_historical_crop_rect("")
+        self.modern_crop_rect_text = ""
+        self._refresh_crop_status_labels()
+        self._log("Рамки обрезки сброшены — снова весь кадр.\n")
+
+    def pick_both_crops(self) -> None:
+        item = self._get_active_historical_item()
+        if not item or not Path(item.path).exists():
+            path = self.historical_img.get()
+            if not path or not Path(path).exists():
+                messagebox.showinfo(
+                    "Нужно историческое фото",
+                    "Сначала добавьте или выберите историческое фото.",
+                )
+                return
+        if not self.modern_img.get() or not Path(self.modern_img.get()).exists():
+            messagebox.showinfo("Нужно современное фото", "Сначала выберите современное фото.")
+            return
+
+        sources = self._historical_sources_for_picker()
+        if not sources:
+            path = self.historical_img.get()
+            if path and Path(path).exists():
+                sources = [{"path": path, "label": Path(path).name, "points": "", "crop_rect": self.old_crop_rect_text or ""}]
+            else:
+                messagebox.showinfo("Нет файлов", "Нет доступных исторических фото на диске.")
+                return
+        start = 0
+        if item:
+            start = next((i for i, s in enumerate(sources) if s["path"] == item.path), 0)
+
+        def receive(
+            _old_points: str,
+            _modern_points: str,
+            hist_sources: List[Dict[str, str]],
+            modern_crop_rect: str,
+        ) -> None:
+            self._apply_picker_historical_points(hist_sources)
+            self.modern_crop_rect_text = modern_crop_rect
+            self._refresh_crop_status_labels()
+            self._save_historical_sources()
+            self._refresh_historical_sources_tree()
+            self._log("Рамки обрезки сохранены для обоих фото.\n")
+
+        DualFacadePointPicker(
+            self,
+            self.modern_img.get(),
+            receive,
+            historical_sources=sources,
+            start_index=start,
+            initial_modern_crop_rect_text=self.modern_crop_rect_text,
+            lock_modern_when_complete=False,
+            crop_only=True,
+        )
+
     def pick_both_corners(self) -> None:
         item = self._get_active_historical_item()
         if not item or not Path(item.path).exists():
@@ -5286,7 +6093,7 @@ map.on('click',e=>{{
         if not self.historical_img.get() or not self.modern_img.get():
             messagebox.showinfo("Нужны два фото", "Во вкладке 1 выберите историческое и современное фото.")
             return
-        if not self.old_points_text or not self.modern_points_text:
+        if not self._is_different_rakurs() and (not self.old_points_text or not self.modern_points_text):
             messagebox.showinfo("Нужны точки", "Во вкладке 2 нажмите “Указать 4 угла на двух фото одновременно”.")
             return
         self._ensure_work_session_for_active_pair()
@@ -5295,13 +6102,13 @@ map.on('click',e=>{{
         pastvu_meta = asdict(self.selected_pastvu) if self.selected_pastvu else {}
 
         active = self._get_active_historical_item()
-        old_crop = (active.crop_rect_text if active else "") or ""
+        old_crop = (active.crop_rect_text if active else "") or getattr(self, "old_crop_rect_text", "") or ""
         def work() -> object:
             return prepare_rectified_project(
                 Path(self.historical_img.get()),
                 Path(self.modern_img.get()),
-                self.old_points_text,
-                self.modern_points_text,
+                self.old_points_text if not self._is_different_rakurs() else "",
+                self.modern_points_text if not self._is_different_rakurs() else "",
                 outdir,
                 old_opacity_percent=int(self.old_opacity.get()),
                 pastvu_meta=pastvu_meta,
@@ -5309,16 +6116,30 @@ map.on('click',e=>{{
                 keep_context=bool(self.keep_context.get()),
                 old_crop_rect_text=old_crop,
                 modern_crop_rect_text=self.modern_crop_rect_text,
+                labeling_mode=self._labeling_mode_from_rakurs(),
             )
 
         def done(_result: object) -> None:
-            self.rectified_status.set(f"Готово. Выпрямленная пара и overlay сохранены: {outdir}")
+            different = self.comparison_rakurs.get() == "different"
+            mode = "два фото рядом" if different else "наложение"
+            self.rectified_status.set(f"Готово ({mode}). Результаты: {outdir}")
             self._log(f"Готово. Результаты сохранены в: {outdir}\n")
-            messagebox.showinfo(
-                "Готово",
-                "Выпрямленная пара, overlay, до/после и картинка для разметки созданы.\n"
-                "Сначала откройте overlay / до-после и проверьте совпадение. Если фасад вывернулся — заново укажите 4 угла.",
-            )
+            if different:
+                messagebox.showinfo(
+                    "Готово — к разметке",
+                    "Создана картинка с двумя фото рядом (история | сегодня).\n"
+                    "Откройте вкладку «Разметка» или «4. Разметка» и обводите области на каждой половине.",
+                )
+                if hasattr(self, "notebook") and hasattr(self, "tab_markup"):
+                    self.notebook.select(self.tab_markup)
+                elif hasattr(self, "notebook") and hasattr(self, "tab_analyze"):
+                    self.notebook.select(self.tab_analyze)
+            else:
+                messagebox.showinfo(
+                    "Готово",
+                    "Выпрямленная пара и overlay созданы.\n"
+                    "Проверьте совпадение, затем вкладка «Разметка».",
+                )
             open_path(outdir)
             self._maybe_auto_export_to_website()
 
@@ -5498,9 +6319,13 @@ map.on('click',e=>{{
                 messagebox.showwarning("Проверьте углы", msg)
                 return
             img = cv_read(self.straight_img.get())
-            out_w, out_h = facade_output_size(pts, pts)
-            rect, _ = warp_facade_to_rect(img, pts, out_w, out_h)
-            rect, _, _ = crop_white_margins_pair(rect, rect)
+            ow, oh = facade_core_size_from_quad(pts)
+            if bool(self.straight_keep_full.get()):
+                rect, _ = warp_facade_keep_full_image(img, pts, ow, oh)
+            else:
+                rect, _ = warp_facade_to_rect(img, pts, ow, oh)
+            if bool(self.straight_tight_crop.get()):
+                rect, _, _ = crop_white_margins_pair(rect, rect)
             out_path = Path(self.straight_out.get())
             out_path.parent.mkdir(parents=True, exist_ok=True)
             cv_write(out_path, rect)
@@ -5712,8 +6537,23 @@ class AppV11(App):
 
         bg_box = ttk.LabelFrame(tools, text="Фон для рисования")
         bg_box.grid(row=1, column=0, sticky="ew", padx=10, pady=6)
-        for value, label in (("overlay", "Настроенный overlay"), ("before_after", "До / после"), ("modern", "Только современное"), ("historical", "Только историческое")):
+        self._markup_bg_box = bg_box
+        self._markup_bg_modes = (
+            ("overlay", "Настроенный overlay"),
+            ("before_after", "До / после"),
+            ("modern", "Только современное"),
+            ("historical", "Только историческое"),
+        )
+        for value, label in self._markup_bg_modes:
             ttk.Radiobutton(bg_box, text=label, value=value, variable=self.markup_background_mode, command=self._refresh_markup_canvas).pack(anchor="w", padx=8, pady=2)
+        self._markup_side_hint = ttk.Label(
+            tools,
+            text="",
+            wraplength=285,
+            foreground="#7a4b00",
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self._markup_side_hint.grid(row=6, column=0, sticky="ew", padx=10, pady=(0, 6))
 
         class_box = ttk.LabelFrame(tools, text="Что отмечаем")
         class_box.grid(row=2, column=0, sticky="ew", padx=10, pady=6)
@@ -5802,7 +6642,7 @@ class AppV11(App):
             return self._rectified_images_cache
         old = Image.open(old_path).convert("RGB")  # type: ignore[union-attr]
         new = Image.open(new_path).convert("RGB")  # type: ignore[union-attr]
-        if new.size != old.size:
+        if not self._is_side_by_side_project() and new.size != old.size:
             new = new.resize(old.size)
         self._rectified_images_cache = (old, new)
         self._rectified_cache_key = key
@@ -5828,6 +6668,15 @@ class AppV11(App):
         return img.convert("RGB")
 
     def _compose_current_view(self, mode: Optional[str] = None):
+        if self._is_side_by_side_project():
+            view_mode = mode or self.compare_mode.get()
+            if view_mode in ("side_by_side", "overlay", "before_after"):
+                return self._comparison_panel_pil()
+            old, modern = self._load_rectified_images()
+            if view_mode == "historical":
+                return self._prepared_old_pil(old)
+            if view_mode == "modern":
+                return self._prepared_modern_pil(modern)
         old, modern = self._load_rectified_images()
         old_p = self._prepared_old_pil(old)
         modern_p = self._prepared_modern_pil(modern)
@@ -5869,7 +6718,7 @@ class AppV11(App):
         try:
             img = self._compose_current_view()
             self._show_pil_on_canvas(self.compare_canvas, img, "_compare_photo_ref", "compare_display")
-            if self.compare_mode.get() == "before_after":
+            if self.compare_mode.get() == "before_after" and not self._is_side_by_side_project():
                 scale, ox, oy, dw, dh = self.compare_display
                 x = ox + int(dw * self.compare_split.get() / 100.0)
                 self.compare_canvas.create_line(x, oy, x, oy + dh, fill="#ffffff", width=2)
@@ -5881,6 +6730,8 @@ class AppV11(App):
             self._draw_canvas_message(self.compare_canvas, str(exc))
 
     def _save_current_labeling_image(self, mode: Optional[str] = None) -> None:
+        if self._is_side_by_side_project():
+            return
         try:
             img = self._compose_current_view(mode=mode or self.compare_mode.get())
             out = Path(self.outdir.get()) / "05_comparison_for_labeling.png"
@@ -5921,21 +6772,36 @@ class AppV11(App):
             except Exception:
                 self.embedded_annotations = []
         self._annotation_loaded_for = outdir
+        self._migrate_side_by_side_annotations()
+        self._prepare_markup_for_side_by_side()
 
     def _refresh_markup_canvas(self) -> None:
         if not hasattr(self, "markup_canvas"):
             return
         self._ensure_annotations_loaded()
+        self._prepare_markup_for_side_by_side()
+        if hasattr(self, "_markup_side_hint"):
+            if self._is_side_by_side_project() and self._markup_uses_comparison_canvas():
+                self._markup_side_hint.configure(
+                    text=(
+                        "Разные ракурсы: два фото рядом, как после «Подготовить». "
+                        "Левая половина — историческое, правая — современное. Обводите на нужной стороне."
+                    )
+                )
+            elif self._is_side_by_side_project():
+                side = self._markup_active_image_side()
+                side_ru = "историческом" if side == "historical" else "современном"
+                self._markup_side_hint.configure(
+                    text=(
+                        "Разные ракурсы: переключите «Только историческое» / «Только современное». "
+                        f"Сейчас рисуете на {side_ru} фото."
+                    )
+                )
+            else:
+                self._markup_side_hint.configure(text="")
         try:
             mode = self.markup_background_mode.get()
-            if mode == "overlay":
-                img = self._compose_current_view(mode="overlay")
-            elif mode == "before_after":
-                img = self._compose_current_view(mode="before_after")
-            elif mode == "modern":
-                img = self._compose_current_view(mode="modern")
-            else:
-                img = self._compose_current_view(mode="historical")
+            img = self._compose_current_view(mode=mode)
             self._show_pil_on_canvas(self.markup_canvas, img, "_markup_photo_ref", "markup_display")
             self._draw_markup_vectors()
             self.markup_status.set(f"Областей: {len(self.embedded_annotations)}. Точек в текущей области: {len(self.current_markup_points)}.")
@@ -5950,7 +6816,9 @@ class AppV11(App):
         def to_disp(pt: Point) -> Point:
             return (ox + pt[0] * scale, oy + pt[1] * scale)
         for idx, ann in enumerate(self.embedded_annotations, start=1):
-            pts = ann.get("polygon", [])
+            if not self._should_show_markup_annotation(ann):
+                continue
+            pts = self._polygon_points_for_markup_display(ann)
             if len(pts) < 3:
                 continue
             cls = ann.get("class", "added_floor")
@@ -5991,13 +6859,14 @@ class AppV11(App):
         if len(self.current_markup_points) < 3:
             return
         cls = self.markup_class.get()
-        self.embedded_annotations.append({
+        ann = self._decorate_markup_annotation({
             "id": len(self.embedded_annotations) + 1,
             "class": cls,
             "label_ru": CLASS_LABELS.get(cls, cls),
             "comment": self.markup_comment.get().strip(),
             "polygon": [[float(x), float(y)] for x, y in self.current_markup_points],
         })
+        self.embedded_annotations.append(ann)
         self.markup_comment.set("")
         self.current_markup_points = []
         self._refresh_markup_canvas()
@@ -6085,7 +6954,9 @@ class AppV11(App):
         if not hasattr(self, "result_canvas"):
             return
         self._update_result_house_header()
-        path = Path(self.outdir.get()) / "07_marked_on_original_modern.png"
+        path = Path(self.outdir.get()) / "10_side_by_side_marked.png"
+        if not path.exists():
+            path = Path(self.outdir.get()) / "07_marked_on_original_modern.png"
         if not path.exists():
             self.result_status.set("После сохранения разметки здесь появится итоговая картинка.")
             self._draw_canvas_message(self.result_canvas, "Пока нет итоговой картинки.\n\nВо вкладке 4 обведите изменения и нажмите “Сохранить и показать на фасаде”.")
@@ -6136,7 +7007,7 @@ class AppV11(App):
         if not self.historical_img.get() or not self.modern_img.get():
             messagebox.showinfo("Нужны два фото", "Во вкладке 1 выберите историческое и современное фото.")
             return
-        if not self.old_points_text or not self.modern_points_text:
+        if not self._is_different_rakurs() and (not self.old_points_text or not self.modern_points_text):
             messagebox.showinfo("Нужны точки", "Во вкладке 2 нажмите “Указать 4 угла на двух фото одновременно”.")
             return
         self._ensure_work_session_for_active_pair()
@@ -6145,13 +7016,13 @@ class AppV11(App):
         pastvu_meta = asdict(self.selected_pastvu) if self.selected_pastvu else {}
 
         active = self._get_active_historical_item()
-        old_crop = (active.crop_rect_text if active else "") or ""
+        old_crop = (active.crop_rect_text if active else "") or getattr(self, "old_crop_rect_text", "") or ""
         def work() -> object:
             return prepare_rectified_project(
                 Path(self.historical_img.get()),
                 Path(self.modern_img.get()),
-                self.old_points_text,
-                self.modern_points_text,
+                self.old_points_text if not self._is_different_rakurs() else "",
+                self.modern_points_text if not self._is_different_rakurs() else "",
                 outdir,
                 old_opacity_percent=int(self.old_opacity.get()),
                 pastvu_meta=pastvu_meta,
@@ -6159,22 +7030,35 @@ class AppV11(App):
                 keep_context=bool(self.keep_context.get()),
                 old_crop_rect_text=old_crop,
                 modern_crop_rect_text=self.modern_crop_rect_text,
+                labeling_mode=self._labeling_mode_from_rakurs(),
             )
 
         def done(_result: object) -> None:
             self._rectified_images_cache = None
             self._rectified_cache_key = None
-            self.rectified_status.set(f"Готово. Выпрямленная пара и overlay сохранены: {outdir}")
+            different = self.comparison_rakurs.get() == "different"
+            mode = "два фото рядом" if different else "наложение"
+            self.rectified_status.set(f"Готово ({mode}). Результаты: {outdir}")
             self._log(f"Готово. Результаты сохранены в: {outdir}\n")
             self._refresh_compare_canvas(save=True)
             self._refresh_markup_canvas()
             self._refresh_workflow_steps()
             if hasattr(self, "notebook"):
-                self.notebook.select(self.tab_compare)
-            messagebox.showinfo(
-                "Готово",
-                "Выпрямленная пара создана. Теперь во вкладке 3 настройте overlay/до-после прямо внутри программы.",
-            )
+                if different and hasattr(self, "tab_markup"):
+                    self.notebook.select(self.tab_markup)
+                else:
+                    self.notebook.select(self.tab_compare)
+            if different:
+                messagebox.showinfo(
+                    "Готово — к разметке",
+                    "Создана картинка: история слева, сегодня справа.\n"
+                    "Перейдите во вкладку «4. Разметка» и обводите области на каждой половине.",
+                )
+            else:
+                messagebox.showinfo(
+                    "Готово",
+                    "Выпрямленная пара создана. Вкладка «3. Сравнение» — проверка overlay, затем «4. Разметка».",
+                )
 
         self._run_bg("Подготовка выпрямленной пары", work, done)
 
@@ -6324,6 +7208,22 @@ class AppV12(AppV11):
         return old_small, modern_small, float(scale), ox, oy, dw, dh
 
     def _compose_preview_for_canvas(self, canvas: tk.Canvas, mode: Optional[str] = None) -> Tuple[object, Tuple[float, int, int, int, int]]:
+        if self._is_side_by_side_project():
+            view_mode = mode or self.compare_mode.get()
+            if view_mode in ("side_by_side", "overlay", "before_after"):
+                panel = self._comparison_panel_pil()
+                cw = max(10, canvas.winfo_width())
+                ch = max(10, canvas.winfo_height())
+                if cw < 80 or ch < 80:
+                    cw, ch = 1100, 760
+                scale = min(cw / panel.width, ch / panel.height, 1.0)
+                dw = max(1, int(round(panel.width * scale)))
+                dh = max(1, int(round(panel.height * scale)))
+                ox = int((cw - dw) / 2)
+                oy = int((ch - dh) / 2)
+                filt = self._resize_filter_fast()
+                disp = panel.resize((dw, dh), filt) if panel.size != (dw, dh) else panel.copy()
+                return disp, (scale, ox, oy, dw, dh)
         old_small, modern_small, scale, ox, oy, dw, dh = self._load_preview_base_images(canvas)
         old_p = self._prepared_old_pil(old_small)
         modern_p = self._prepared_modern_pil(modern_small)
@@ -6355,7 +7255,7 @@ class AppV12(AppV11):
         try:
             img, display = self._compose_preview_for_canvas(self.compare_canvas, self.compare_mode.get())
             self._put_preview_on_canvas(self.compare_canvas, img, "_compare_photo_ref", "compare_display", display)
-            if self.compare_mode.get() == "before_after":
+            if self.compare_mode.get() == "before_after" and not self._is_side_by_side_project():
                 scale, ox, oy, dw, dh = self.compare_display
                 x = ox + int(dw * self.compare_split.get() / 100.0)
                 self.compare_canvas.create_line(x, oy, x, oy + dh, fill="#ffffff", width=2)
@@ -6373,12 +7273,36 @@ class AppV12(AppV11):
         if not hasattr(self, "markup_canvas"):
             return
         self._ensure_annotations_loaded()
+        self._prepare_markup_for_side_by_side()
+        if hasattr(self, "_markup_side_hint"):
+            if self._is_side_by_side_project() and self._markup_uses_comparison_canvas():
+                self._markup_side_hint.configure(
+                    text=(
+                        "Разные ракурсы: два фото рядом, как после «Подготовить». "
+                        "Левая половина — историческое, правая — современное. Обводите на нужной стороне."
+                    )
+                )
+            elif self._is_side_by_side_project():
+                side = self._markup_active_image_side()
+                side_ru = "историческом" if side == "historical" else "современном"
+                self._markup_side_hint.configure(
+                    text=(
+                        "Разные ракурсы: переключите «Только историческое» / «Только современное». "
+                        f"Сейчас рисуете на {side_ru} фото."
+                    )
+                )
+            else:
+                self._markup_side_hint.configure(text="")
         try:
             mode = self.markup_background_mode.get()
-            if mode not in {"overlay", "before_after", "modern", "historical"}:
+            if mode not in {"overlay", "before_after", "modern", "historical", "side_by_side"}:
                 mode = "overlay"
-            img, display = self._compose_preview_for_canvas(self.markup_canvas, mode)
-            self._put_preview_on_canvas(self.markup_canvas, img, "_markup_photo_ref", "markup_display", display)
+            if self._is_side_by_side_project():
+                img = self._compose_current_view(mode=mode)
+                self._show_pil_on_canvas(self.markup_canvas, img, "_markup_photo_ref", "markup_display")
+            else:
+                img, display = self._compose_preview_for_canvas(self.markup_canvas, mode)
+                self._put_preview_on_canvas(self.markup_canvas, img, "_markup_photo_ref", "markup_display", display)
             self._draw_markup_vectors()
             self._update_markup_status_text()
         except Exception as exc:
@@ -6401,7 +7325,9 @@ class AppV12(AppV11):
             return (ox + pt[0] * scale, oy + pt[1] * scale)
 
         for idx, ann in enumerate(self.embedded_annotations, start=1):
-            pts = ann.get("polygon", [])
+            if not self._should_show_markup_annotation(ann):
+                continue
+            pts = self._polygon_points_for_markup_display(ann)
             if len(pts) < 3:
                 continue
             cls = ann.get("class", "added_floor")
@@ -6446,13 +7372,14 @@ class AppV12(AppV11):
         if len(self.current_markup_points) < 3:
             return
         cls = self.markup_class.get()
-        self.embedded_annotations.append({
+        ann = self._decorate_markup_annotation({
             "id": len(self.embedded_annotations) + 1,
             "class": cls,
             "label_ru": CLASS_LABELS.get(cls, cls),
             "comment": self.markup_comment.get().strip(),
             "polygon": [[float(x), float(y)] for x, y in self.current_markup_points],
         })
+        self.embedded_annotations.append(ann)
         self.markup_comment.set("")
         self.current_markup_points = []
         self._draw_markup_vectors()
@@ -6511,40 +7438,47 @@ class AppV12(AppV11):
     def _result_annotations_in_source(self) -> List[dict]:
         self._ensure_annotations_loaded()
         project_path = self._project_json_path()
-        H = None
+        project: dict = {}
         if project_path is not None:
             try:
                 project = json.loads(project_path.read_text(encoding="utf-8"))
+            except Exception:
+                project = {}
+        result: List[dict] = []
+        for idx, ann in enumerate(self.embedded_annotations, start=1):
+            if ann.get("polygon_source"):
+                src_poly = ann.get("polygon_source")
+            elif project and project_is_side_by_side(project):
+                src_poly = annotation_polygon_on_full_source(ann, project)
+            else:
+                pts = np.asarray(ann.get("polygon", []), dtype=np.float32)
+                if pts.shape[0] < 3:
+                    continue
                 fb = str(getattr(self, "modern_crop_rect_text", "") or "")
                 if not fb:
                     fb = modern_crop_rect_from_metadata_near(Path(self.outdir.get()))
-                H = H_rect_to_full_modern_from_project(project, fallback_rect_text=fb)
-                if H.shape != (3, 3):
-                    H = None
-            except Exception:
-                H = None
-        result: List[dict] = []
-        for idx, ann in enumerate(self.embedded_annotations, start=1):
-            pts = np.asarray(ann.get("polygon", []), dtype=np.float32)
-            if pts.shape[0] < 3:
-                continue
-            if H is not None:
-                try:
-                    pts2 = cv.perspectiveTransform(pts.reshape(-1, 1, 2), H).reshape(-1, 2)
-                except Exception:
+                H = H_rect_to_full_modern_from_project(project, fallback_rect_text=fb) if project else None
+                if H is not None and H.shape == (3, 3):
+                    try:
+                        pts2 = cv.perspectiveTransform(pts.reshape(-1, 1, 2), H).reshape(-1, 2)
+                    except Exception:
+                        pts2 = pts
+                else:
                     pts2 = pts
-            else:
-                pts2 = pts
+                src_poly = pts2.tolist()
             item = dict(ann)
             item["_idx"] = idx
-            item["_source_polygon"] = pts2.tolist()
+            item["_source_polygon"] = src_poly
             result.append(item)
         return result
 
     def _refresh_result_canvas(self) -> None:
         if not hasattr(self, "result_canvas"):
             return
-        path = Path(self.outdir.get()) / "07_marked_on_original_modern.png"
+        outdir = Path(self.outdir.get())
+        path = outdir / "10_side_by_side_marked.png"
+        if not path.exists():
+            path = outdir / "07_marked_on_original_modern.png"
         if not path.exists():
             self.result_status.set("После сохранения разметки здесь появится итоговая картинка.")
             self._draw_canvas_message(self.result_canvas, "Пока нет итоговой картинки.\n\nВо вкладке 4 обведите изменения и нажмите “Сохранить и показать на фасаде”.")
@@ -7060,55 +7994,88 @@ class AppV13(AppV12):
 
     def _build_rectify_tab(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(1, weight=1)
-        box = ttk.LabelFrame(parent, text="Обязательный шаг: выпрямить оба фото по одной и той же плоскости фасада")
-        box.grid(row=0, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
+        row = self._build_rakurs_mode_block(parent, 0)
+        box = ttk.LabelFrame(parent, text="Шаг 2 — фото и папка результата")
+        box.grid(row=row, column=0, columnspan=3, sticky="ew", padx=10, pady=6)
         box.columnconfigure(1, weight=1)
         self._row_file(box, "Историческое фото:", self.historical_img, self.choose_historical_img, 0)
         self._row_file(box, "Современное фото:", self.modern_img, self.choose_modern_img, 1)
         self._row_folder(box, "Папка результата:", self.outdir, self.choose_result_dir, 2)
+        row += 1
 
-        point_frame = ttk.LabelFrame(parent, text="4 угла фасада")
-        point_frame.grid(row=1, column=0, columnspan=3, sticky="ew", padx=10, pady=8)
+        row = self._build_rectify_crop_block(parent, row)
+
+        self._corners_frame = ttk.LabelFrame(parent, text="Шаг 4 — 4 угла фасада (только для похожих ракурсов)")
+        self._corners_frame_row = row
+        self._corners_frame.grid(row=row, column=0, columnspan=3, sticky="ew", padx=10, pady=8)
+        row += 1
         ttk.Label(
-            point_frame,
+            self._corners_frame,
             text="Активное историческое фото — из списка на вкладке «Источники». Современные 4 угла задаются один раз и повторно используются.",
             wraplength=980,
             foreground="#555",
         ).pack(anchor="w", padx=8, pady=(8, 4))
-        pf_btns = ttk.Frame(point_frame)
+        pf_btns = ttk.Frame(self._corners_frame)
         pf_btns.pack(anchor="w", padx=8, pady=8)
         ttk.Button(pf_btns, text="Указать 4 угла на двух фото одновременно", command=self.pick_both_corners, style="Big.TButton").pack(side="left")
         ttk.Label(pf_btns, textvariable=self.points_status, foreground="#555").pack(side="left", padx=10)
 
-        slider_frame = ttk.LabelFrame(parent, text="Overlay")
-        slider_frame.grid(row=2, column=0, columnspan=3, sticky="ew", padx=10, pady=8)
-        ttk.Label(slider_frame, textvariable=self.old_opacity_label).pack(anchor="w", padx=8, pady=(8, 0))
-        tk.Scale(slider_frame, from_=0, to=100, orient="horizontal", variable=self.old_opacity, command=self._update_opacity_label, length=420, showvalue=False).pack(anchor="w", padx=8, pady=(0, 4))
-        ttk.Checkbutton(
-            slider_frame,
-            text="Показывать весь исходный снимок (4 угла только для наложения; рекомендуется)",
-            variable=self.keep_context,
+        self._overlay_options_frame = ttk.LabelFrame(parent, text="Шаг 5 — наложение (только для похожих ракурсов)")
+        self._overlay_options_frame.grid(row=row, column=0, columnspan=3, sticky="ew", padx=10, pady=8)
+        row += 1
+        ttk.Label(self._overlay_options_frame, textvariable=self.old_opacity_label).pack(anchor="w", padx=8, pady=(8, 0))
+        tk.Scale(
+            self._overlay_options_frame,
+            from_=0,
+            to=100,
+            orient="horizontal",
+            variable=self.old_opacity,
+            command=self._update_opacity_label,
+            length=420,
+            showvalue=False,
         ).pack(anchor="w", padx=8, pady=(0, 4))
-        ttk.Label(
-            slider_frame,
-            text="После выпрямления пустые белые поля по краям обрезаются автоматически — фасад крупнее на экране.",
-            foreground="#555",
-            wraplength=900,
+        ttk.Checkbutton(
+            self._overlay_options_frame,
+            text="Показывать весь исходный снимок (рекомендуется)",
+            variable=self.keep_context,
         ).pack(anchor="w", padx=8, pady=(0, 8))
 
         btns = ttk.Frame(parent)
-        btns.grid(row=3, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
+        btns.grid(row=row, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
+        row += 1
         btns.columnconfigure(0, weight=1)
-        tk.Button(btns, text="ПОДГОТОВИТЬ ВЫПРЯМЛЕННЫЕ ФОТО И СРАВНЕНИЕ", command=self.start_prepare_project, bg="#0b6bcb", fg="white", activebackground="#084f96", activeforeground="white", font=("TkDefaultFont", 10, "bold"), padx=10, pady=8).grid(row=0, column=0, sticky="ew")
+        self.prepare_main_btn = tk.Button(
+            btns,
+            text="Подготовить → overlay и разметка",
+            command=self.start_prepare_project,
+            bg="#0b6bcb",
+            fg="white",
+            activebackground="#084f96",
+            activeforeground="white",
+            font=("TkDefaultFont", 10, "bold"),
+            padx=10,
+            pady=8,
+        )
+        self.prepare_main_btn.grid(row=0, column=0, sticky="ew")
         small = ttk.Frame(parent)
-        small.grid(row=4, column=0, columnspan=3, sticky="w", padx=10, pady=(0, 8))
+        small.grid(row=row, column=0, columnspan=3, sticky="w", padx=10, pady=(0, 8))
+        row += 1
         ttk.Button(small, text="Открыть overlay", command=self.open_overlay).pack(side="left")
         ttk.Button(small, text="Открыть до/после", command=self.open_before_after).pack(side="left", padx=6)
         ttk.Button(small, text="Открыть папку результата", command=lambda: open_path(Path(self.outdir.get()))).pack(side="left", padx=6)
 
-        ttk.Label(parent, textvariable=self.rectified_status, font=("TkDefaultFont", 10, "bold")).grid(row=5, column=0, columnspan=3, sticky="w", padx=10, pady=8)
-        warning = "Важно: 4 точки должны быть одной и той же плоскостью здания. Расширенный холст не обрезает всё за пределами этих 4 точек — поэтому надстройка или пристройка останется видимой."
-        ttk.Label(parent, text=warning, wraplength=980, foreground="#6b4a00").grid(row=6, column=0, columnspan=3, sticky="w", padx=10, pady=8)
+        ttk.Label(parent, textvariable=self.rectified_status, font=("TkDefaultFont", 10, "bold")).grid(
+            row=row, column=0, columnspan=3, sticky="w", padx=10, pady=8
+        )
+        row += 1
+        warning = (
+            "Похожие ракурсы: обрезка (по желанию), 4 угла и выпрямление. "
+            "Разные ракурсы: обрежьте кадры при необходимости — углы не нужны, два снимка рядом."
+        )
+        ttk.Label(parent, text=warning, wraplength=980, foreground="#6b4a00").grid(
+            row=row, column=0, columnspan=3, sticky="w", padx=10, pady=8
+        )
+        self._on_comparison_rakurs_changed()
 
     # ---------------- comparison tab ----------------
 
@@ -7198,6 +8165,22 @@ class AppV13(AppV12):
         self._compare_slider_changed(None)
 
     def _compose_preview_for_canvas(self, canvas: tk.Canvas, mode: Optional[str] = None) -> Tuple[object, Tuple[float, int, int, int, int]]:
+        if self._is_side_by_side_project():
+            view_mode = mode or self.compare_mode.get()
+            if view_mode in ("side_by_side", "overlay", "before_after"):
+                panel = self._comparison_panel_pil()
+                cw = max(10, canvas.winfo_width())
+                ch = max(10, canvas.winfo_height())
+                if cw < 80 or ch < 80:
+                    cw, ch = 1100, 760
+                scale = min(cw / panel.width, ch / panel.height, 1.0)
+                dw = max(1, int(round(panel.width * scale)))
+                dh = max(1, int(round(panel.height * scale)))
+                ox = int((cw - dw) / 2)
+                oy = int((ch - dh) / 2)
+                filt = self._resize_filter_fast()
+                disp = panel.resize((dw, dh), filt) if panel.size != (dw, dh) else panel.copy()
+                return disp, (scale, ox, oy, dw, dh)
         old_small, modern_small, scale, ox, oy, dw, dh = self._load_preview_base_images(canvas)
         old_p = self._prepared_old_pil(old_small)
         modern_p = self._prepared_modern_pil(modern_small)
@@ -7217,6 +8200,15 @@ class AppV13(AppV12):
         return out, (scale, ox, oy, dw, dh)
 
     def _compose_current_view(self, mode: Optional[str] = None):
+        if self._is_side_by_side_project():
+            view_mode = mode or self.compare_mode.get()
+            if view_mode in ("side_by_side", "overlay", "before_after"):
+                return self._comparison_panel_pil()
+            old, modern = self._load_rectified_images()
+            if view_mode == "historical":
+                return self._prepared_old_pil(old)
+            if view_mode == "modern":
+                return self._prepared_modern_pil(modern)
         old, modern = self._load_rectified_images()
         old_p = self._prepared_old_pil(old)
         modern_p = self._prepared_modern_pil(modern)
@@ -7250,8 +8242,17 @@ class AppV13(AppV12):
         ttk.Label(tools, text="Разметка идёт по выпрямленному холсту. Колесо мыши — приближение, средняя или правая кнопка — двигать изображение.", wraplength=285, foreground="#555").grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 6))
         bg_box = ttk.LabelFrame(tools, text="Фон для рисования")
         bg_box.grid(row=1, column=0, sticky="ew", padx=10, pady=6)
+        self._markup_bg_box = bg_box
         for value, label in (("overlay", "Настроенный overlay"), ("before_after", "До / после"), ("modern", "Только современное"), ("historical", "Только историческое")):
             ttk.Radiobutton(bg_box, text=label, value=value, variable=self.markup_background_mode, command=self._reset_markup_zoom_and_refresh).pack(anchor="w", padx=8, pady=2)
+        self._markup_side_hint = ttk.Label(
+            tools,
+            text="",
+            wraplength=285,
+            foreground="#7a4b00",
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        self._markup_side_hint.grid(row=6, column=0, sticky="ew", padx=10, pady=(0, 6))
         class_box = ttk.LabelFrame(tools, text="Что отмечаем")
         class_box.grid(row=2, column=0, sticky="ew", padx=10, pady=6)
         for key, label in CLASS_LABELS.items():
@@ -7297,6 +8298,8 @@ class AppV13(AppV12):
         self._schedule_markup_refresh(delay=30)
 
     def _markup_current_full_size(self) -> Tuple[int, int]:
+        if self._is_side_by_side_project() and self._markup_uses_comparison_canvas():
+            return self._comparison_panel_pil().size
         old, _modern = self._load_rectified_images()
         return old.size
 
@@ -7353,9 +8356,26 @@ class AppV13(AppV12):
         if not hasattr(self, "markup_canvas"):
             return
         self._ensure_annotations_loaded()
+        self._prepare_markup_for_side_by_side()
+        if hasattr(self, "_markup_side_hint"):
+            if self._is_side_by_side_project() and self._markup_uses_comparison_canvas():
+                self._markup_side_hint.configure(
+                    text=(
+                        "Разные ракурсы: два фото рядом, как после «Подготовить». "
+                        "Левая половина — историческое, правая — современное."
+                    )
+                )
+            elif self._is_side_by_side_project():
+                side = self._markup_active_image_side()
+                side_ru = "историческом" if side == "historical" else "современном"
+                self._markup_side_hint.configure(
+                    text=f"Разные ракурсы: сейчас фон — только {side_ru} кадр."
+                )
+            else:
+                self._markup_side_hint.configure(text="")
         try:
             mode = self.markup_background_mode.get()
-            if mode not in {"overlay", "before_after", "modern", "historical"}:
+            if mode not in {"overlay", "before_after", "modern", "historical", "side_by_side"}:
                 mode = "overlay"
             full = self._compose_current_view(mode=mode)
             cw = max(10, self.markup_canvas.winfo_width())
@@ -7436,7 +8456,9 @@ class AppV13(AppV12):
     def _refresh_result_canvas(self) -> None:
         if not hasattr(self, "result_canvas"):
             return
-        path = Path(self.outdir.get()) / "07_marked_on_original_modern.png"
+        path = Path(self.outdir.get()) / "10_side_by_side_marked.png"
+        if not path.exists():
+            path = Path(self.outdir.get()) / "07_marked_on_original_modern.png"
         if not path.exists():
             self.result_status.set("После сохранения разметки здесь появится итоговая картинка.")
             self._draw_canvas_message(self.result_canvas, "Пока нет итоговой картинки.\n\nВо вкладке 4 обведите изменения и нажмите “Сохранить разметку и перейти к результату”.")
@@ -7978,13 +9000,21 @@ class AppV14(AppV13):
     def _compose_result_pil_from_source(self):
         if Image is None or cv is None:
             raise RuntimeError("Pillow/OpenCV не установлены.")
+        outdir = Path(self.outdir.get())
+        sb_marked = outdir / "10_side_by_side_marked.png"
+        if sb_marked.exists():
+            return Image.open(sb_marked).convert("RGB")  # type: ignore[union-attr]
         project_path = self._project_json_path()
         if project_path is None:
             raise RuntimeError("Сначала подготовьте выпрямленную пару (вкладка 2).")
         project = json.loads(project_path.read_text(encoding="utf-8"))
+        if project_is_side_by_side(project):
+            comp = outdir / "06_marked_rectified.png"
+            if comp.exists():
+                return Image.open(comp).convert("RGB")  # type: ignore[union-attr]
         modern_path = Path(str(project.get("modern_image") or ""))
         if not modern_path.exists():
-            fallback = Path(self.outdir.get()) / "07_marked_on_original_modern.png"
+            fallback = outdir / "07_marked_on_original_modern.png"
             if fallback.exists():
                 return Image.open(fallback).convert("RGB")  # type: ignore[union-attr]
             raise RuntimeError(f"Не найдено исходное современное фото: {modern_path}")
@@ -7992,11 +9022,19 @@ class AppV14(AppV13):
         modern_bgr = cv_read(modern_path)
         anns = normalize_annotation_list(list(self.embedded_annotations))
         if anns:
-            fb = str(getattr(self, "modern_crop_rect_text", "") or "")
-            if not fb:
-                fb = modern_crop_rect_from_metadata_near(Path(self.outdir.get()))
-            H = H_rect_to_full_modern_from_project(project, fallback_rect_text=fb)
-            modern_bgr = draw_polygons_on_image(modern_bgr, anns, transform=H, draw_indices=False)
+            if project_is_side_by_side(project):
+                modern_bgr = draw_polygons_on_image(
+                    modern_bgr,
+                    annotations_for_side(anns, "modern", project),
+                    transform=None,
+                    draw_indices=False,
+                )
+            else:
+                fb = str(getattr(self, "modern_crop_rect_text", "") or "")
+                if not fb:
+                    fb = modern_crop_rect_from_metadata_near(outdir)
+                H = H_rect_to_full_modern_from_project(project, fallback_rect_text=fb)
+                modern_bgr = draw_polygons_on_image(modern_bgr, anns, transform=H, draw_indices=False)
         return Image.fromarray(cv.cvtColor(modern_bgr, cv.COLOR_BGR2RGB))  # type: ignore[union-attr]
 
     def _refresh_result_canvas(self) -> None:
