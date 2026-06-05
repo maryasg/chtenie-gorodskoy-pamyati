@@ -1534,7 +1534,8 @@ def warp_facade_keep_full_image(
     max_xy = np.ceil(all_pts.max(axis=0) + margin).astype(float)
     canvas_w = int(max(2, max_xy[0] - min_xy[0]))
     canvas_h = int(max(2, max_xy[1] - min_xy[1]))
-    max_side = 5200
+    h_src, w_src = img.shape[:2]
+    max_side = min(5200, int(max(h_src, w_src) * 2.5))
     scale = min(1.0, max_side / float(max(canvas_w, canvas_h)))
     T = np.array([[scale, 0, -min_xy[0] * scale], [0, scale, -min_xy[1] * scale], [0, 0, 1]], dtype=np.float64)
     canvas_w = int(max(2, round(canvas_w * scale)))
@@ -1545,7 +1546,7 @@ def warp_facade_keep_full_image(
         H,
         (canvas_w, canvas_h),
         flags=cv.INTER_CUBIC,
-        borderMode=cv.BORDER_CONSTANT,
+        borderMode=cv.BORDER_REPLICATE,
         borderValue=(0, 0, 0),
     )
     return warped, H
@@ -1602,8 +1603,9 @@ def warp_pair_keep_context(
     canvas_w = int(max(2, max_xy[0] - min_xy[0]))
     canvas_h = int(max(2, max_xy[1] - min_xy[1]))
 
-    # Avoid accidental gigantic canvases when the four points are nearly degenerate.
-    max_side = 4200
+    h_src = max(old_img.shape[0], modern_img.shape[0])
+    w_src = max(old_img.shape[1], modern_img.shape[1])
+    max_side = min(4200, int(max(h_src, w_src) * 2.5))
     scale = min(1.0, max_side / float(max(canvas_w, canvas_h)))
     T = np.array([[scale, 0, -min_xy[0] * scale], [0, scale, -min_xy[1] * scale], [0, 0, 1]], dtype=np.float64)
     canvas_w = int(max(2, round(canvas_w * scale)))
@@ -1612,8 +1614,8 @@ def warp_pair_keep_context(
     H_modern = T @ H_mod_core
 
     border = (0, 0, 0)
-    old_rect = cv.warpPerspective(old_img, H_old, (canvas_w, canvas_h), flags=cv.INTER_CUBIC, borderMode=cv.BORDER_CONSTANT, borderValue=border)
-    modern_rect = cv.warpPerspective(modern_img, H_modern, (canvas_w, canvas_h), flags=cv.INTER_CUBIC, borderMode=cv.BORDER_CONSTANT, borderValue=border)
+    old_rect = cv.warpPerspective(old_img, H_old, (canvas_w, canvas_h), flags=cv.INTER_CUBIC, borderMode=cv.BORDER_REPLICATE, borderValue=border)
+    modern_rect = cv.warpPerspective(modern_img, H_modern, (canvas_w, canvas_h), flags=cv.INTER_CUBIC, borderMode=cv.BORDER_REPLICATE, borderValue=border)
     return old_rect, modern_rect, H_old, H_modern
 
 
@@ -1653,6 +1655,94 @@ def _content_bbox(img: np.ndarray, *, pad: int = 6) -> Tuple[int, int, int, int]
 def _bbox_area(box: Tuple[int, int, int, int]) -> int:
     x0, y0, x1, y1 = box
     return max(0, x1 - x0) * max(0, y1 - y0)
+
+
+def _black_content_bbox(
+    img: np.ndarray,
+    *,
+    pad: int = 0,
+    threshold: int = 10,
+) -> Tuple[int, int, int, int]:
+    """Границы реального содержимого после warp с чёрными полями."""
+    if cv is None:
+        h, w = img.shape[:2]
+        return 0, 0, w, h
+    if img.ndim == 3:
+        content = np.max(img, axis=2) > threshold
+    else:
+        content = img > threshold
+    mask = (content.astype(np.uint8)) * 255
+    coords = cv.findNonZero(mask)
+    if coords is None:
+        h, w = img.shape[:2]
+        return 0, 0, w, h
+    x, y, w, h = cv.boundingRect(coords)
+    H, W = img.shape[:2]
+    x0 = max(0, int(x) - pad)
+    y0 = max(0, int(y) - pad)
+    x1 = min(W, int(x + w) + pad)
+    y1 = min(H, int(y + h) + pad)
+    return x0, y0, x1, y1
+
+
+def crop_black_margins(
+    img: np.ndarray,
+    *,
+    pad: int = 8,
+    threshold: int = 10,
+) -> Tuple[np.ndarray, Tuple[int, int]]:
+    """Убрать чёрные поля после perspective warp."""
+    H, W = img.shape[:2]
+    x0, y0, x1, y1 = _black_content_bbox(img, pad=pad, threshold=threshold)
+    if x1 - x0 < 40 or y1 - y0 < 40:
+        return img, (0, 0)
+    if (x1 - x0) * (y1 - y0) >= W * H * 0.995:
+        return img, (0, 0)
+    return img[y0:y1, x0:x1].copy(), (x0, y0)
+
+
+def crop_black_margins_pair(
+    old_rect: np.ndarray,
+    modern_rect: np.ndarray,
+    *,
+    pad: int = 12,
+    threshold: int = 10,
+) -> Tuple[np.ndarray, np.ndarray, Tuple[int, int]]:
+    """Обрезать общие чёрные поля у пары выпрямленных кадров."""
+    boxes = [_black_content_bbox(im, pad=0, threshold=threshold) for im in (old_rect, modern_rect)]
+    x0 = max(0, min(b[0] for b in boxes) - pad)
+    y0 = max(0, min(b[1] for b in boxes) - pad)
+    x1 = min(old_rect.shape[1], max(b[2] for b in boxes) + pad)
+    y1 = min(old_rect.shape[0], max(b[3] for b in boxes) + pad)
+    if x1 - x0 < 40 or y1 - y0 < 40:
+        return old_rect, modern_rect, (0, 0)
+    full = old_rect.shape[0] * old_rect.shape[1]
+    if (x1 - x0) * (y1 - y0) >= full * 0.995:
+        return old_rect, modern_rect, (0, 0)
+    return (
+        old_rect[y0:y1, x0:x1].copy(),
+        modern_rect[y0:y1, x0:x1].copy(),
+        (x0, y0),
+    )
+
+
+def straighten_single_facade(
+    img: np.ndarray,
+    pts: np.ndarray,
+    *,
+    keep_full: bool = True,
+    tight_white_crop: bool = False,
+) -> np.ndarray:
+    """Выпрямить одно фото по 4 углам фасада."""
+    ow, oh = facade_core_size_from_quad(pts)
+    if keep_full:
+        rect, _ = warp_facade_keep_full_image(img, pts, ow, oh)
+    else:
+        rect, _ = warp_facade_to_rect(img, pts, ow, oh)
+    rect, _ = crop_black_margins(rect)
+    if tight_white_crop:
+        rect, _, _ = crop_white_margins_pair(rect, rect)
+    return rect
 
 
 def crop_white_margins_pair(
@@ -1876,6 +1966,12 @@ def prepare_rectified_project(
             old_rect, modern_rect, H_old_to_rect, H_modern_to_rect = warp_pair_keep_context(
                 old_img, old_pts, modern_img, modern_pts, out_w, out_h
             )
+            old_rect, modern_rect, black_crop = crop_black_margins_pair(old_rect, modern_rect)
+            if black_crop != (0, 0):
+                dx, dy = black_crop
+                H_old_to_rect = _translate_homography(H_old_to_rect, dx, dy)
+                H_modern_to_rect = _translate_homography(H_modern_to_rect, dx, dy)
+                H_rect_to_modern = np.linalg.inv(H_modern_to_rect)
         else:
             old_rect, H_old_to_rect = warp_facade_to_rect(old_img, old_pts, out_w, out_h)
             modern_rect, H_modern_to_rect = warp_facade_to_rect(modern_img, modern_pts, out_w, out_h)
@@ -3344,6 +3440,11 @@ class App(tk.Tk):
         self.straight_points_status = tk.StringVar(value="4 угла фасада не выбраны.")
         self.straight_keep_full = tk.BooleanVar(value=True)
         self.straight_tight_crop = tk.BooleanVar(value=False)
+        self.straight_preview_status = tk.StringVar(value="После выпрямления здесь появится предпросмотр.")
+        self.straight_crop_rect_text = ""
+        self._straight_preview_pil = None
+        self._straight_crop_drag_start: Optional[Tuple[float, float]] = None
+        self._straight_crop_drag_canvas_start: Optional[Tuple[int, int]] = None
         self.comparison_rakurs = tk.StringVar(value="similar")
         self.independent_labeling = tk.BooleanVar(value=False)
 
@@ -3562,7 +3663,7 @@ class App(tk.Tk):
     def _should_show_markup_annotation(self, ann: dict) -> bool:
         if not self._is_side_by_side_project():
             return True
-        if self._markup_uses_comparison_canvas():
+        if self._markup_uses_dual_panels() or self._markup_uses_comparison_canvas():
             return True
         side = str(ann.get("image_side") or "")
         if not side:
@@ -3634,7 +3735,11 @@ class App(tk.Tk):
             return "modern"
         return "historical" if float(x) < split_x else "modern"
 
-    def _polygon_points_for_markup_display(self, ann: dict) -> List[List[float]]:
+    def _polygon_points_for_markup_display(
+        self,
+        ann: dict,
+        display_side: Optional[str] = None,
+    ) -> List[List[float]]:
         poly = ann.get("polygon") or []
         if not poly:
             return []
@@ -3646,14 +3751,15 @@ class App(tk.Tk):
                 return [[float(x), float(y)] for x, y in poly]
             side = str(ann.get("image_side") or annotation_image_side(ann, project))
             return rectified_polygon_to_comparison(poly, side, project)
-        side = self._markup_active_image_side()
+        ann_side = str(ann.get("image_side") or annotation_image_side(ann, project))
+        side = display_side or ann_side or self._markup_active_image_side()
         if str(ann.get("coordinate_space") or "") == "rectified":
-            if str(ann.get("image_side") or side) != side:
+            if ann_side != side:
                 return []
             return [[float(x), float(y)] for x, y in poly]
         if str(ann.get("coordinate_space") or "") == "comparison":
             return comparison_polygon_to_rectified(poly, side, project)
-        if str(ann.get("image_side") or side) == side:
+        if ann_side == side:
             return [[float(x), float(y)] for x, y in poly]
         return []
 
@@ -3671,6 +3777,71 @@ class App(tk.Tk):
         if not self._is_side_by_side_project():
             return
         self._sync_side_by_side_view_modes()
+
+    def _result_display_image_path(self) -> Optional[Path]:
+        outdir = Path(self.outdir.get())
+        project = self._project_json_dict() or {}
+        if project_is_side_by_side(project):
+            p10 = outdir / "10_side_by_side_marked.png"
+            if p10.exists():
+                return p10
+            p06 = outdir / "06_marked_rectified.png"
+            if p06.exists():
+                return p06
+        p07 = outdir / "07_marked_on_original_modern.png"
+        if p07.exists():
+            return p07
+        return None
+
+    def _result_display_uses_comparison_panel(self) -> bool:
+        project = self._project_json_dict() or {}
+        if not project_is_side_by_side(project):
+            return False
+        outdir = Path(self.outdir.get())
+        return (outdir / "10_side_by_side_marked.png").exists() or (outdir / "06_marked_rectified.png").exists()
+
+    def _result_polygon_for_display(self, ann: dict, project: dict) -> List[List[float]]:
+        if self._result_display_uses_comparison_panel():
+            side = annotation_image_side(ann, project)
+            if str(ann.get("coordinate_space") or "") == "comparison":
+                return [[float(x), float(y)] for x, y in (ann.get("polygon") or [])]
+            rect_poly = annotation_polygon_rectified(ann, project)
+            return rectified_polygon_to_comparison(rect_poly, side, project)
+        side = annotation_image_side(ann, project)
+        if project_is_side_by_side(project) and side == "historical":
+            return []
+        return annotation_polygon_on_full_source(ann, project)
+
+    def _reset_result_view_transform(self) -> None:
+        if hasattr(self, "result_zoom"):
+            self.result_zoom = 1.0
+        if hasattr(self, "result_pan_x"):
+            self.result_pan_x = 0.0
+            self.result_pan_y = 0.0
+        self._result_view_reset_pending = False
+
+    def _mark_result_view_for_reset(self) -> None:
+        self._result_view_reset_pending = True
+
+    def _canvas_layout_ready(self, canvas: Optional[tk.Canvas], min_size: int = 80) -> bool:
+        if canvas is None:
+            return False
+        try:
+            return int(canvas.winfo_width()) >= min_size and int(canvas.winfo_height()) >= min_size
+        except tk.TclError:
+            return False
+
+    def _result_canvas_layout_ready(self) -> bool:
+        return self._canvas_layout_ready(getattr(self, "result_canvas", None))
+
+    def _go_to_result_tab_and_refresh(self, delay: int = 80) -> None:
+        self._mark_result_view_for_reset()
+        if hasattr(self, "notebook") and hasattr(self, "tab_result"):
+            self.notebook.select(self.tab_result)
+        if hasattr(self, "_schedule_result_refresh"):
+            self._schedule_result_refresh(delay=delay)
+        else:
+            self.after(delay, self._refresh_result_canvas)
 
     def _on_comparison_rakurs_changed(self, *_args: object) -> None:
         different = self._is_different_rakurs()
@@ -3932,8 +4103,7 @@ class App(tk.Tk):
             parent,
             text=(
                 "4 угла задают плоскость фасада «к нам»: 1 верх-лево, 2 верх-право, 3 низ-право, 4 низ-лево. "
-                "Так выпрямляются и вертикали, и горизонтали (перспектива в фасад). "
-                "По умолчанию весь кадр сохраняется, без обрезки и без поворота файла."
+                "После выпрямления при необходимости поверните картинку, затем выделите рамкой нужную часть для сохранения."
             ),
             wraplength=900,
             foreground="#555",
@@ -3942,18 +4112,50 @@ class App(tk.Tk):
         opt.grid(row=4, column=0, columnspan=3, sticky="w", padx=10, pady=4)
         ttk.Checkbutton(
             opt,
-            text="Сохранить весь исходный кадр (рекомендуется)",
+            text="Сохранить весь исходный кадр (контекст вокруг фасада)",
             variable=self.straight_keep_full,
         ).pack(anchor="w")
         ttk.Checkbutton(
             opt,
-            text="Дополнительно обрезать пустые поля по краям",
+            text="Дополнительно обрезать белые/серые поля по краям",
             variable=self.straight_tight_crop,
         ).pack(anchor="w")
         btns = ttk.Frame(parent)
         btns.grid(row=5, column=0, columnspan=3, sticky="w", padx=10, pady=10)
         ttk.Button(btns, text="Выпрямить по 4 углам", command=self.run_straighten_manual).pack(side="left")
-        ttk.Button(btns, text="Открыть папку результата", command=lambda: open_path(Path(self.straight_out.get()).parent)).pack(side="left", padx=8)
+        tk.Button(
+            btns,
+            text="СОХРАНИТЬ ВЫБРАННУЮ ОБЛАСТЬ",
+            command=self.save_straight_crop_selection,
+            bg="#0b7a3b",
+            fg="white",
+            activebackground="#075a2c",
+            activeforeground="white",
+            font=("TkDefaultFont", 9, "bold"),
+            padx=8,
+            pady=4,
+        ).pack(side="left", padx=8)
+        ttk.Button(btns, text="Сбросить рамку", command=self._clear_straight_crop).pack(side="left", padx=4)
+        ttk.Button(btns, text="↺ 90° влево", command=lambda: self._rotate_straight_preview(90)).pack(side="left", padx=4)
+        ttk.Button(btns, text="↻ 90° вправо", command=lambda: self._rotate_straight_preview(-90)).pack(side="left", padx=2)
+        ttk.Button(btns, text="180°", command=lambda: self._rotate_straight_preview(180)).pack(side="left", padx=2)
+        ttk.Button(btns, text="Сохранить всё изображение", command=self.save_straight_full_image).pack(side="left", padx=4)
+        ttk.Button(btns, text="Сбросить предпросмотр", command=self._reset_straight_preview).pack(side="left", padx=4)
+        ttk.Button(btns, text="Открыть папку результата", command=lambda: open_path(Path(self.straight_out.get()).parent)).pack(side="left", padx=4)
+        preview_box = ttk.LabelFrame(parent, text="Предпросмотр: потяните мышью рамку на нужной части фасада")
+        preview_box.grid(row=6, column=0, columnspan=3, sticky="nsew", padx=10, pady=(4, 10))
+        preview_box.rowconfigure(0, weight=1)
+        preview_box.columnconfigure(0, weight=1)
+        parent.rowconfigure(6, weight=1)
+        self.straight_canvas = tk.Canvas(preview_box, bg="#2e2e2e", highlightthickness=0, height=360, cursor="crosshair")
+        self.straight_canvas.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+        self.straight_canvas.bind("<Configure>", lambda _e: self._refresh_straight_preview())
+        self.straight_canvas.bind("<ButtonPress-1>", self._straight_crop_begin)
+        self.straight_canvas.bind("<B1-Motion>", self._straight_crop_motion)
+        self.straight_canvas.bind("<ButtonRelease-1>", self._straight_crop_end)
+        ttk.Label(preview_box, textvariable=self.straight_preview_status, wraplength=900, foreground="#555").grid(
+            row=1, column=0, sticky="w", padx=8, pady=(0, 8)
+        )
 
     def _row_file(self, parent: ttk.Frame, label: str, var: tk.StringVar, command: Callable[[], None], row: int) -> None:
         ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=8, pady=6)
@@ -6356,6 +6558,194 @@ map.on('click',e=>{{
             self.straight_points_status.set("Выбрано 4 угла фасада.")
         FacadePointPicker(self, self.straight_img.get(), "4 угла фасада", receive)
 
+    def _reset_straight_preview(self) -> None:
+        self._straight_preview_pil = None
+        self._clear_straight_crop()
+        if hasattr(self, "straight_canvas"):
+            self.straight_canvas.delete("all")
+        self.straight_preview_status.set("После выпрямления здесь появится предпросмотр.")
+
+    def _straight_image_size(self) -> Tuple[int, int]:
+        if self._straight_preview_pil is not None:
+            return self._straight_preview_pil.size
+        return (1, 1)
+
+    def _straight_canvas_to_image(self, cx: float, cy: float) -> Tuple[float, float]:
+        scale, ox, oy, _dw, _dh = getattr(self, "straight_display", (1.0, 0, 0, 0, 0))
+        w, h = self._straight_image_size()
+        x = (float(cx) - ox) / max(scale, 1e-9)
+        y = (float(cy) - oy) / max(scale, 1e-9)
+        return max(0.0, min(float(w), x)), max(0.0, min(float(h), y))
+
+    def _clear_straight_crop(self) -> None:
+        self.straight_crop_rect_text = ""
+        self._straight_crop_drag_start = None
+        self._straight_crop_drag_canvas_start = None
+        if hasattr(self, "straight_canvas"):
+            self.straight_canvas.delete("straight_crop")
+
+    def _draw_straight_crop_overlay(self) -> None:
+        if not hasattr(self, "straight_canvas"):
+            return
+        self.straight_canvas.delete("straight_crop")
+        box = parse_crop_rect(self.straight_crop_rect_text)
+        if box is None or self._straight_preview_pil is None:
+            return
+        scale, ox, oy, _dw, _dh = getattr(self, "straight_display", (1.0, 0, 0, 0, 0))
+        x0, y0, x1, y1 = box
+        dx0 = ox + x0 * scale
+        dy0 = oy + y0 * scale
+        dx1 = ox + x1 * scale
+        dy1 = oy + y1 * scale
+        cw = max(10, self.straight_canvas.winfo_width())
+        ch = max(10, self.straight_canvas.winfo_height())
+        for rx0, ry0, rx1, ry1 in (
+            (0, 0, cw, dy0),
+            (0, dy1, cw, ch),
+            (0, dy0, dx0, dy1),
+            (dx1, dy0, cw, dy1),
+        ):
+            if rx1 > rx0 and ry1 > ry0:
+                self.straight_canvas.create_rectangle(
+                    rx0, ry0, rx1, ry1,
+                    fill="#000000", stipple="gray50", outline="", tags="straight_crop",
+                )
+        self.straight_canvas.create_rectangle(dx0, dy0, dx1, dy1, outline="#3ecf6e", width=2, tags="straight_crop")
+        self.straight_canvas.create_text(dx0 + 6, dy0 + 6, text="сохранить", fill="#3ecf6e", anchor="nw", tags="straight_crop")
+
+    def _straight_crop_begin(self, event: tk.Event) -> None:
+        if self._straight_preview_pil is None:
+            return
+        self._straight_crop_drag_canvas_start = (event.x, event.y)
+        self._straight_crop_drag_start = self._straight_canvas_to_image(event.x, event.y)
+        self.straight_canvas.delete("straight_crop")
+
+    def _straight_crop_motion(self, event: tk.Event) -> None:
+        if self._straight_crop_drag_start is None or self._straight_crop_drag_canvas_start is None:
+            return
+        x0, y0 = self._straight_crop_drag_canvas_start
+        self.straight_canvas.delete("straight_crop")
+        self.straight_canvas.create_rectangle(
+            x0, y0, event.x, event.y,
+            outline="#3ecf6e", width=2, dash=(6, 4), tags="straight_crop",
+        )
+
+    def _straight_crop_end(self, event: tk.Event) -> None:
+        if self._straight_crop_drag_start is None:
+            return
+        x0i, y0i = self._straight_crop_drag_start
+        x1i, y1i = self._straight_canvas_to_image(event.x, event.y)
+        self._straight_crop_drag_start = None
+        self._straight_crop_drag_canvas_start = None
+        box = parse_crop_rect(crop_rect_to_text(x0i, y0i, x1i, y1i))
+        if box is None:
+            self.straight_canvas.delete("straight_crop")
+            self.straight_preview_status.set("Рамка слишком мала — выделите область крупнее.")
+            return
+        self.straight_crop_rect_text = crop_rect_to_text(*box)
+        self._draw_straight_crop_overlay()
+        crop_w = int(round(box[2] - box[0]))
+        crop_h = int(round(box[3] - box[1]))
+        self.straight_preview_status.set(
+            f"Выделено: {crop_w}×{crop_h} px. Нажмите «СОХРАНИТЬ ВЫБРАННУЮ ОБЛАСТЬ»."
+        )
+
+    def _rotate_straight_preview(self, degrees: int) -> None:
+        if self._straight_preview_pil is None:
+            messagebox.showinfo("Нет предпросмотра", "Сначала нажмите «Выпрямить по 4 углам».")
+            return
+        if Image is None:
+            messagebox.showerror("Pillow", "Нужен Pillow для поворота изображения.")
+            return
+        try:
+            resample = getattr(getattr(Image, "Resampling", Image), "BICUBIC", 3)
+            self._straight_preview_pil = self._straight_preview_pil.rotate(  # type: ignore[union-attr]
+                int(degrees),
+                expand=True,
+                resample=resample,
+            )
+            self._clear_straight_crop()
+            self._refresh_straight_preview()
+            w, h = self._straight_preview_pil.size
+            label = "влево" if degrees > 0 else "вправо" if degrees < 0 else "на 180°"
+            self.straight_preview_status.set(
+                f"Повёрнуто {label}. Размер: {w}×{h} px. Выделите область → «СОХРАНИТЬ ВЫБРАННУЮ ОБЛАСТЬ»."
+            )
+        except Exception as exc:
+            messagebox.showerror("Поворот не удался", str(exc))
+
+    def _refresh_straight_preview(self) -> None:
+        if not hasattr(self, "straight_canvas"):
+            return
+        if not self._canvas_layout_ready(self.straight_canvas):
+            self.after(100, self._refresh_straight_preview)
+            return
+        if self._straight_preview_pil is None:
+            self._draw_canvas_message(
+                self.straight_canvas,
+                "Выберите фото, укажите 4 угла и нажмите «Выпрямить по 4 углам».",
+            )
+            return
+        try:
+            self._show_pil_on_canvas(
+                self.straight_canvas,
+                self._straight_preview_pil,
+                "_straight_photo_ref",
+                "straight_display",
+            )
+            self._draw_straight_crop_overlay()
+        except Exception as exc:
+            self.straight_preview_status.set(str(exc))
+            self._draw_canvas_message(self.straight_canvas, str(exc))
+
+    def save_straight_crop_selection(self) -> None:
+        if self._straight_preview_pil is None:
+            messagebox.showinfo("Нет предпросмотра", "Сначала нажмите «Выпрямить по 4 углам».")
+            return
+        box = parse_crop_rect(self.straight_crop_rect_text)
+        if box is None:
+            messagebox.showinfo(
+                "Выделите область",
+                "Потяните мышью рамку на предпросмотре вокруг нужной части фасада, "
+                "затем нажмите «СОХРАНИТЬ ВЫБРАННУЮ ОБЛАСТЬ».",
+            )
+            return
+        if not self.straight_out.get():
+            messagebox.showinfo("Нужен путь", "Укажите, куда сохранить файл.")
+            return
+        try:
+            x0, y0, x1, y1 = [int(round(v)) for v in box]
+            cropped = self._straight_preview_pil.crop((x0, y0, x1, y1))  # type: ignore[union-attr]
+            out_path = Path(self.straight_out.get())
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            cropped.save(out_path)
+            crop_w, crop_h = cropped.size
+            self.straight_preview_status.set(f"Сохранено: {out_path.name} ({crop_w}×{crop_h} px)")
+            self._log(f"\nВыпрямление (выбранная область) → {out_path} ({crop_w}×{crop_h} px)\n")
+            messagebox.showinfo("Готово", f"Сохранена выбранная область:\n{out_path}\n{crop_w}×{crop_h} px")
+            open_path(out_path.parent)
+        except Exception as exc:
+            messagebox.showerror("Не удалось сохранить", str(exc))
+
+    def save_straight_full_image(self) -> None:
+        if self._straight_preview_pil is None:
+            messagebox.showinfo("Нет предпросмотра", "Сначала нажмите «Выпрямить по 4 углам».")
+            return
+        if not self.straight_out.get():
+            messagebox.showinfo("Нужен путь", "Укажите, куда сохранить файл.")
+            return
+        try:
+            out_path = Path(self.straight_out.get())
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            self._straight_preview_pil.save(out_path)  # type: ignore[union-attr]
+            w, h = self._straight_preview_pil.size
+            self.straight_preview_status.set(f"Сохранено целиком: {out_path.name} ({w}×{h} px)")
+            self._log(f"\nВыпрямление (всё изображение) → {out_path} ({w}×{h} px)\n")
+            messagebox.showinfo("Готово", f"Сохранено всё изображение:\n{out_path}")
+            open_path(out_path.parent)
+        except Exception as exc:
+            messagebox.showerror("Не удалось сохранить", str(exc))
+
     def run_straighten_manual(self) -> None:
         if not self.straight_img.get():
             messagebox.showinfo("Нужно фото", "Сначала выберите фото фасада.")
@@ -6373,19 +6763,25 @@ map.on('click',e=>{{
                 messagebox.showwarning("Проверьте углы", msg)
                 return
             img = cv_read(self.straight_img.get())
-            ow, oh = facade_core_size_from_quad(pts)
-            if bool(self.straight_keep_full.get()):
-                rect, _ = warp_facade_keep_full_image(img, pts, ow, oh)
+            rect = straighten_single_facade(
+                img,
+                pts,
+                keep_full=bool(self.straight_keep_full.get()),
+                tight_white_crop=bool(self.straight_tight_crop.get()),
+            )
+            self._clear_straight_crop()
+            if Image is not None:
+                self._straight_preview_pil = Image.fromarray(cv.cvtColor(rect, cv.COLOR_BGR2RGB))  # type: ignore[union-attr]
             else:
-                rect, _ = warp_facade_to_rect(img, pts, ow, oh)
-            if bool(self.straight_tight_crop.get()):
-                rect, _, _ = crop_white_margins_pair(rect, rect)
-            out_path = Path(self.straight_out.get())
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            cv_write(out_path, rect)
-            self._log(f"\nВыпрямлено по 4 углам → {out_path} ({rect.shape[1]}×{rect.shape[0]} px)\n")
-            messagebox.showinfo("Готово", f"Сохранено:\n{out_path}")
-            open_path(out_path.parent)
+                self._straight_preview_pil = None
+            if hasattr(self, "notebook") and hasattr(self, "tab_straight"):
+                self.notebook.select(self.tab_straight)
+            self.after(80, self._refresh_straight_preview)
+            self.straight_preview_status.set(
+                f"Предпросмотр: {rect.shape[1]}×{rect.shape[0]} px. "
+                "Потяните мышью рамку на нужной части → «СОХРАНИТЬ ВЫБРАННУЮ ОБЛАСТЬ»."
+            )
+            self._log(f"\nВыпрямлено по 4 углам — предпросмотр {rect.shape[1]}×{rect.shape[0]} px (файл пока не сохранён)\n")
         except Exception as exc:
             messagebox.showerror("Ошибка выпрямления", str(exc))
             self._log(f"Ошибка выпрямления: {exc}\n")
@@ -6769,6 +7165,9 @@ class AppV11(App):
     def _refresh_compare_canvas(self, save: bool = True) -> None:
         if not hasattr(self, "compare_canvas"):
             return
+        if not self._canvas_layout_ready(self.compare_canvas):
+            self.after(100, lambda: self._refresh_compare_canvas(save=save))
+            return
         try:
             img = self._compose_current_view()
             self._show_pil_on_canvas(self.compare_canvas, img, "_compare_photo_ref", "compare_display")
@@ -6831,6 +7230,9 @@ class AppV11(App):
 
     def _refresh_markup_canvas(self) -> None:
         if not hasattr(self, "markup_canvas"):
+            return
+        if not self._canvas_layout_ready(self.markup_canvas):
+            self.after(100, self._refresh_markup_canvas)
             return
         self._ensure_annotations_loaded()
         self._prepare_markup_for_side_by_side()
@@ -6957,9 +7359,7 @@ class AppV11(App):
             self._annotation_loaded_for = None
             if hasattr(self, "_clear_dirty"):
                 self._clear_dirty()
-            self._refresh_result_canvas()
-            if hasattr(self, "notebook"):
-                self.notebook.select(self.tab_result)
+            self._go_to_result_tab_and_refresh()
             messagebox.showinfo("Готово", "Разметка сохранена и перенесена на исходное современное фото.")
             if hasattr(self, "_maybe_auto_export_to_website"):
                 self._maybe_auto_export_to_website()
@@ -7006,6 +7406,9 @@ class AppV11(App):
 
     def _refresh_result_canvas(self) -> None:
         if not hasattr(self, "result_canvas"):
+            return
+        if not self._result_canvas_layout_ready():
+            self.after(100, self._refresh_result_canvas)
             return
         self._update_result_house_header()
         path = Path(self.outdir.get()) / "10_side_by_side_marked.png"
@@ -7305,6 +7708,9 @@ class AppV12(AppV11):
     def _refresh_compare_canvas(self, save: bool = False) -> None:
         if not hasattr(self, "compare_canvas"):
             return
+        if not self._canvas_layout_ready(self.compare_canvas):
+            self.after(100, lambda: self._refresh_compare_canvas(save=save))
+            return
         self._refresh_compare_source_thumbnails()
         try:
             img, display = self._compose_preview_for_canvas(self.compare_canvas, self.compare_mode.get())
@@ -7325,6 +7731,9 @@ class AppV12(AppV11):
 
     def _refresh_markup_canvas(self) -> None:
         if not hasattr(self, "markup_canvas"):
+            return
+        if not self._canvas_layout_ready(self.markup_canvas):
+            self.after(100, self._refresh_markup_canvas)
             return
         self._ensure_annotations_loaded()
         self._prepare_markup_for_side_by_side()
@@ -7472,9 +7881,7 @@ class AppV12(AppV11):
             outputs = save_annotations_and_exports(Path(self.outdir.get()), self.embedded_annotations)
             self._create_labeled_result_file()
             self._annotation_saved(outputs)
-            self._refresh_result_canvas()
-            if hasattr(self, "notebook"):
-                self.notebook.select(self.tab_result)
+            self._go_to_result_tab_and_refresh()
             messagebox.showinfo("Готово", "Разметка сохранена. Во вкладке результата области подписаны названиями и комментариями.")
         except Exception as exc:
             messagebox.showerror("Не удалось сохранить разметку", str(exc))
@@ -7520,20 +7927,26 @@ class AppV12(AppV11):
                 else:
                     pts2 = pts
                 src_poly = pts2.tolist()
+            display_poly = self._result_polygon_for_display(ann, project)
+            if len(display_poly) < 3:
+                continue
             item = dict(ann)
             item["_idx"] = idx
             item["_source_polygon"] = src_poly
+            item["_display_polygon"] = display_poly
             result.append(item)
         return result
 
     def _refresh_result_canvas(self) -> None:
         if not hasattr(self, "result_canvas"):
             return
-        outdir = Path(self.outdir.get())
-        path = outdir / "10_side_by_side_marked.png"
-        if not path.exists():
-            path = outdir / "07_marked_on_original_modern.png"
-        if not path.exists():
+        if not self._result_canvas_layout_ready():
+            self.after(100, self._refresh_result_canvas)
+            return
+        if getattr(self, "_result_view_reset_pending", False):
+            self._reset_result_view_transform()
+        path = self._result_display_image_path()
+        if path is None:
             self.result_status.set("После сохранения разметки здесь появится итоговая картинка.")
             self._draw_canvas_message(self.result_canvas, "Пока нет итоговой картинки.\n\nВо вкладке 4 обведите изменения и нажмите “Сохранить и показать на фасаде”.")
             self._update_result_legend()
@@ -7542,11 +7955,15 @@ class AppV12(AppV11):
             if Image is None:
                 raise RuntimeError("Pillow не установлен.")
             img = Image.open(path).convert("RGB")  # type: ignore[union-attr]
+            self._result_pil = img
             self._show_pil_on_canvas(self.result_canvas, img, "_result_photo_ref", "result_display")
             self._draw_result_labels_on_canvas()
             labeled = Path(self.outdir.get()) / "08_marked_on_original_modern_labeled.png"
             extra = f"\nФайл с подписями: {labeled}" if labeled.exists() else ""
-            self.result_status.set(f"Итоговая картинка готова: {path}{extra}")
+            if self._result_display_uses_comparison_panel():
+                self.result_status.set(f"Итог: два фото рядом с номерами — {path.name}{extra}")
+            else:
+                self.result_status.set(f"Итоговая картинка готова: {path}{extra}")
             self._update_result_legend()
         except Exception as exc:
             self.result_status.set(str(exc))
@@ -7564,7 +7981,7 @@ class AppV12(AppV11):
         self.result_canvas.delete("result_label")
         scale, ox, oy, dw, dh = self.result_display
         for item in self._result_annotations_in_source():
-            pts = item.get("_source_polygon", [])
+            pts = item.get("_display_polygon") or item.get("_source_polygon", [])
             if not pts:
                 continue
             xs = [float(p[0]) for p in pts]
@@ -8409,6 +8826,9 @@ class AppV13(AppV12):
     def _refresh_markup_canvas(self) -> None:
         if not hasattr(self, "markup_canvas"):
             return
+        if not self._canvas_layout_ready(self.markup_canvas):
+            self.after(100, self._refresh_markup_canvas)
+            return
         self._ensure_annotations_loaded()
         self._prepare_markup_for_side_by_side()
         if hasattr(self, "_markup_side_hint"):
@@ -8492,7 +8912,7 @@ class AppV13(AppV12):
         self.result_canvas.delete("result_label")
         scale, ox, oy, dw, dh = self.result_display
         for item in self._result_annotations_in_source():
-            pts = item.get("_source_polygon", [])
+            pts = item.get("_display_polygon") or item.get("_source_polygon", [])
             if not pts:
                 continue
             xs = [float(p[0]) for p in pts]
@@ -8510,10 +8930,13 @@ class AppV13(AppV12):
     def _refresh_result_canvas(self) -> None:
         if not hasattr(self, "result_canvas"):
             return
-        path = Path(self.outdir.get()) / "10_side_by_side_marked.png"
-        if not path.exists():
-            path = Path(self.outdir.get()) / "07_marked_on_original_modern.png"
-        if not path.exists():
+        if not self._result_canvas_layout_ready():
+            self.after(100, self._refresh_result_canvas)
+            return
+        if getattr(self, "_result_view_reset_pending", False):
+            self._reset_result_view_transform()
+        path = self._result_display_image_path()
+        if path is None:
             self.result_status.set("После сохранения разметки здесь появится итоговая картинка.")
             self._draw_canvas_message(self.result_canvas, "Пока нет итоговой картинки.\n\nВо вкладке 4 обведите изменения и нажмите “Сохранить разметку и перейти к результату”.")
             self._update_result_legend()
@@ -8522,11 +8945,15 @@ class AppV13(AppV12):
             if Image is None:
                 raise RuntimeError("Pillow не установлен.")
             img = Image.open(path).convert("RGB")  # type: ignore[union-attr]
+            self._result_pil = img
             self._show_pil_on_canvas(self.result_canvas, img, "_result_photo_ref", "result_display")
             self._draw_result_labels_on_canvas()
             legend_file = Path(self.outdir.get()) / "08_marked_on_original_modern_labeled.png"
             extra = f"\nФайл с легендой снизу: {legend_file}" if legend_file.exists() else ""
-            self.result_status.set(f"Итоговая картинка готова: {path}{extra}")
+            if self._result_display_uses_comparison_panel():
+                self.result_status.set(f"Итог: два фото рядом с номерами — {path.name}{extra}")
+            else:
+                self.result_status.set(f"Итоговая картинка готова: {path}{extra}")
             self._update_result_legend()
         except Exception as exc:
             self.result_status.set(str(exc))
@@ -8622,9 +9049,7 @@ class AppV13(AppV12):
             outputs = save_annotations_and_exports(Path(self.outdir.get()), self.embedded_annotations)
             self._create_labeled_result_file()
             self._annotation_saved(outputs)
-            self._refresh_result_canvas()
-            if hasattr(self, "notebook"):
-                self.notebook.select(self.tab_result)
+            self._go_to_result_tab_and_refresh()
             messagebox.showinfo("Готово", "Разметка сохранена. Во вкладке результата на фото — номера, а подписи и комментарии — под картинкой.")
         except Exception as exc:
             messagebox.showerror("Не удалось сохранить разметку", str(exc))
@@ -8648,6 +9073,7 @@ class AppV14(AppV13):
         self._markup_dirty = False
         self._result_hover_idx: Optional[int] = None
         self._result_pil = None
+        self._result_view_reset_pending = False
         self.result_zoom = 1.0
         self.result_pan_x = 0.0
         self.result_pan_y = 0.0
@@ -8888,7 +9314,7 @@ class AppV14(AppV13):
     def _hit_result_annotation(self, img_xy: Tuple[float, float]) -> Optional[dict]:
         x, y = img_xy
         for item in reversed(self._result_annotations_in_source()):
-            poly = [(float(p[0]), float(p[1])) for p in item.get("_source_polygon", [])]
+            poly = [(float(p[0]), float(p[1])) for p in (item.get("_display_polygon") or item.get("_source_polygon", []))]
             if len(poly) >= 3 and point_in_polygon(x, y, poly):
                 return item
         return None
@@ -8929,7 +9355,7 @@ class AppV14(AppV13):
             if int(item.get("_idx", 0)) != int(self._result_hover_idx):
                 continue
             scale, ox, oy, _dw, _dh = self.result_display
-            poly = item.get("_source_polygon", [])
+            poly = item.get("_display_polygon") or item.get("_source_polygon", [])
             flat: List[float] = []
             for p in poly:
                 flat.extend([ox + float(p[0]) * scale, oy + float(p[1]) * scale])
@@ -8967,7 +9393,7 @@ class AppV14(AppV13):
         for item in self._result_annotations_in_source():
             if int(item.get("_idx", 0)) != int(idx):
                 continue
-            poly = [(float(p[0]), float(p[1])) for p in item.get("_source_polygon", [])]
+            poly = [(float(p[0]), float(p[1])) for p in (item.get("_display_polygon") or item.get("_source_polygon", []))]
             if len(poly) < 3:
                 return
             xs = [p[0] for p in poly]
@@ -9030,7 +9456,7 @@ class AppV14(AppV13):
         self.result_canvas.delete("result_label")
         scale, ox, oy, dw, dh = self.result_display
         for item in self._result_annotations_in_source():
-            pts = item.get("_source_polygon", [])
+            pts = item.get("_display_polygon") or item.get("_source_polygon", [])
             if not pts:
                 continue
             xs = [float(p[0]) for p in pts]
@@ -9094,9 +9520,14 @@ class AppV14(AppV13):
     def _refresh_result_canvas(self) -> None:
         if not hasattr(self, "result_canvas"):
             return
+        if not self._result_canvas_layout_ready():
+            self.after(100, self._refresh_result_canvas)
+            return
         self._update_result_house_header()
         self._ensure_annotations_loaded()
-        if not self.embedded_annotations and not (Path(self.outdir.get()) / "07_marked_on_original_modern.png").exists():
+        if getattr(self, "_result_view_reset_pending", False):
+            self._reset_result_view_transform()
+        if not self.embedded_annotations and self._result_display_image_path() is None:
             self._result_pil = None
             self.result_status.set("После сохранения разметки здесь появится итоговая картинка.")
             self._draw_canvas_message(
@@ -9130,7 +9561,10 @@ class AppV14(AppV13):
             self._draw_result_labels_on_canvas()
             legend_file = Path(self.outdir.get()) / "08_marked_on_original_modern_labeled.png"
             extra = f"\nФайл с легендой снизу: {legend_file}" if legend_file.exists() else ""
-            self.result_status.set(f"Итог на полном исходном современном фото.{extra}")
+            if self._result_display_uses_comparison_panel():
+                self.result_status.set(f"Итог: два фото рядом с номерами.{extra}")
+            else:
+                self.result_status.set(f"Итог на полном исходном современном фото.{extra}")
             self._update_result_legend()
         except Exception as exc:
             self.result_status.set(str(exc))
@@ -9281,6 +9715,9 @@ class AppV15(AppV14):
         canvas = self.markup_canvas_by_side.get(side)
         if canvas is None:
             return
+        if not self._canvas_layout_ready(canvas):
+            self.after(100, lambda s=side: self._refresh_dual_markup_side(s))
+            return
         try:
             img = self._side_rectified_pil(side)
             cw = max(10, canvas.winfo_width())
@@ -9318,10 +9755,12 @@ class AppV15(AppV14):
         def to_disp(pt: Point) -> Point:
             return (ox + pt[0] * scale, oy + pt[1] * scale)
 
+        project = self._project_json_dict() or {}
         for idx, ann in enumerate(self.embedded_annotations, start=1):
-            if str(ann.get("image_side") or "") != side:
+            ann_side = str(ann.get("image_side") or annotation_image_side(ann, project))
+            if ann_side != side:
                 continue
-            pts = self._polygon_points_for_markup_display(ann)
+            pts = self._polygon_points_for_markup_display(ann, display_side=side)
             if len(pts) < 3:
                 continue
             cls = ann.get("class", "added_floor")
@@ -9518,10 +9957,11 @@ class AppV15(AppV14):
         if list_index < 0 or list_index >= len(self.embedded_annotations):
             return
         ann = self.embedded_annotations[list_index]
-        pts = self._polygon_points_for_markup_display(ann)
+        project = self._project_json_dict() or {}
+        side = str(ann.get("image_side") or annotation_image_side(ann, project) or "modern")
+        pts = self._polygon_points_for_markup_display(ann, display_side=side)
         if len(pts) < 3:
             return
-        side = str(ann.get("image_side") or "modern")
         if self._markup_uses_dual_panels() and side in getattr(self, "markup_canvas_by_side", {}):
             canvas = self.markup_canvas_by_side[side]
             for c in self.markup_canvas_by_side.values():
