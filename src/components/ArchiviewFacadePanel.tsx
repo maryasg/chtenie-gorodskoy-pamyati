@@ -45,6 +45,15 @@ type AnnPayload = {
   rectified_size?: { width?: number; height?: number }
 }
 
+function imageMatchesRectifiedSize(
+  width: number,
+  height: number,
+  rectified?: { width?: number; height?: number },
+): boolean {
+  if (!rectified?.width || !rectified?.height) return false
+  return Math.abs(width - rectified.width) <= 2 && Math.abs(height - rectified.height) <= 2
+}
+
 export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAssets }) {
   const [regions, setRegions] = useState<DisplayRegion[]>([])
   const [imageOk, setImageOk] = useState(false)
@@ -172,6 +181,13 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
         }
         if (isSb && annData?.side_by_side) {
           buildRegionsSideBySide(annotations, annData, img.naturalWidth, img.naturalHeight)
+        } else if (
+          !isSb &&
+          (layout === 'overlay' ||
+            assets.labelingLayout === 'overlay' ||
+            imageMatchesRectifiedSize(img.naturalWidth, img.naturalHeight, annData?.rectified_size))
+        ) {
+          buildRegionsRectified(annotations, img.naturalWidth, img.naturalHeight)
         } else if (H) {
           buildRegionsOverlay(annotations, H, img.naturalWidth, img.naturalHeight)
         } else {
