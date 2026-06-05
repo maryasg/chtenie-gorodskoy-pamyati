@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 
 $configPath = Join-Path $ScriptDir 'website_buildings.json'
 if (-not (Test-Path -LiteralPath $configPath)) {
-    throw "Не найден website_buildings.json в $ScriptDir"
+    throw "website_buildings.json not found in $ScriptDir"
 }
 
 $all = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json

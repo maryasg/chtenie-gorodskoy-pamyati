@@ -384,17 +384,30 @@ def project_is_side_by_side(project: dict) -> bool:
     return str(project.get("labeling_layout") or "") == "side_by_side" or bool(project.get("no_rectification"))
 
 
+def _side_by_side_split_x(project: dict) -> float:
+    sb = project.get("side_by_side") or {}
+    mx = float(sb.get("modern_offset_x") or 0)
+    if mx > 0:
+        return mx
+    return float(sb.get("historical_width") or sb.get("split_x") or 0)
+
+
 def annotation_image_side(ann: dict, project: dict) -> str:
     side = str(ann.get("image_side") or "")
     if side in ("historical", "modern"):
         return side
     sb = project.get("side_by_side") or {}
-    hw = float(sb.get("historical_width") or 0)
+    split_x = _side_by_side_split_x(project)
     pts = ann.get("polygon") or []
-    if not pts or hw <= 0:
+    if not pts or split_x <= 0:
         return "modern"
     cx = sum(float(p[0]) for p in pts) / len(pts)
-    return "historical" if cx < hw else "modern"
+    if str(ann.get("coordinate_space") or "") == "comparison":
+        return "historical" if cx < split_x else "modern"
+    hw = float(sb.get("historical_width") or 0)
+    if hw > 0 and cx < hw * 0.55:
+        return "historical"
+    return "modern"
 
 
 def _side_by_side_panel_height(project: dict) -> float:
@@ -489,6 +502,18 @@ def annotation_polygon_on_full_source(ann: dict, project: dict) -> List[List[flo
     return [[float(x), float(y)] for x, y in out]
 
 
+def annotation_polygon_rectified(ann: dict, project: dict) -> List[List[float]]:
+    side = annotation_image_side(ann, project)
+    poly = ann.get("polygon") or []
+    if not poly:
+        return []
+    if str(ann.get("coordinate_space") or "") == "rectified":
+        return [[float(x), float(y)] for x, y in poly]
+    if str(ann.get("coordinate_space") or "") == "comparison":
+        return comparison_polygon_to_rectified(poly, side, project)
+    return comparison_polygon_to_rectified(poly, side, project)
+
+
 def annotations_for_side(annotations: List[dict], side: str, project: dict) -> List[dict]:
     out: List[dict] = []
     for ann in annotations:
@@ -498,6 +523,19 @@ def annotations_for_side(annotations: List[dict], side: str, project: dict) -> L
         src_poly = annotation_polygon_on_full_source(ann, project)
         item["polygon"] = src_poly
         item["polygon_source"] = src_poly
+        out.append(item)
+    return out
+
+
+def annotations_for_side_rectified(annotations: List[dict], side: str, project: dict) -> List[dict]:
+    out: List[dict] = []
+    for ann in annotations:
+        if annotation_image_side(ann, project) != side:
+            continue
+        item = dict(ann)
+        rect_poly = annotation_polygon_rectified(ann, project)
+        item["polygon"] = rect_poly
+        item["polygon_rectified"] = rect_poly
         out.append(item)
     return out
 
@@ -2068,6 +2106,8 @@ def save_annotations_and_exports(outdir: Path, annotations: List[dict]) -> Dict[
     modern_src = cv_read(modern_src_path)
     hist_anns_modern = annotations_for_side(annotations, "modern", project)
     hist_anns_historical = annotations_for_side(annotations, "historical", project)
+    hist_anns_modern_rect = annotations_for_side_rectified(annotations, "modern", project)
+    hist_anns_historical_rect = annotations_for_side_rectified(annotations, "historical", project)
 
     if is_sb:
         marked_rect = draw_polygons_on_image(
@@ -2106,8 +2146,18 @@ def save_annotations_and_exports(outdir: Path, annotations: List[dict]) -> Dict[
         if historical_rect_path.exists() and modern_rect_path.exists():
             try:
                 sb_panel, _sb_meta = create_side_by_side_labeling(
-                    draw_polygons_on_image(cv_read(historical_rect_path), hist_anns_historical, transform=None, draw_indices=False),
-                    draw_polygons_on_image(cv_read(modern_rect_path), hist_anns_modern, transform=None, draw_indices=False),
+                    draw_polygons_on_image(
+                        cv_read(historical_rect_path),
+                        hist_anns_historical_rect,
+                        transform=None,
+                        draw_indices=False,
+                    ),
+                    draw_polygons_on_image(
+                        cv_read(modern_rect_path),
+                        hist_anns_modern_rect,
+                        transform=None,
+                        draw_indices=False,
+                    ),
                 )
                 cv_write(side_by_side_result_path, sb_panel)
                 extra_outputs["side_by_side_marked"] = str(side_by_side_result_path)
@@ -3501,6 +3551,9 @@ class App(tk.Tk):
         return project_is_side_by_side(project) if project else False
 
     def _markup_active_image_side(self) -> str:
+        if self._markup_uses_dual_panels():
+            side = str(getattr(self, "markup_drawing_side", None) or "historical")
+            return side if side in ("historical", "modern") else "historical"
         if self._is_side_by_side_project():
             mode = self.markup_background_mode.get()
             return "historical" if mode == "historical" else "modern"
@@ -3516,17 +3569,10 @@ class App(tk.Tk):
             return True
         return side == self._markup_active_image_side()
 
-    def _decorate_markup_annotation(self, ann: dict) -> dict:
+    def _decorate_markup_annotation(self, ann: dict, side: Optional[str] = None) -> dict:
         if self._is_side_by_side_project():
-            if self._markup_uses_comparison_canvas():
-                ann["coordinate_space"] = "comparison"
-                poly = ann.get("polygon") or []
-                if len(poly) >= 3:
-                    xs = [float(p[0]) for p in poly]
-                    ann["image_side"] = self._polygon_side_from_comparison_xy(sum(xs) / len(xs), 0.0)
-            else:
-                ann["image_side"] = self._markup_active_image_side()
-                ann["coordinate_space"] = "rectified"
+            ann["image_side"] = side or self._markup_active_image_side()
+            ann["coordinate_space"] = "rectified"
         return ann
 
     def _migrate_side_by_side_annotations(self) -> None:
@@ -3536,9 +3582,13 @@ class App(tk.Tk):
         changed = False
         for ann in self.embedded_annotations:
             if str(ann.get("coordinate_space") or "") == "comparison":
-                if not ann.get("image_side"):
-                    ann["image_side"] = annotation_image_side(ann, project)
-                    changed = True
+                side = str(ann.get("image_side") or annotation_image_side(ann, project))
+                poly = ann.get("polygon") or []
+                if poly:
+                    ann["polygon"] = comparison_polygon_to_rectified(poly, side, project)
+                ann["image_side"] = side
+                ann["coordinate_space"] = "rectified"
+                changed = True
                 continue
             if str(ann.get("coordinate_space") or "") == "rectified":
                 if not ann.get("image_side"):
@@ -3566,7 +3616,12 @@ class App(tk.Tk):
             raise RuntimeError("Сначала нажмите «Подготовить» на вкладке 2 (разные ракурсы).")
         return Image.open(path).convert("RGB")  # type: ignore[union-attr]
 
+    def _markup_uses_dual_panels(self) -> bool:
+        return bool(self._is_side_by_side_project())
+
     def _markup_uses_comparison_canvas(self) -> bool:
+        if self._markup_uses_dual_panels():
+            return False
         if not self._is_side_by_side_project():
             return False
         mode = self.markup_background_mode.get()
@@ -3574,11 +3629,10 @@ class App(tk.Tk):
 
     def _polygon_side_from_comparison_xy(self, x: float, y: float) -> str:
         project = self._project_json_dict() or {}
-        sb = project.get("side_by_side") or {}
-        hw = float(sb.get("historical_width") or 0)
-        if hw <= 0:
+        split_x = _side_by_side_split_x(project)
+        if split_x <= 0:
             return "modern"
-        return "historical" if float(x) < hw else "modern"
+        return "historical" if float(x) < split_x else "modern"
 
     def _polygon_points_for_markup_display(self, ann: dict) -> List[List[float]]:
         poly = ann.get("polygon") or []
@@ -9117,11 +9171,253 @@ class AppV15(AppV14):
     def _build_ui(self) -> None:
         super()._build_ui()
         self.title(f"Archiview CV {APP_VERSION}")
+        self.markup_drawing_side = "historical"
+        self.current_markup_points_by_side: Dict[str, List[Point]] = {"historical": [], "modern": []}
+        self.markup_display_by_side: Dict[str, Tuple[float, int, int, int, int]] = {
+            "historical": (1.0, 0, 0, 0, 0),
+            "modern": (1.0, 0, 0, 0, 0),
+        }
+        self._markup_photo_ref_by_side: Dict[str, object] = {}
+        self._setup_dual_markup_panels()
         self._inject_markup_regions_panel()
         self._bind_markup_pan_release()
         self._log(
             "v15: курсор-рука при пробеле и перетаскивании; в списке «Области» можно удалить любую.\n"
+            "v15: разные ракурсы — две отдельные области разметки (история / современность).\n"
         )
+
+    def _setup_dual_markup_panels(self) -> None:
+        if not hasattr(self, "markup_canvas"):
+            return
+        parent = self.markup_canvas.master
+        parent.rowconfigure(0, weight=1)
+        parent.columnconfigure(0, weight=1)
+        self._dual_markup_container = ttk.Frame(parent)
+        self._dual_markup_container.grid(row=0, column=0, sticky="nsew")
+        self._dual_markup_container.columnconfigure(0, weight=1)
+        self._dual_markup_container.columnconfigure(1, weight=1)
+        self._dual_markup_container.rowconfigure(1, weight=1)
+
+        self.markup_canvas_by_side: Dict[str, tk.Canvas] = {}
+        self._dual_markup_titles: Dict[str, ttk.Label] = {}
+
+        for col, side, title in (
+            (0, "historical", "Историческое фото — разметка здесь"),
+            (1, "modern", "Современное фото — разметка здесь"),
+        ):
+            head = ttk.Frame(self._dual_markup_container)
+            head.grid(row=0, column=col, sticky="ew", padx=(0 if col == 0 else 4, 4 if col == 0 else 0), pady=(0, 4))
+            lbl = ttk.Label(head, text=title, font=("TkDefaultFont", 9, "bold"))
+            lbl.pack(side="left")
+            self._dual_markup_titles[side] = lbl
+            ttk.Button(
+                head,
+                text="Закончить область",
+                command=lambda s=side: self._finish_markup_polygon_side(s),
+            ).pack(side="right", padx=(6, 0))
+            ttk.Button(
+                head,
+                text="Отменить точку",
+                command=lambda s=side: self._undo_markup_point_side(s),
+            ).pack(side="right")
+
+            canvas = tk.Canvas(self._dual_markup_container, bg="#2e2e2e", highlightthickness=0, height=280)
+            canvas.grid(row=1, column=col, sticky="nsew", padx=(0 if col == 0 else 4, 4 if col == 0 else 0))
+            canvas.bind("<Configure>", lambda _e, s=side: self._schedule_dual_markup_refresh(s, delay=120))
+            canvas.bind("<Button-1>", lambda e, s=side: self._markup_click_side(s, e))
+            canvas.bind("<Double-Button-1>", lambda _e, s=side: self._finish_markup_polygon_side(s))
+            self.markup_canvas_by_side[side] = canvas
+
+        self._dual_markup_container.grid_remove()
+
+    def _sync_markup_layout(self) -> None:
+        dual = self._markup_uses_dual_panels()
+        if not hasattr(self, "_dual_markup_container"):
+            return
+        if dual:
+            self.markup_canvas.grid_remove()
+            self._dual_markup_container.grid()
+            if hasattr(self, "_markup_bg_box"):
+                self._markup_bg_box.grid_remove()
+            if hasattr(self, "_markup_side_hint"):
+                self._markup_side_hint.configure(
+                    text=(
+                        "Два отдельных окна: координаты не смешиваются. "
+                        "Историческое — слева, современное — справа. "
+                        "В каждом окне своя кнопка «Закончить область»."
+                    )
+                )
+            parent = self.markup_canvas.master
+            if isinstance(parent, ttk.LabelFrame):
+                parent.configure(
+                    text="Разные ракурсы: две независимые области — рисуйте в нужном окне"
+                )
+        else:
+            self._dual_markup_container.grid_remove()
+            self.markup_canvas.grid()
+            if hasattr(self, "_markup_bg_box"):
+                self._markup_bg_box.grid()
+            parent = self.markup_canvas.master
+            if isinstance(parent, ttk.LabelFrame):
+                parent.configure(
+                    text="Рисуйте прямо здесь: левый клик — точка; колесо — zoom; правая/средняя кнопка — перемещение"
+                )
+
+    def _schedule_dual_markup_refresh(self, side: str, delay: int = 80) -> None:
+        key = f"_dual_markup_refresh_{side}"
+        job = getattr(self, key, None)
+        if job is not None:
+            try:
+                self.after_cancel(job)
+            except Exception:
+                pass
+        setattr(self, key, self.after(delay, lambda: self._refresh_dual_markup_side(side)))
+
+    def _side_rectified_pil(self, side: str):
+        old, modern = self._load_rectified_images()
+        return old if side == "historical" else modern
+
+    def _refresh_dual_markup_side(self, side: str) -> None:
+        canvas = self.markup_canvas_by_side.get(side)
+        if canvas is None:
+            return
+        try:
+            img = self._side_rectified_pil(side)
+            cw = max(10, canvas.winfo_width())
+            ch = max(10, canvas.winfo_height())
+            scale = min(cw / float(img.width), ch / float(img.height), 1.0)
+            dw = max(1, int(round(img.width * scale)))
+            dh = max(1, int(round(img.height * scale)))
+            ox = int((cw - dw) / 2)
+            oy = int((ch - dh) / 2)
+            filt = self._resize_filter_fast()
+            disp = img.resize((dw, dh), filt) if img.size != (dw, dh) else img.copy()
+            photo = ImageTk.PhotoImage(disp)  # type: ignore[union-attr]
+            self._markup_photo_ref_by_side[side] = photo
+            self.markup_display_by_side[side] = (scale, ox, oy, dw, dh)
+            canvas.delete("all")
+            canvas.create_image(ox, oy, image=photo, anchor="nw")
+            self._draw_markup_vectors_side(side)
+            if side == "historical":
+                self._update_markup_status_text()
+        except Exception as exc:
+            if side == "historical":
+                self.markup_status.set(str(exc))
+
+    def _refresh_dual_markup_panels(self) -> None:
+        for side in ("historical", "modern"):
+            self._refresh_dual_markup_side(side)
+
+    def _draw_markup_vectors_side(self, side: str) -> None:
+        canvas = self.markup_canvas_by_side.get(side)
+        if canvas is None:
+            return
+        canvas.delete("markup_vector")
+        scale, ox, oy, dw, dh = self.markup_display_by_side.get(side, (1.0, 0, 0, 0, 0))
+
+        def to_disp(pt: Point) -> Point:
+            return (ox + pt[0] * scale, oy + pt[1] * scale)
+
+        for idx, ann in enumerate(self.embedded_annotations, start=1):
+            if str(ann.get("image_side") or "") != side:
+                continue
+            pts = self._polygon_points_for_markup_display(ann)
+            if len(pts) < 3:
+                continue
+            cls = ann.get("class", "added_floor")
+            color = TK_COLORS.get(cls, "#00aa00")
+            flat: List[float] = []
+            for p in pts:
+                x, y = to_disp((float(p[0]), float(p[1])))
+                flat.extend([x, y])
+            canvas.create_polygon(flat, outline=color, fill="", width=3, tags="markup_vector")
+            xs = flat[0::2]
+            ys = flat[1::2]
+            cx = sum(xs) / max(1, len(xs))
+            cy = sum(ys) / max(1, len(ys))
+            canvas.create_text(cx, cy, text=str(idx), fill=color, font=("TkDefaultFont", 12, "bold"), tags="markup_vector")
+
+        pts_cur = self.current_markup_points_by_side.get(side) or []
+        if pts_cur:
+            color = TK_COLORS.get(self.markup_class.get(), "#00aa00")
+            disp = [to_disp(p) for p in pts_cur]
+            for i, (x, y) in enumerate(disp, start=1):
+                r = 5
+                canvas.create_oval(x - r, y - r, x + r, y + r, fill=color, outline="white", width=2, tags="markup_vector")
+                canvas.create_text(x + 8, y - 8, text=str(i), fill=color, font=("TkDefaultFont", 9, "bold"), tags="markup_vector")
+            if len(disp) >= 2:
+                flat = [v for xy in disp for v in xy]
+                canvas.create_line(flat, fill=color, width=2, tags="markup_vector")
+
+    def _markup_click_side(self, side: str, event: tk.Event) -> None:
+        if self._space_down:
+            return
+        self.markup_drawing_side = side
+        scale, ox, oy, dw, dh = self.markup_display_by_side.get(side, (1.0, 0, 0, 0, 0))
+        if dw <= 0 or dh <= 0:
+            return
+        x = (event.x - ox) / max(scale, 1e-9)
+        y = (event.y - oy) / max(scale, 1e-9)
+        img = self._side_rectified_pil(side)
+        if x < 0 or y < 0 or x > img.width or y > img.height:
+            return
+        self.current_markup_points_by_side.setdefault(side, []).append((float(x), float(y)))
+        self.current_markup_points = self.current_markup_points_by_side[side]
+        self._draw_markup_vectors_side(side)
+        self._update_markup_status_text()
+        self._mark_dirty()
+
+    def _finish_markup_polygon_side(self, side: str) -> None:
+        self.markup_drawing_side = side
+        pts = self.current_markup_points_by_side.get(side) or []
+        if len(pts) < 3:
+            return
+        cls = self.markup_class.get()
+        ann = self._decorate_markup_annotation(
+            {
+                "id": len(self.embedded_annotations) + 1,
+                "class": cls,
+                "label_ru": CLASS_LABELS.get(cls, cls),
+                "comment": self.markup_comment.get().strip(),
+                "polygon": [[float(x), float(y)] for x, y in pts],
+            },
+            side=side,
+        )
+        self.embedded_annotations.append(ann)
+        self.markup_comment.set("")
+        self.current_markup_points_by_side[side] = []
+        self.current_markup_points = []
+        self._draw_markup_vectors_side(side)
+        self._refresh_markup_regions_list()
+        self._update_markup_status_text()
+        self._mark_dirty()
+
+    def _undo_markup_point_side(self, side: str) -> None:
+        pts = self.current_markup_points_by_side.get(side) or []
+        if pts:
+            pts.pop()
+        self.current_markup_points = pts
+        self._draw_markup_vectors_side(side)
+        self._update_markup_status_text()
+        self._mark_dirty()
+
+    def _prepare_markup_for_side_by_side(self) -> None:
+        super()._prepare_markup_for_side_by_side()
+        self._sync_markup_layout()
+
+    def _refresh_markup_canvas(self) -> None:
+        self._ensure_annotations_loaded()
+        self._prepare_markup_for_side_by_side()
+        if self._markup_uses_dual_panels():
+            self._refresh_dual_markup_panels()
+            return
+        super()._refresh_markup_canvas()
+
+    def _draw_markup_vectors(self) -> None:
+        if self._markup_uses_dual_panels():
+            self._refresh_dual_markup_panels()
+            return
+        super()._draw_markup_vectors()
 
     def _bind_markup_pan_release(self) -> None:
         for ev in ("<ButtonRelease-1>", "<ButtonRelease-2>", "<ButtonRelease-3>"):
@@ -9221,13 +9517,25 @@ class AppV15(AppV14):
     def _highlight_markup_region_index(self, list_index: int) -> None:
         if list_index < 0 or list_index >= len(self.embedded_annotations):
             return
-        self.markup_canvas.delete("markup_highlight")
         ann = self.embedded_annotations[list_index]
-        scale, ox, oy, _dw, _dh = self.markup_display
-        pts = ann.get("polygon", [])
+        pts = self._polygon_points_for_markup_display(ann)
         if len(pts) < 3:
             return
-        flat: List[float] = []
+        side = str(ann.get("image_side") or "modern")
+        if self._markup_uses_dual_panels() and side in getattr(self, "markup_canvas_by_side", {}):
+            canvas = self.markup_canvas_by_side[side]
+            for c in self.markup_canvas_by_side.values():
+                c.delete("markup_highlight")
+            scale, ox, oy, _dw, _dh = self.markup_display_by_side.get(side, self.markup_display)
+            flat: List[float] = []
+            for p in pts:
+                flat.extend([ox + float(p[0]) * scale, oy + float(p[1]) * scale])
+            color = TK_COLORS.get(ann.get("class", "added_floor"), "#00aa00")
+            canvas.create_polygon(flat, outline=color, fill="", width=5, tags="markup_highlight")
+            return
+        self.markup_canvas.delete("markup_highlight")
+        scale, ox, oy, _dw, _dh = self.markup_display
+        flat = []
         for p in pts:
             flat.extend([ox + float(p[0]) * scale, oy + float(p[1]) * scale])
         color = TK_COLORS.get(ann.get("class", "added_floor"), "#00aa00")
