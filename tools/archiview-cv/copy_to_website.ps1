@@ -15,7 +15,8 @@ if (-not $CardId -and -not $NoPrompt) {
     Write-Host 'Building ID for the website (see website_buildings.json):'
     Write-Host '  MOSCOW_003 - Dom so zveryami'
     Write-Host '  MOSCOW_001 - Ordynka 17'
-    Write-Host '  MOSCOW_002, MOSCOW_004 - when added to json'
+    Write-Host '  MOSCOW_004 - Dom s vyveskoy Falkevicha (Krivokolennyy)'
+    Write-Host '  MOSCOW_002 - when added to json'
     $CardId = Read-Host 'CardId (Enter = MOSCOW_003)'
 }
 if (-not $CardId) { $CardId = 'MOSCOW_003' }

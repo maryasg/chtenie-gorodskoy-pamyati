@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ArchiviewAnnotation, ArchiviewBuildingAssets } from '../data/explorer/archiviewAssets'
 import {
   polygonCentroid,
+  rectifiedPolygonToComparison,
   toPercentPoints,
   transformPolygon,
   type Point,
@@ -37,13 +38,28 @@ const CLASS_COLORS: Record<string, string> = {
   check_manually: '#b000b0',
 }
 
+type AnnPayload = {
+  annotations?: ArchiviewAnnotation[]
+  labeling_layout?: string
+  side_by_side?: Record<string, unknown>
+  rectified_size?: { width?: number; height?: number }
+}
+
 export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAssets }) {
   const [regions, setRegions] = useState<DisplayRegion[]>([])
   const [imageOk, setImageOk] = useState(false)
   const [hoverIdx, setHoverIdx] = useState<number | null>(null)
   const [imgSize, setImgSize] = useState({ w: 1, h: 1 })
+  const [sideBySide, setSideBySide] = useState(false)
 
-  const buildRegions = useCallback(
+  const displayImageUrl = useMemo(() => {
+    if (assets.labelingLayout === 'side_by_side' && assets.sideBySideMarkedUrl) {
+      return assets.sideBySideMarkedUrl
+    }
+    return assets.markedFacadeUrl
+  }, [assets])
+
+  const buildRegionsOverlay = useCallback(
     (annotations: ArchiviewAnnotation[], H: number[][], width: number, height: number) => {
       const list: DisplayRegion[] = []
       annotations.forEach((ann, i) => {
@@ -51,6 +67,45 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
         if (!raw || raw.length < 3) return
         const onPhoto = transformPolygon(H, raw)
         const pct = toPercentPoints(onPhoto, width, height)
+        const [cx, cy] = polygonCentroid(pct)
+        list.push({
+          idx: i + 1,
+          cls: ann.class,
+          label: ann.label_ru || ann.class,
+          comment: (ann.comment || '').trim(),
+          polygonPct: pct,
+          cx,
+          cy,
+        })
+      })
+      setRegions(list)
+    },
+    [],
+  )
+
+  const buildRegionsSideBySide = useCallback(
+    (
+      annotations: ArchiviewAnnotation[],
+      payload: AnnPayload,
+      width: number,
+      height: number,
+    ) => {
+      const sb = payload.side_by_side ?? {}
+      const list: DisplayRegion[] = []
+      annotations.forEach((ann, i) => {
+        const raw = ann.polygon as Point[] | undefined
+        if (!raw || raw.length < 3) return
+        const side =
+          (ann as ArchiviewAnnotation & { image_side?: string }).image_side === 'historical'
+            ? 'historical'
+            : 'modern'
+        const onPanel = rectifiedPolygonToComparison(
+          raw,
+          side,
+          sb as Parameters<typeof rectifiedPolygonToComparison>[2],
+          payload.rectified_size,
+        )
+        const pct = toPercentPoints(onPanel, width, height)
         const [cx, cy] = polygonCentroid(pct)
         list.push({
           idx: i + 1,
@@ -75,45 +130,65 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
         fetch(assets.annotationsUrl),
         fetch(assets.facadeProjectUrl),
       ])
-      const annData = annRes.ok ? await annRes.json() : null
+      const annData = (annRes.ok ? await annRes.json() : null) as AnnPayload | null
       const projData = projRes.ok ? await projRes.json() : null
       const H = projData?.H_rect_to_modern as number[][] | undefined
       const annotations = (annData?.annotations ?? []) as ArchiviewAnnotation[]
+      const layout = annData?.labeling_layout ?? assets.labelingLayout ?? 'overlay'
+      const isSb = layout === 'side_by_side'
+      if (!cancelled) setSideBySide(isSb)
 
       const img = new Image()
       img.onload = () => {
         if (cancelled) return
         setImgSize({ w: img.naturalWidth, h: img.naturalHeight })
         setImageOk(true)
-        if (H && annotations.length) {
-          buildRegions(annotations, H, img.naturalWidth, img.naturalHeight)
+        if (!annotations.length) {
+          setRegions([])
+          return
+        }
+        if (isSb && annData?.side_by_side) {
+          buildRegionsSideBySide(annotations, annData, img.naturalWidth, img.naturalHeight)
+        } else if (H) {
+          buildRegionsOverlay(annotations, H, img.naturalWidth, img.naturalHeight)
+        } else {
+          setRegions([])
         }
       }
       img.onerror = () => {
         if (!cancelled) setImageOk(false)
       }
-      img.src = assets.markedFacadeUrl
+      img.src = displayImageUrl
     }
 
     load()
     return () => {
       cancelled = true
     }
-  }, [assets, buildRegions])
+  }, [assets, buildRegionsOverlay, buildRegionsSideBySide, displayImageUrl])
 
   const active = hoverIdx !== null ? regions.find((r) => r.idx === hoverIdx) : null
 
   return (
     <div className="space-y-3">
       <p className="text-sm text-arch-muted">
-        Наведите на <strong>номер или область</strong> на фото — сверху появится название. Список
-        справа синхронизирован с подсветкой.
+        {sideBySide ? (
+          <>
+            Слева — историческое фото, справа — современное. Наведите на <strong>номер или область</strong>{' '}
+            — сверху появится название.
+          </>
+        ) : (
+          <>
+            Наведите на <strong>номер или область</strong> на фото — сверху появится название. Список
+            справа синхронизирован с подсветкой.
+          </>
+        )}
       </p>
 
       {!imageOk && (
         <p className="rounded-lg border border-dashed border-arch-line bg-arch-surface-2/60 p-4 text-sm text-arch-muted">
           Файл разметки пока не на сайте. Экспортируйте из Archiview → <code>copy_to_website.bat</code>{' '}
-          → Push.
+          (CardId: {assets.cardId}) → Push → Ctrl+F5.
         </p>
       )}
 
@@ -122,7 +197,7 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
           <div className="relative min-w-0 flex-1">
             <div className="relative inline-block max-w-full">
               <img
-                src={assets.markedFacadeUrl}
+                src={displayImageUrl}
                 alt="Фасад с разметкой Archiview"
                 width={imgSize.w}
                 height={imgSize.h}

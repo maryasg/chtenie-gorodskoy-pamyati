@@ -1,0 +1,7 @@
+Archiview export for MOSCOW_004 (Falkevich).
+
+Registry: src/data/explorer/archiviewAssets.ts -> MOSCOW_004_krivokolenny
+
+Next: GitHub Desktop -> Commit -> Push origin -> Ctrl+F5 on site.
+
+Re-export: copy_to_website.bat -> CardId MOSCOW_004

@@ -22,3 +22,34 @@ export function polygonCentroid(points: Point[]): Point {
 export function toPercentPoints(points: Point[], width: number, height: number): Point[] {
   return points.map(([x, y]) => [(x / width) * 100, (y / height) * 100])
 }
+
+type SideBySideMeta = {
+  label_bar_height?: number
+  panel_height?: number
+  modern_offset_x?: number
+  historical_crop_size?: [number, number]
+  modern_crop_size?: [number, number]
+}
+
+/** Координаты разметки на панели «история | современность». */
+export function rectifiedPolygonToComparison(
+  polygon: Point[],
+  side: 'historical' | 'modern',
+  sb: SideBySideMeta,
+  rectifiedSize?: { width?: number; height?: number },
+): Point[] {
+  const labelH = Number(sb.label_bar_height ?? 0)
+  let panelH = Number(sb.panel_height ?? 0)
+  if (panelH <= 0 && rectifiedSize?.height) {
+    panelH = Number(rectifiedSize.height) - labelH
+  }
+  const cropSize = side === 'historical' ? sb.historical_crop_size : sb.modern_crop_size
+  const ch = cropSize?.[1] ?? 0
+  if (panelH <= 0 || ch <= 0) return polygon
+  const scale = panelH / ch
+  const modernX = Number(sb.modern_offset_x ?? 0)
+  return polygon.map(([x, y]) => [
+    x * scale + (side === 'modern' ? modernX : 0),
+    y * scale + labelH,
+  ])
+}

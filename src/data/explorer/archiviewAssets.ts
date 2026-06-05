@@ -15,6 +15,9 @@ export interface ArchiviewBuildingAssets {
   cardId: string
   markedFacadeUrl: string
   labeledFacadeUrl: string
+  /** 10_side_by_side_marked.png — режим «разные ракурсы» */
+  sideBySideMarkedUrl?: string
+  labelingLayout?: 'overlay' | 'side_by_side'
   /** 03_historical_rectified.png — для ползунка до/после */
   historicalRectifiedUrl: string
   /** 04_modern_rectified.png */
@@ -48,6 +51,19 @@ export const ARCHIVIEW_ASSETS: Record<string, ArchiviewBuildingAssets> = {
     modernPhotoYear: '2026',
     annotationsUrl: `${base}explorer/MOSCOW_003/annotations.json`,
     facadeProjectUrl: `${base}explorer/MOSCOW_003/facade-project.json`,
+  },
+  MOSCOW_004_krivokolenny: {
+    buildingId: 'MOSCOW_004_krivokolenny',
+    cardId: 'MOSCOW_004',
+    markedFacadeUrl: `${base}explorer/MOSCOW_004/side-by-side-marked.png`,
+    labeledFacadeUrl: `${base}explorer/MOSCOW_004/marked-facade-labeled.png`,
+    sideBySideMarkedUrl: `${base}explorer/MOSCOW_004/side-by-side-marked.png`,
+    labelingLayout: 'side_by_side',
+    historicalRectifiedUrl: `${base}explorer/MOSCOW_004/historical-rectified.png`,
+    modernRectifiedUrl: `${base}explorer/MOSCOW_004/modern-rectified.png`,
+    modernPhotoYear: '2026',
+    annotationsUrl: `${base}explorer/MOSCOW_004/annotations.json`,
+    facadeProjectUrl: `${base}explorer/MOSCOW_004/facade-project.json`,
   },
 }
 

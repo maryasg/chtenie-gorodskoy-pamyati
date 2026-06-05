@@ -35,13 +35,27 @@ function Escape-Regex([string]$s) {
 # --- archiviewAssets.ts ---
 $assetsFile = Join-Path $RepoRoot 'src\data\explorer\archiviewAssets.ts'
 
+$explorerDir = Join-Path $RepoRoot ("public\explorer\{0}" -f $CardId)
+$hasSideBySide = Test-Path -LiteralPath (Join-Path $explorerDir 'side-by-side-marked.png')
+
 $histLine = if ($histYear) { "    historicalPhotoYear: '$histYear'," } else { $null }
+$markedUrlLine = if ($hasSideBySide) {
+    ('    markedFacadeUrl: `${base}explorer/{0}/side-by-side-marked.png`,' -f $CardId)
+} else {
+    ('    markedFacadeUrl: `${base}explorer/{0}/marked-facade.png`,' -f $CardId)
+}
 $entryLines = @(
     "  ${buildingId}: {"
     "    buildingId: '$buildingId',"
     "    cardId: '$CardId',"
-    ('    markedFacadeUrl: `${base}explorer/{0}/marked-facade.png`,' -f $CardId)
+    $markedUrlLine
     ('    labeledFacadeUrl: `${base}explorer/{0}/marked-facade-labeled.png`,' -f $CardId)
+)
+if ($hasSideBySide) {
+    $entryLines += ('    sideBySideMarkedUrl: `${base}explorer/{0}/side-by-side-marked.png`,' -f $CardId)
+    $entryLines += "    labelingLayout: 'side_by_side',"
+}
+$entryLines += @(
     ('    historicalRectifiedUrl: `${base}explorer/{0}/historical-rectified.png`,' -f $CardId)
     ('    modernRectifiedUrl: `${base}explorer/{0}/modern-rectified.png`,' -f $CardId)
 )
