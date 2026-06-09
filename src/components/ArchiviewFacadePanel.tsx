@@ -166,7 +166,8 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
       const projData = projRes.ok ? await projRes.json() : null
       const H = projData?.H_rect_to_modern as number[][] | undefined
       const annotations = (annData?.annotations ?? []) as ArchiviewAnnotation[]
-      const layout = annData?.labeling_layout ?? assets.labelingLayout ?? 'overlay'
+      const explicitLayout = annData?.labeling_layout ?? assets.labelingLayout
+      const layout = explicitLayout ?? 'legacy_overlay'
       const isSb = layout === 'side_by_side'
       if (!cancelled) setSideBySide(isSb)
 
@@ -183,8 +184,7 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
           buildRegionsSideBySide(annotations, annData, img.naturalWidth, img.naturalHeight)
         } else if (
           !isSb &&
-          (layout === 'overlay' ||
-            assets.labelingLayout === 'overlay' ||
+          (explicitLayout === 'overlay' ||
             imageMatchesRectifiedSize(img.naturalWidth, img.naturalHeight, annData?.rectified_size))
         ) {
           buildRegionsRectified(annotations, img.naturalWidth, img.naturalHeight)
