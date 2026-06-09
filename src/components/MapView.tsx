@@ -46,6 +46,7 @@ export function MapView() {
         '&copy; <a href="https://www.openstreetmap.org/copyright" rel="noopener noreferrer">OpenStreetMap</a>',
     }).addTo(map)
 
+    const markers = new Map<string, L.Marker>()
     BUILDINGS.forEach((b) => {
       const meta = MAP_STATUS_META[b.mapStatus]
       const marker = L.marker([b.lat, b.lng], { icon: coloredIcon(meta.marker) }).addTo(map)
@@ -53,14 +54,15 @@ export function MapView() {
         `<strong>${b.name}</strong><br/><span style="font-size:12px;color:#444">${traceSummary(b)}</span><br/><a href="${import.meta.env.BASE_URL}building/${b.id}">Открыть карточку</a>`,
         { closeButton: true },
       )
-      markersRef.current.set(b.id, marker)
+      markers.set(b.id, marker)
     })
 
     mapRef.current = map
+    markersRef.current = markers
     return () => {
       map.remove()
       mapRef.current = null
-      markersRef.current.clear()
+      markers.clear()
     }
   }, [])
 

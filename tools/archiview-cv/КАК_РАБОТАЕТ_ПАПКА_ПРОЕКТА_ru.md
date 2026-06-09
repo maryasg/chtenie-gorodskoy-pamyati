@@ -64,8 +64,11 @@
 |-------------------|----------|
 | `result/03_historical_rectified.png` | `public/explorer/MOSCOW_003/historical-rectified.png` |
 | `result/04_modern_rectified.png` | `modern-rectified.png` |
-| `result/07_marked_on_original_modern.png` | `marked-facade.png` |
+| `result/06_marked_rectified.png` | `marked-facade.png` для overlay |
+| `result/10_side_by_side_marked.png` | `side-by-side-marked.png` для side_by_side |
 | `annotations/manual_annotations.json` | `annotations.json` |
+
+`07_marked_on_original_modern.png` остаётся полезным для проверки и архива, но для overlay на сайте используется `06_marked_rectified.png`, чтобы координаты полигонов не съезжали.
 
 Для каждого нового здания — свой ID (`MOSCOW_001`, `MOSCOW_002` …) и строка в `src/data/explorer/archiviewAssets.ts`.
 

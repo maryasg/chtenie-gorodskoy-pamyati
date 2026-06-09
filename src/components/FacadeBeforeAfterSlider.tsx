@@ -7,6 +7,12 @@ type Props = {
   modernYear?: string
 }
 
+type AssetCheck = {
+  historicalUrl: string
+  modernUrl: string
+  status: 'loading' | 'ready' | 'error'
+}
+
 export function FacadeBeforeAfterSlider({
   historicalUrl,
   modernUrl,
@@ -14,24 +20,33 @@ export function FacadeBeforeAfterSlider({
   modernYear,
 }: Props) {
   const [split, setSplit] = useState(50)
-  const [ready, setReady] = useState(false)
-  const [error, setError] = useState(false)
+  const [assetCheck, setAssetCheck] = useState<AssetCheck>({
+    historicalUrl,
+    modernUrl,
+    status: 'loading',
+  })
   const dragging = useRef(false)
   const stageRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let cancelled = false
-    setReady(false)
-    setError(false)
 
     const check = async () => {
-      const [hRes, mRes] = await Promise.all([
-        fetch(historicalUrl, { method: 'HEAD' }),
-        fetch(modernUrl, { method: 'HEAD' }),
-      ])
-      if (cancelled) return
-      if (hRes.ok && mRes.ok) setReady(true)
-      else setError(true)
+      try {
+        const [hRes, mRes] = await Promise.all([
+          fetch(historicalUrl, { method: 'HEAD' }),
+          fetch(modernUrl, { method: 'HEAD' }),
+        ])
+        if (cancelled) return
+        setAssetCheck({
+          historicalUrl,
+          modernUrl,
+          status: hRes.ok && mRes.ok ? 'ready' : 'error',
+        })
+      } catch {
+        if (cancelled) return
+        setAssetCheck({ historicalUrl, modernUrl, status: 'error' })
+      }
     }
     check()
     return () => {
@@ -64,7 +79,12 @@ export function FacadeBeforeAfterSlider({
     }
   }, [setSplitFromClientX])
 
-  if (error) {
+  const assetStatus =
+    assetCheck.historicalUrl === historicalUrl && assetCheck.modernUrl === modernUrl
+      ? assetCheck.status
+      : 'loading'
+
+  if (assetStatus === 'error') {
     return (
       <p className="rounded-lg border border-dashed border-arch-line bg-arch-surface-2/60 p-4 text-sm text-arch-muted">
         Пара для сравнения ещё не на сайте. В Archiview: вкладка 2 → подготовить выпрямление, затем{' '}
@@ -73,7 +93,7 @@ export function FacadeBeforeAfterSlider({
     )
   }
 
-  if (!ready) {
+  if (assetStatus !== 'ready') {
     return <p className="text-sm text-arch-muted">Загрузка сравнения…</p>
   }
 

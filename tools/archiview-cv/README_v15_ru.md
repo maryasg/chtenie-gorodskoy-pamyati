@@ -92,9 +92,13 @@ Legacy-проекты (`20260520_190036` и т.п.) видны в списке; 
 |---------------|--------|
 | `03_historical_rectified.png` | История (выпрямленная) → ползунок на сайте |
 | `04_modern_rectified.png` | Современность (выпрямленная) → ползунок на сайте |
-| `07_marked_on_original_modern.png` | Фасад с номерами → на сайт |
+| `06_marked_rectified.png` | Overlay-разметка → `marked-facade.png` на сайте |
+| `07_marked_on_original_modern.png` | Разметка на исходном современном фото → архив/проверка, не основной файл сайта для overlay |
 | `08_marked_on_original_modern_labeled.png` | Фасад + легенда снизу |
+| `10_side_by_side_marked.png` | Side-by-side-разметка → `side-by-side-marked.png` на сайте |
 | `annotations\manual_annotations.json` | Подписи и полигоны |
+
+`copy_to_website.bat` сам выбирает правильный файл: для overlay на сайт уходит `06_marked_rectified.png`, для side_by_side — `10_side_by_side_marked.png`.
 
 **Правка областей:** вкладка «Разметка» — список «Области», удалить номер, нарисовать заново, «Сохранить и показать на фасаде». Старые полигоны подгружаются из `manual_annotations.json`. Перетаскивание вершин пока нет — только удалить и перерисовать. Если криво на сайте — проверьте 4 угла во вкладке 2 и заново сохраните разметку.
 
