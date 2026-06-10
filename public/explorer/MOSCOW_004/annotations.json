@@ -115,8 +115,8 @@
     },
     {
       "id": 3,
-      "class": "historical_signage",
-      "label_ru": "Историческая вывеска (на старом фото)",
+      "class": "lost_signage",
+      "label_ru": "Место вывески на фото 1989 (не читается)",
       "comment": "",
       "polygon": [
         [

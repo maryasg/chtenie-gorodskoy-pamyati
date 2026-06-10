@@ -72,7 +72,7 @@ const DEMO_CASES = [
   {
     title: 'Дом с вывеской Фалькевича',
     to: '/building/MOSCOW_004_krivokolenny',
-    text: 'Side-by-side для разных ракурсов и чтения городских “ghost signs”.',
+    text: 'Side-by-side показывает контраст: на фото 1989 вывеска не читается, а в 2026 после реставрации слой снова виден.',
   },
 ]
 

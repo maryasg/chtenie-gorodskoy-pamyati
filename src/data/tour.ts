@@ -21,6 +21,6 @@ export const PILOT_TOUR: TourStop[] = [
   {
     buildingId: 'MOSCOW_004_krivokolenny',
     title: 'Дом с вывеской Фалькевича',
-    methodologyNote: 'Сохранённая вывеска 1910-х и переделка окна в дверь.',
+    methodologyNote: 'Сравнение 1989 без читаемой вывески и 2026 после возвращения слоя «Сжатый газ».',
   },
 ]
