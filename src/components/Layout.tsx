@@ -2,6 +2,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom'
 
 const NAV = [
   { to: '/', label: 'Карта' },
+  { to: '/method', label: 'Метод' },
   { to: '/tour', label: 'Экскурсия' },
   { to: '/explorer', label: 'Исследователь' },
 ]
