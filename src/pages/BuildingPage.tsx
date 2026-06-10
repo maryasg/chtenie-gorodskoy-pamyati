@@ -10,6 +10,7 @@ import { getArchiviewAssets } from '../data/explorer/archiviewAssets'
 
 import { useState, type ReactNode } from 'react'
 import type { Building, MemoryTrace } from '../types/building'
+import type { ArchiviewBuildingAssets } from '../data/explorer/archiviewAssets'
 
 function Section({
   title,
@@ -162,6 +163,56 @@ function MaterialsAndSources({ building }: { building: Building }) {
   )
 }
 
+function SideBySidePhotoComparison({ assets }: { assets: ArchiviewBuildingAssets }) {
+  const historicalLabel = assets.historicalPhotoYear
+    ? `Фотоматериал ${assets.historicalPhotoYear}`
+    : 'Исторический фотоматериал'
+  const modernLabel = assets.modernPhotoYear
+    ? `Современная съёмка ${assets.modernPhotoYear}`
+    : 'Современная съёмка'
+
+  return (
+    <div className="space-y-3">
+      <p className="rounded-lg border border-arch-line bg-arch-surface-2/50 p-3 text-sm leading-relaxed text-arch-ink/80">
+        Это сравнение разных ракурсов. Фотографии не приводятся к одной выпрямленной плоскости и
+        не накладываются друг на друга: для идентификации вывесок достаточно видеть, читается ли
+        надпись на каждом фотоматериале.
+      </p>
+      <div className="grid gap-4 md:grid-cols-2">
+        <figure className="overflow-hidden rounded-xl border border-arch-line bg-arch-surface">
+          <div className="border-b border-arch-line px-3 py-2 text-sm font-semibold text-arch-green-deep">
+            {historicalLabel}
+          </div>
+          <img
+            src={assets.historicalRectifiedUrl}
+            alt={historicalLabel}
+            loading="lazy"
+            className="max-h-[520px] w-full object-contain"
+          />
+          <figcaption className="px-3 py-2 text-xs leading-relaxed text-arch-muted">
+            На фото фиксируется состояние фасада; для Кривоколенного вывеска «Сжатый газ» здесь не
+            читается.
+          </figcaption>
+        </figure>
+        <figure className="overflow-hidden rounded-xl border border-arch-line bg-arch-surface">
+          <div className="border-b border-arch-line px-3 py-2 text-sm font-semibold text-arch-green-deep">
+            {modernLabel}
+          </div>
+          <img
+            src={assets.modernRectifiedUrl}
+            alt={modernLabel}
+            loading="lazy"
+            className="max-h-[520px] w-full object-contain"
+          />
+          <figcaption className="px-3 py-2 text-xs leading-relaxed text-arch-muted">
+            На современной съёмке виден слой вывески после обнаружения и восстановления.
+          </figcaption>
+        </figure>
+      </div>
+    </div>
+  )
+}
+
 export function BuildingPage() {
   const { id } = useParams<{ id: string }>()
   const building = id ? getBuildingById(id) : undefined
@@ -174,6 +225,8 @@ export function BuildingPage() {
       </p>
     )
   }
+
+  const isSideBySide = archiview?.labelingLayout === 'side_by_side'
 
   return (
     <div className="space-y-6">
@@ -260,21 +313,27 @@ export function BuildingPage() {
                 материалов; выводы о событиях опираются на подписи, экспертизы и источники карточки.
               </p>
             )}
-            <FacadeBeforeAfterSlider
-              historicalUrl={archiview.historicalRectifiedUrl}
-              modernUrl={archiview.modernRectifiedUrl}
-              historicalYear={archiview.historicalPhotoYear}
-              modernYear={archiview.modernPhotoYear}
-            />
+            {isSideBySide ? (
+              <SideBySidePhotoComparison assets={archiview} />
+            ) : (
+              <FacadeBeforeAfterSlider
+                historicalUrl={archiview.historicalRectifiedUrl}
+                modernUrl={archiview.modernRectifiedUrl}
+                historicalYear={archiview.historicalPhotoYear}
+                modernYear={archiview.modernPhotoYear}
+              />
+            )}
           </Section>
-          <p>
-            <Link
-              to={`/building/${building.id}/ar`}
-              className="inline-flex items-center gap-1 rounded-full border border-arch-line bg-arch-surface px-4 py-2 text-sm font-medium text-arch-green-deep hover:border-arch-green/40 hover:bg-arch-green-soft"
-            >
-              AR-preview: слои времени на фасаде →
-            </Link>
-          </p>
+          {!isSideBySide && (
+            <p>
+              <Link
+                to={`/building/${building.id}/ar`}
+                className="inline-flex items-center gap-1 rounded-full border border-arch-line bg-arch-surface px-4 py-2 text-sm font-medium text-arch-green-deep hover:border-arch-green/40 hover:bg-arch-green-soft"
+              >
+                AR-preview: слои времени на фасаде →
+              </Link>
+            </p>
+          )}
         </>
       ) : null}
 

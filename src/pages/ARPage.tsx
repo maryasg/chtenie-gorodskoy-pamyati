@@ -23,7 +23,13 @@ export function ARPage() {
         <p className="mt-1 text-sm text-stone-600">{building.address}</p>
       </div>
 
-      {archiview ? (
+      {archiview?.labelingLayout === 'side_by_side' ? (
+        <div className="rounded-lg border border-arch-line bg-arch-surface p-4 text-sm leading-relaxed text-arch-ink/80">
+          Для этого здания AR-preview не показывается: фотоматериалы сняты с разных ракурсов и не
+          выпрямлялись в единую плоскость. В карточке используется side-by-side-разметка, где важно
+          сравнить, читается ли вывеска на каждом снимке.
+        </div>
+      ) : archiview ? (
         <FacadeARPreview building={building} archiview={archiview} />
       ) : (
         <>
