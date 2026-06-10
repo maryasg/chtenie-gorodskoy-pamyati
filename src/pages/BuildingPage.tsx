@@ -190,8 +190,8 @@ function SideBySidePhotoComparison({ assets }: { assets: ArchiviewBuildingAssets
             className="max-h-[520px] w-full object-contain"
           />
           <figcaption className="px-3 py-2 text-xs leading-relaxed text-arch-muted">
-            На фото фиксируется состояние фасада; для Кривоколенного вывеска «Сжатый газ» здесь не
-            читается.
+            На фото фиксируется состояние фасада с местом вывески Фалькевича. Это не выпрямленное
+            наложение, а отдельный фотоматериал для side-by-side-разметки.
           </figcaption>
         </figure>
         <figure className="overflow-hidden rounded-xl border border-arch-line bg-arch-surface">
@@ -205,7 +205,8 @@ function SideBySidePhotoComparison({ assets }: { assets: ArchiviewBuildingAssets
             className="max-h-[520px] w-full object-contain"
           />
           <figcaption className="px-3 py-2 text-xs leading-relaxed text-arch-muted">
-            На современной съёмке виден слой вывески после обнаружения и восстановления.
+            На современной съёмке видны восстановленные слои вывесок: Фалькевич и соседняя вывеска
+            «Сжатый газ».
           </figcaption>
         </figure>
       </div>
