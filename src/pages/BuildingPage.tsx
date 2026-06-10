@@ -190,8 +190,7 @@ function SideBySidePhotoComparison({ assets }: { assets: ArchiviewBuildingAssets
             className="max-h-[520px] w-full object-contain"
           />
           <figcaption className="px-3 py-2 text-xs leading-relaxed text-arch-muted">
-            На фото фиксируется состояние фасада с местом вывески Фалькевича. Это не выпрямленное
-            наложение, а отдельный фотоматериал для side-by-side-разметки.
+            На фото фиксируется состояние фасада с местом вывески Фалькевича.
           </figcaption>
         </figure>
         <figure className="overflow-hidden rounded-xl border border-arch-line bg-arch-surface">
