@@ -28,6 +28,8 @@ export interface MemoryTrace {
   period: string
   confidence: Confidence
   userMessage: string
+  imagePath?: string
+  imageCaption?: string
   overallConfidence?: number
 }
 

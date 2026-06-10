@@ -8,8 +8,8 @@ import { FacadeHotspotViewer } from '../components/FacadeHotspotViewer'
 import { TransformationTimeline } from '../components/TransformationTimeline'
 import { getArchiviewAssets } from '../data/explorer/archiviewAssets'
 
-import type { ReactNode } from 'react'
-import type { Building } from '../types/building'
+import { useState, type ReactNode } from 'react'
+import type { Building, MemoryTrace } from '../types/building'
 
 function Section({
   title,
@@ -28,6 +28,33 @@ function Section({
       <h2 className="arch-section-title mb-3">{title}</h2>
       {children}
     </section>
+  )
+}
+
+function publicAssetUrl(path: string): string {
+  if (/^https?:\/\//.test(path)) return path
+  return `${import.meta.env.BASE_URL}${path.replace(/^\/+/, '')}`
+}
+
+function MemoryTraceImage({ trace }: { trace: MemoryTrace }) {
+  const [hidden, setHidden] = useState(false)
+  if (!trace.imagePath || hidden) return null
+
+  return (
+    <figure className="mt-3 overflow-hidden rounded-xl border border-arch-line bg-arch-surface">
+      <img
+        src={publicAssetUrl(trace.imagePath)}
+        alt={trace.imageCaption ?? trace.title}
+        loading="lazy"
+        onError={() => setHidden(true)}
+        className="max-h-72 w-full object-cover"
+      />
+      {trace.imageCaption && (
+        <figcaption className="px-3 py-2 text-xs leading-relaxed text-arch-muted">
+          {trace.imageCaption}
+        </figcaption>
+      )}
+    </figure>
   )
 }
 
@@ -211,6 +238,7 @@ export function BuildingPage() {
                 <span className="text-xs text-arch-muted">{t.period}</span>
               </div>
               <p className="mt-2 text-sm text-arch-ink/80">{t.userMessage}</p>
+              <MemoryTraceImage trace={t} />
             </li>
           ))}
         </ul>

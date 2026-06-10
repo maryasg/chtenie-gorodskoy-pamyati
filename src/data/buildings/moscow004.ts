@@ -38,6 +38,8 @@ export const MOSCOW_004: Building = {
       confidence: 'confirmed',
       userMessage:
         'Одна из самых узнаваемых сохранённых вывесок Москвы; в 2015 году уже реставрировали, в 2024 — соседняя находка при ремонте фасада.',
+      imagePath: 'details/MOSCOW_004/sign-falkevich-2026.jpg',
+      imageCaption: 'Вывеска Фалькевича, полевая съёмка 2026',
     },
     {
       id: 'T002',
@@ -47,6 +49,8 @@ export const MOSCOW_004: Building = {
       confidence: 'confirmed',
       userMessage:
         'На фото 1989 года эта вывеска не читается; после обнаружения под штукатуркой и работ 2024 года на фото 2026 года видна надпись «Объединение государственных кислородных заводов „Сжатый газ“».',
+      imagePath: 'details/MOSCOW_004/sign-gas-2026.jpg',
+      imageCaption: 'Вывеска «Сжатый газ», полевая съёмка 2026',
     },
     {
       id: 'T003',
