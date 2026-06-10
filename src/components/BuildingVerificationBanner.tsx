@@ -15,7 +15,7 @@ export function BuildingVerificationBanner({ verification }: { verification: Bui
         {historicalPhoto && (
           <li className="flex flex-wrap items-center gap-2 text-sm text-arch-ink">
             <span className="inline-flex rounded-full border border-arch-green/35 bg-arch-green-soft px-2.5 py-0.5 text-xs font-medium text-arch-green-deep">
-              Подтверждено историческим фото
+              Есть исторический фотоматериал
             </span>
             {historicalPhotoYear && (
               <span className="text-arch-muted">
@@ -50,7 +50,7 @@ export function BuildingVerificationBanner({ verification }: { verification: Bui
               href={item.url}
               target="_blank"
               rel="noreferrer"
-              className="text-amber-950 underline decoration-amber-400 underline-offset-2 hover:text-stone-900"
+              className="text-amber-950 underline decoration-amber-400 underline-offset-2 hover:text-arch-green-deep"
             >
               {item.outlet ? `${item.outlet}: ` : ''}
               {item.title}

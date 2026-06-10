@@ -54,6 +54,19 @@ function imageMatchesRectifiedSize(
   return Math.abs(width - rectified.width) <= 2 && Math.abs(height - rectified.height) <= 2
 }
 
+function isHomography(H: unknown): H is number[][] {
+  return (
+    Array.isArray(H) &&
+    H.length === 3 &&
+    H.every(
+      (row) =>
+        Array.isArray(row) &&
+        row.length === 3 &&
+        row.every((value) => typeof value === 'number' && Number.isFinite(value)),
+    )
+  )
+}
+
 export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAssets }) {
   const [regions, setRegions] = useState<DisplayRegion[]>([])
   const [imageOk, setImageOk] = useState(false)
@@ -164,9 +177,10 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
       ])
       const annData = (annRes.ok ? await annRes.json() : null) as AnnPayload | null
       const projData = projRes.ok ? await projRes.json() : null
-      const H = projData?.H_rect_to_modern as number[][] | undefined
+      const H = isHomography(projData?.H_rect_to_modern) ? projData.H_rect_to_modern : undefined
       const annotations = (annData?.annotations ?? []) as ArchiviewAnnotation[]
-      const layout = annData?.labeling_layout ?? assets.labelingLayout ?? 'overlay'
+      const explicitLayout = annData?.labeling_layout ?? assets.labelingLayout
+      const layout = explicitLayout ?? 'legacy_overlay'
       const isSb = layout === 'side_by_side'
       if (!cancelled) setSideBySide(isSb)
 
@@ -181,15 +195,12 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
         }
         if (isSb && annData?.side_by_side) {
           buildRegionsSideBySide(annotations, annData, img.naturalWidth, img.naturalHeight)
-        } else if (
-          !isSb &&
-          (layout === 'overlay' ||
-            assets.labelingLayout === 'overlay' ||
-            imageMatchesRectifiedSize(img.naturalWidth, img.naturalHeight, annData?.rectified_size))
-        ) {
+        } else if (!isSb && imageMatchesRectifiedSize(img.naturalWidth, img.naturalHeight, annData?.rectified_size)) {
           buildRegionsRectified(annotations, img.naturalWidth, img.naturalHeight)
         } else if (H) {
           buildRegionsOverlay(annotations, H, img.naturalWidth, img.naturalHeight)
+        } else if (!isSb && explicitLayout === 'overlay' && !annData?.rectified_size) {
+          buildRegionsRectified(annotations, img.naturalWidth, img.naturalHeight)
         } else {
           setRegions([])
         }

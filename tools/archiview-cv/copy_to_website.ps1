@@ -47,6 +47,27 @@ function Test-HasExportFiles([string]$Dir) {
     return $false
 }
 
+function Sanitize-WebsiteAnnotations([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    try {
+        $data = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+        $imageRef = [string]$data.image
+        if (-not $imageRef) { return }
+
+        $leaf = Split-Path -Leaf $imageRef
+        if (-not $leaf) {
+            $leaf = $imageRef -replace '^.*[\\/]', ''
+        }
+        if ($leaf -and $leaf -ne $imageRef) {
+            $data.image = $leaf
+            $data | ConvertTo-Json -Depth 50 | Set-Content -LiteralPath $Path -Encoding UTF8
+            Write-Host 'OK: annotations.json image path sanitized'
+        }
+    } catch {
+        Write-Host "WARN: annotations sanitize failed: $_"
+    }
+}
+
 function Get-ProjectDirFromResult([string]$Dir) {
     $p = Get-Item -LiteralPath $Dir
     if ($p.Name -eq 'result') { return $p.Parent.FullName }
@@ -193,6 +214,9 @@ foreach ($pair in $Pairs) {
     }
     Copy-Item -LiteralPath $src -Destination $dst -Force
     Write-Host "OK: $($pair[1])"
+    if ($pair[1] -eq 'annotations.json') {
+        Sanitize-WebsiteAnnotations $dst
+    }
 }
 
 if (-not $isSideBySide) {

@@ -4,6 +4,7 @@ import { ARPage } from './pages/ARPage'
 import { BuildingPage } from './pages/BuildingPage'
 import { ExplorerPage } from './pages/ExplorerPage'
 import { MapPage } from './pages/MapPage'
+import { MethodPage } from './pages/MethodPage'
 import { TourPage } from './pages/TourPage'
 
 export default function App() {
@@ -12,6 +13,7 @@ export default function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<MapPage />} />
+          <Route path="method" element={<MethodPage />} />
           <Route path="tour" element={<TourPage />} />
           <Route path="explorer" element={<ExplorerPage />} />
           <Route path="building/:id" element={<BuildingPage />} />

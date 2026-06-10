@@ -13,7 +13,7 @@
   "MOSCOW_001": {
     "displayName": "Дом Куманиных (Большая Ордынка)",
     "buildingId": "MOSCOW_001_kumaninykh",
-    "historicalPhotoYear": "",
+    "historicalPhotoYear": "1924",
     "modernPhotoYear": "2026",
     "officialExpertise": {
       "title": "Акт историко-культурной экспертизы (Большая Ордынка, 17)",
@@ -31,7 +31,7 @@
   "MOSCOW_004": {
     "displayName": "Дом на Кривоколенном",
     "buildingId": "MOSCOW_004_krivokolenny",
-    "historicalPhotoYear": "",
+    "historicalPhotoYear": "1989",
     "modernPhotoYear": "2026",
     "officialExpertise": null
   }

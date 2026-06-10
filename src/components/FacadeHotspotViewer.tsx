@@ -39,15 +39,15 @@ export function FacadeHotspotViewer({ building }: { building: Building }) {
   return (
     <div className="space-y-3">
       <div
-        className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-stone-200 bg-gradient-to-b from-stone-200 to-stone-300"
+        className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-arch-line bg-gradient-to-b from-arch-surface-2 to-arch-green-soft"
         onMouseLeave={() => setHovered(null)}
       >
         {facadePhoto?.status === 'предстоит съёмка' && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-stone-900/40 p-4 text-center text-sm text-white">
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-arch-green-deep/55 p-4 text-center text-sm text-arch-surface">
             Современное фото фасада предстоит съёмке. Hotspots — ориентировочные для демо.
           </div>
         )}
-        <div className="absolute inset-0 flex items-end justify-center pb-8 text-center text-xs text-stone-600">
+        <div className="absolute inset-0 flex items-end justify-center pb-8 text-center text-xs text-arch-muted">
           {building.name} — схема фасада
         </div>
         {hasHotspots &&
@@ -63,8 +63,8 @@ export function FacadeHotspotViewer({ building }: { building: Building }) {
                   onClick={() => setActive(hs)}
                   className={`absolute rounded border-2 transition ${
                     isOn
-                      ? 'border-amber-400 bg-amber-400/45 z-20'
-                      : 'border-red-500/80 bg-red-500/25 hover:bg-red-500/40 z-10'
+                      ? 'border-arch-gold bg-arch-gold/45 z-20'
+                      : 'border-arch-accent/80 bg-arch-accent/25 hover:bg-arch-accent/40 z-10'
                   }`}
                   style={{
                     left: `${hs.x}%`,
@@ -75,7 +75,7 @@ export function FacadeHotspotViewer({ building }: { building: Building }) {
                 />
                 {isOn && (
                   <div
-                    className="pointer-events-none absolute z-30 max-w-[min(90%,220px)] rounded-md border border-amber-500 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-950 shadow-md"
+                    className="pointer-events-none absolute z-30 max-w-[min(90%,220px)] rounded-md border border-arch-gold bg-arch-surface px-2 py-1 text-xs font-semibold text-arch-ink shadow-md"
                     style={{
                       left: `${Math.min(hs.x + (hs.width ?? 8) / 2, 72)}%`,
                       top: `${Math.max(hs.y - 4, 2)}%`,
@@ -91,17 +91,17 @@ export function FacadeHotspotViewer({ building }: { building: Building }) {
       </div>
 
       {display && (
-        <div className="rounded-lg border border-stone-200 bg-white p-4 shadow-sm">
+        <div className="rounded-xl border border-arch-line bg-arch-surface p-4 shadow-sm">
           {(() => {
             const d = resolveDetail(display)
             return (
               <>
                 <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <h4 className="font-semibold">{d.title}</h4>
+                  <h4 className="font-semibold text-arch-green-deep">{d.title}</h4>
                   <ConfidenceBadge level={d.confidence} />
                 </div>
-                <p className="text-sm text-stone-700">{d.body}</p>
-                <p className="mt-2 text-xs text-stone-500">
+                <p className="text-sm text-arch-ink/80">{d.body}</p>
+                <p className="mt-2 text-xs text-arch-muted">
                   Наведите на другую область — подпись обновится
                 </p>
               </>
@@ -111,7 +111,7 @@ export function FacadeHotspotViewer({ building }: { building: Building }) {
       )}
 
       {!hasHotspots && (
-        <p className="text-sm text-stone-500">
+        <p className="text-sm text-arch-muted">
           Точки на фасаде появятся после съёмки и разметки. См. архивные фото ниже.
         </p>
       )}
