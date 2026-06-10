@@ -82,7 +82,7 @@ export function MapView() {
 
   return (
     <div className="space-y-4">
-      <div ref={containerRef} className="h-[420px] w-full rounded-xl border border-stone-200" />
+      <div ref={containerRef} className="h-[420px] w-full rounded-xl border border-arch-line shadow-sm" />
       <div className="flex flex-wrap gap-3 text-sm">
         {Object.entries(MAP_STATUS_META).map(([key, meta]) => (
           <span key={key} className="flex items-center gap-1.5">
@@ -94,7 +94,7 @@ export function MapView() {
           </span>
         ))}
       </div>
-      <p className="text-xs text-stone-500">
+      <p className="text-xs text-arch-muted">
         Наведите на карточку здания ниже — на карте подсветится точка и названия следов.
       </p>
       <ul className="grid gap-2 sm:grid-cols-2">
@@ -106,15 +106,15 @@ export function MapView() {
               onMouseLeave={() => setHoveredId(null)}
               onFocus={() => setHoveredId(b.id)}
               onBlur={() => setHoveredId(null)}
-              className={`block rounded-lg border bg-white p-3 transition ${
+              className={`block rounded-xl border p-3 transition ${
                 hoveredId === b.id
-                  ? 'border-amber-400 bg-amber-50/80 shadow-sm'
-                  : 'border-stone-200 hover:border-stone-400'
+                  ? 'border-arch-gold bg-arch-green-soft shadow-sm'
+                  : 'border-arch-line bg-arch-surface hover:border-arch-green/40 hover:bg-arch-surface-2/60'
               }`}
             >
-              <span className="font-medium">{b.name}</span>
-              <span className="mt-1 block text-xs text-stone-500">{b.address}</span>
-              <span className="mt-2 block text-xs text-stone-600">{traceSummary(b)}</span>
+              <span className="font-medium text-arch-green-deep">{b.name}</span>
+              <span className="mt-1 block text-xs text-arch-muted">{b.address}</span>
+              <span className="mt-2 block text-xs text-arch-ink/70">{traceSummary(b)}</span>
             </Link>
           </li>
         ))}

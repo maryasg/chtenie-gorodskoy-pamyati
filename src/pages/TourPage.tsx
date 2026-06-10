@@ -9,27 +9,35 @@ export function TourPage() {
   const building = getBuildingById(current.buildingId)
 
   return (
-    <div>
-      <h1 className="mb-2 text-2xl font-semibold">Готовая экскурсия</h1>
-      <p className="mb-6 text-sm text-stone-600">
+    <div className="space-y-6">
+      <header className="arch-section border-arch-green/20 bg-gradient-to-br from-arch-green-soft to-arch-surface">
+        <p className="arch-kicker mb-1">Маршрут пилота</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-arch-green-deep">Готовая экскурсия</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-arch-muted">
+          Четыре точки складываются в короткий сценарий чтения фасадов: от слоёв модерна до
+          вывесок, палат и современной надстройки.
+        </p>
+      </header>
+
+      <p className="text-sm text-arch-muted">
         Маршрут по четырём проверенным зданиям пилота. Шаг {step + 1} из {PILOT_TOUR.length}.
       </p>
 
-      <div className="rounded-xl border border-stone-200 bg-white p-6">
-        <p className="text-xs font-medium uppercase tracking-wide text-stone-500">
+      <div className="arch-section">
+        <p className="arch-kicker">
           Точка {step + 1}
         </p>
-        <h2 className="mt-1 text-xl font-semibold">{current.title}</h2>
-        <p className="mt-3 text-sm text-stone-700">{current.methodologyNote}</p>
+        <h2 className="mt-1 text-xl font-semibold text-arch-green-deep">{current.title}</h2>
+        <p className="mt-3 text-sm leading-relaxed text-arch-ink/80">{current.methodologyNote}</p>
         {building && (
-          <p className="mt-2 text-sm text-stone-500">{building.address}</p>
+          <p className="mt-2 text-sm text-arch-muted">{building.address}</p>
         )}
         <div className="mt-6 flex flex-wrap gap-2">
           <button
             type="button"
             disabled={step === 0}
             onClick={() => setStep((s) => s - 1)}
-            className="rounded-lg border border-stone-300 px-4 py-2 text-sm disabled:opacity-40"
+            className="rounded-full border border-arch-line bg-arch-surface px-4 py-2 text-sm font-medium text-arch-green-deep transition hover:border-arch-green/40 hover:bg-arch-green-soft disabled:opacity-40"
           >
             Назад
           </button>
@@ -37,7 +45,7 @@ export function TourPage() {
             <button
               type="button"
               onClick={() => setStep((s) => s + 1)}
-              className="rounded-lg bg-stone-900 px-4 py-2 text-sm text-white"
+              className="rounded-full bg-arch-green-deep px-4 py-2 text-sm font-medium text-arch-surface transition hover:bg-arch-green"
             >
               Далее
             </button>
@@ -45,7 +53,7 @@ export function TourPage() {
             <button
               type="button"
               onClick={() => setStep(0)}
-              className="rounded-lg bg-stone-900 px-4 py-2 text-sm text-white"
+              className="rounded-full bg-arch-green-deep px-4 py-2 text-sm font-medium text-arch-surface transition hover:bg-arch-green"
             >
               Сначала
             </button>
@@ -53,7 +61,7 @@ export function TourPage() {
           {building && (
             <Link
               to={`/building/${building.id}`}
-              className="rounded-lg border border-stone-900 px-4 py-2 text-sm font-medium"
+              className="rounded-full border border-arch-green/40 bg-arch-green-soft px-4 py-2 text-sm font-medium text-arch-green-deep transition hover:bg-arch-surface"
             >
               Открыть карточку
             </Link>
@@ -68,7 +76,9 @@ export function TourPage() {
               type="button"
               onClick={() => setStep(i)}
               className={`rounded-full px-3 py-1 text-xs ${
-                i === step ? 'bg-stone-900 text-white' : 'bg-stone-200 text-stone-700'
+                i === step
+                  ? 'bg-arch-green-deep text-arch-surface'
+                  : 'border border-arch-line bg-arch-surface text-arch-muted hover:bg-arch-green-soft hover:text-arch-green-deep'
               }`}
             >
               {i + 1}. {t.title}

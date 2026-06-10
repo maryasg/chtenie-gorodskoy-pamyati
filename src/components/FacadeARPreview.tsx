@@ -41,21 +41,21 @@ export function FacadeARPreview({ building, archiview }: Props) {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-xl border border-violet-200 bg-violet-50/70 p-4 text-sm text-violet-950">
+      <div className="rounded-xl border border-arch-green/25 bg-arch-green-soft p-4 text-sm leading-relaxed text-arch-green-deep">
         <strong>AR-preview (без камеры).</strong> Современный фасад как «окно на месте», поверх —
-        призрак истории. Выберите этап на шкале — подсказки совпадают с блоком «Этапы трансформации»
+        призрак истории. Выберите этап на шкале — подсказки совпадают с блоком «Исторические слои»
         на карточке здания.
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-stone-300 bg-stone-950 shadow-lg">
-        <div className="flex items-center justify-between border-b border-stone-700/80 bg-stone-900 px-4 py-2 text-xs text-stone-400">
+      <div className="overflow-hidden rounded-2xl border border-arch-line bg-arch-green-deep shadow-lg">
+        <div className="flex items-center justify-between border-b border-arch-green/60 bg-arch-green-deep px-4 py-2 text-xs text-arch-surface/75">
           <span>Режим: слои времени</span>
           {archiview?.modernPhotoYear && (
             <span className="tabular-nums">сегодня · {archiview.modernPhotoYear}</span>
           )}
         </div>
 
-        <div className="relative aspect-[4/3] max-h-[min(70vh,640px)] w-full bg-stone-900">
+        <div className="relative aspect-[4/3] max-h-[min(70vh,640px)] w-full bg-arch-green-deep">
           {hasPair ? (
             <>
               <img
@@ -79,7 +79,7 @@ export function FacadeARPreview({ building, archiview }: Props) {
               </div>
             </>
           ) : (
-            <div className="flex h-full min-h-[240px] items-center justify-center p-6 text-center text-sm text-stone-400">
+            <div className="flex h-full min-h-[240px] items-center justify-center p-6 text-center text-sm text-arch-surface/75">
               Для этого здания ещё нет пары выпрямленных фото из Archiview. На карточке доступна схема
               hotspots.
             </div>
@@ -90,8 +90,8 @@ export function FacadeARPreview({ building, archiview }: Props) {
       </div>
 
       {hasPair && (
-        <label className="block rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm">
-          <span className="flex items-center justify-between text-stone-700">
+        <label className="block rounded-xl border border-arch-line bg-arch-surface px-3 py-2 text-sm">
+          <span className="flex items-center justify-between text-arch-ink/80">
             <span>Сила исторического слоя</span>
             <span className="font-medium tabular-nums">{Math.round(ghostOpacity * 100)}%</span>
           </span>
@@ -101,12 +101,12 @@ export function FacadeARPreview({ building, archiview }: Props) {
             max={100}
             value={Math.round(ghostOpacity * 100)}
             onChange={(e) => setGhostOverride(Number(e.target.value) / 100)}
-            className="mt-2 w-full accent-violet-600"
+            className="mt-2 w-full accent-arch-green"
           />
           <button
             type="button"
             onClick={() => setGhostOverride(null)}
-            className="mt-1 text-xs text-violet-700 underline"
+            className="mt-1 text-xs text-arch-green underline"
           >
             Вернуть автоматически для выбранного этапа
           </button>
@@ -115,7 +115,7 @@ export function FacadeARPreview({ building, archiview }: Props) {
 
       {stages.length > 0 && (
         <section>
-          <h2 className="mb-3 text-lg font-semibold">Шкала времени</h2>
+          <h2 className="mb-3 text-lg font-semibold text-arch-green-deep">Шкала времени</h2>
           <div className="flex flex-wrap gap-2">
             {stages.map((stage, i) => (
               <button
@@ -127,8 +127,8 @@ export function FacadeARPreview({ building, archiview }: Props) {
                 }}
                 className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
                   i === stageIndex
-                    ? 'border-violet-600 bg-violet-600 text-white shadow-sm'
-                    : 'border-stone-300 bg-white text-stone-700 hover:border-violet-300'
+                    ? 'border-arch-green-deep bg-arch-green-deep text-arch-surface shadow-sm'
+                    : 'border-arch-line bg-arch-surface text-arch-muted hover:border-arch-green/40 hover:bg-arch-green-soft hover:text-arch-green-deep'
                 }`}
               >
                 {stage.period}
@@ -137,21 +137,21 @@ export function FacadeARPreview({ building, archiview }: Props) {
           </div>
 
           {activeStage && (
-            <div className="mt-4 rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+            <div className="mt-4 rounded-xl border border-arch-line bg-arch-surface p-4 shadow-sm">
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="font-semibold text-stone-900">{activeStage.title}</h3>
+                <h3 className="font-semibold text-arch-green-deep">{activeStage.title}</h3>
                 <ConfidenceBadge level={activeStage.confidence} />
-                <span className="text-sm text-stone-500">{activeStage.period}</span>
+                <span className="text-sm text-arch-muted">{activeStage.period}</span>
               </div>
-              <p className="mt-2 text-sm text-stone-700">{stageHint}</p>
-              <p className="mt-2 text-sm text-stone-700">
+              <p className="mt-2 text-sm text-arch-ink/80">{stageHint}</p>
+              <p className="mt-2 text-sm text-arch-ink/80">
                 <strong>Изменилось:</strong> {activeStage.whatChanged}
               </p>
-              <p className="mt-1 text-sm text-stone-600">
+              <p className="mt-1 text-sm text-arch-muted">
                 <strong>Видно сегодня:</strong> {activeStage.visibleToday}
               </p>
               {activeStage.source && (
-                <p className="mt-2 text-xs text-stone-500">Источник: {activeStage.source}</p>
+                <p className="mt-2 text-xs text-arch-muted">Источник: {activeStage.source}</p>
               )}
             </div>
           )}

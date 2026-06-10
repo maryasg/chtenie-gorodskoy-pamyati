@@ -41,31 +41,35 @@ export function ExplorerPage() {
   }
 
   return (
-    <div className="max-w-xl space-y-6">
-      <div>
-        <h1 className="mb-2 text-2xl font-semibold">Режим исследователя</h1>
-        <p className="text-sm text-stone-600">
+    <div className="max-w-2xl space-y-6">
+      <header className="arch-section border-arch-green/20 bg-gradient-to-br from-arch-green-soft to-arch-surface">
+        <p className="arch-kicker mb-1">Демо-сценарий</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-arch-green-deep">Режим исследователя</h1>
+        <p className="mt-2 text-sm leading-relaxed text-arch-muted">
           Имитация рабочего процесса <strong>Archiview</strong>: загрузка фото → первичное чтение →
           гипотезы. Готовая разметка с номерами областей — в{' '}
-          <Link to={`/building/${PILOT.buildingId}`} className="font-medium underline">
+          <Link to={`/building/${PILOT.buildingId}`} className="font-medium text-arch-green underline">
             карточке здания
           </Link>{' '}
           (пилот: дом со зверями).
         </p>
-      </div>
+      </header>
 
-      <div className="rounded-lg border border-amber-300 bg-amber-50 p-4">
-        <p className="text-sm font-semibold text-amber-900">
-          Первичное AI-чтение · проверка куратором не проводилась
+      <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
+        <p className="text-sm font-semibold text-amber-950">
+          Демо-режим: здесь показан сценарий будущей функции. Реальная разметка и проверка следов
+          выполняются куратором в Archiview.
         </p>
       </div>
 
-      <ol className="flex flex-wrap gap-2 text-xs font-medium text-stone-600">
+      <ol className="flex flex-wrap gap-2 text-xs font-medium text-arch-muted">
         {([1, 2, 3] as const).map((n) => (
           <li
             key={n}
             className={`rounded-full px-3 py-1 ${
-              step >= n ? 'bg-stone-900 text-white' : 'bg-stone-200 text-stone-600'
+              step >= n
+                ? 'bg-arch-green-deep text-arch-surface'
+                : 'border border-arch-line bg-arch-surface text-arch-muted'
             }`}
           >
             {n === 1 ? 'Фото' : n === 2 ? 'Подсказки' : 'Чтение'}
@@ -73,8 +77,8 @@ export function ExplorerPage() {
         ))}
       </ol>
 
-      <section className="rounded-xl border border-stone-200 bg-white p-4">
-        <h2 className="mb-2 text-sm font-semibold">1. Загрузите фото фасада</h2>
+      <section className="arch-section">
+        <h2 className="mb-2 text-sm font-semibold text-arch-green-deep">1. Загрузите фото фасада</h2>
         <input
           type="file"
           accept="image/*"
@@ -85,47 +89,47 @@ export function ExplorerPage() {
             setDone(false)
             if (f) setStep(2)
           }}
-          className="mb-2 block w-full text-sm"
+          className="mb-2 block w-full text-sm text-arch-ink file:mr-3 file:rounded-full file:border-0 file:bg-arch-green-deep file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-arch-surface"
         />
         {file && (
-          <p className="text-xs text-stone-500">
+          <p className="text-xs text-arch-muted">
             Выбрано: {file.name} · далее — «Запустить чтение фасада»
           </p>
         )}
       </section>
 
-      <section className="rounded-xl border border-stone-200 bg-white p-4">
-        <h2 className="mb-2 text-sm font-semibold">2. Подсказки съёмки (как в Archiview)</h2>
-        <ul className="list-inside list-disc text-sm text-stone-700">
+      <section className="arch-section">
+        <h2 className="mb-2 text-sm font-semibold text-arch-green-deep">2. Подсказки съёмки</h2>
+        <ul className="list-inside list-disc text-sm leading-relaxed text-arch-ink/80">
           {TIPS.map((t) => (
             <li key={t}>{t}</li>
           ))}
         </ul>
       </section>
 
-      <section className="rounded-xl border border-stone-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold">3. Запустить чтение фасада</h2>
+      <section className="arch-section">
+        <h2 className="mb-3 text-sm font-semibold text-arch-green-deep">3. Запустить чтение фасада</h2>
         <button
           type="button"
           disabled={!file || analyzing}
           onClick={runMock}
-          className="rounded-lg bg-stone-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+          className="rounded-full bg-arch-green-deep px-4 py-2 text-sm font-medium text-arch-surface transition hover:bg-arch-green disabled:opacity-50"
         >
           {analyzing ? 'Анализ фасада…' : 'Запустить чтение фасада (demo)'}
         </button>
-        <p className="mt-2 text-xs text-stone-500">
+        <p className="mt-2 text-xs text-arch-muted">
           В программе Archiview на ПК — те же шаги с выпрямлением, сравнением и разметкой.
         </p>
       </section>
 
       {done && (
-        <div className="space-y-4 rounded-xl border border-stone-200 bg-white p-4">
-          <p className="text-sm font-medium">Найденные следы (демо-гипотезы)</p>
+        <div className="arch-section space-y-4">
+          <p className="text-sm font-medium text-arch-green-deep">Найденные следы (демо-гипотезы)</p>
           {MOCK_TRACES.map((tr) => (
             <div key={tr.title}>
               <p className="font-medium">{tr.title}</p>
               <ConfidenceBadge level="needs_verification" />
-              <ul className="mt-2 space-y-1 text-sm text-stone-700">
+              <ul className="mt-2 space-y-1 text-sm text-arch-ink/80">
                 {tr.hypotheses.map((h) => (
                   <li key={h.label}>
                     {h.label} — {h.weight}%
@@ -134,9 +138,9 @@ export function ExplorerPage() {
               </ul>
             </div>
           ))}
-          <p className="text-sm text-stone-600">
+          <p className="text-sm text-arch-muted">
             Итог с подсветкой областей и номерами на фото смотрите в{' '}
-            <Link to={`/building/${PILOT.buildingId}`} className="font-medium underline">
+            <Link to={`/building/${PILOT.buildingId}`} className="font-medium text-arch-green underline">
               карточке «Дом со зверями»
             </Link>
             .

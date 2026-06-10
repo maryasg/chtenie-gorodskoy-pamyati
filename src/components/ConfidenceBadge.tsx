@@ -4,7 +4,7 @@ const STYLES: Record<Confidence, string> = {
   confirmed: 'bg-emerald-100 text-emerald-900 border-emerald-300',
   probable: 'bg-slate-100 text-slate-800 border-slate-300',
   needs_verification: 'bg-amber-100 text-amber-900 border-amber-300',
-  typological_hypothesis: 'bg-violet-100 text-violet-900 border-violet-300',
+  typological_hypothesis: 'bg-arch-green-soft text-arch-green-deep border-arch-green/30',
 }
 
 const LABELS: Record<Confidence, string> = {

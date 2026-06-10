@@ -50,7 +50,7 @@ export function BuildingVerificationBanner({ verification }: { verification: Bui
               href={item.url}
               target="_blank"
               rel="noreferrer"
-              className="text-amber-950 underline decoration-amber-400 underline-offset-2 hover:text-stone-900"
+              className="text-amber-950 underline decoration-amber-400 underline-offset-2 hover:text-arch-green-deep"
             >
               {item.outlet ? `${item.outlet}: ` : ''}
               {item.title}
