@@ -37,6 +37,7 @@ export const ARCHIVIEW_ASSETS: Record<string, ArchiviewBuildingAssets> = {
     labelingLayout: 'overlay',
     historicalRectifiedUrl: `${base}explorer/MOSCOW_001/historical-rectified.png`,
     modernRectifiedUrl: `${base}explorer/MOSCOW_001/modern-rectified.png`,
+    historicalPhotoYear: '1924',
     modernPhotoYear: '2026',
     annotationsUrl: `${base}explorer/MOSCOW_001/annotations.json`,
     facadeProjectUrl: `${base}explorer/MOSCOW_001/facade-project.json`,
