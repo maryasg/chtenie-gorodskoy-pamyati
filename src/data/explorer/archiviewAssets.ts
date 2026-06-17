@@ -7,6 +7,8 @@ export interface ArchiviewAnnotation {
   class: string
   label_ru: string
   comment: string
+  /** Optional link to curated building.memoryTraces content. */
+  traceId?: string
   polygon?: [number, number][]
 }
 

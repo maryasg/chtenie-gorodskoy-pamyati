@@ -264,7 +264,7 @@ export function BuildingPage() {
 
       {archiview ? (
         <Section title="Фасад и подсветка" kicker="Archiview">
-          <ArchiviewFacadePanel assets={archiview} />
+          <ArchiviewFacadePanel assets={archiview} building={building} />
         </Section>
       ) : (
         <Section title="Фасад и подсветка">
