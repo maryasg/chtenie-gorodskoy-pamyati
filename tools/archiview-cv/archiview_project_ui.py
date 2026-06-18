@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Archiview CV v15 — вкладки «База домов / Фото / Сравнения»."""
+"""Archiview CV v16 — вкладки «База домов / Фото / Сравнения»."""
 from __future__ import annotations
 
 import shutil
@@ -35,7 +35,7 @@ class ProjectsOverviewPanel(ttk.LabelFrame):
         on_open_project: Callable[[Path], None],
         on_log: Optional[Callable[[str], None]] = None,
     ) -> None:
-        super().__init__(parent, text="Проекты на диске (v15)")
+        super().__init__(parent, text="Проекты на диске (v16)")
         self.project_root = Path(project_root)
         self.on_open_project = on_open_project
         self.on_log = on_log

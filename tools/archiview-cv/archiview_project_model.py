@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Archiview CV v15 — модель проекта дома (много фото, много сравнений).
+"""Archiview CV v16 — модель проекта дома (много фото, много сравнений).
 
 Первый проход: хранение и миграция legacy-папок без ломания result/.
 Композиты (composites/) — заготовка каталогов на будущее.
@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
-SCHEMA_VERSION = "v15.1"
+SCHEMA_VERSION = "v16.0"
 
 COMPARISON_STATUSES = (
     "draft",
@@ -213,7 +213,7 @@ class ProjectSummary:
 
 
 class ProjectStore:
-    """Загрузка/сохранение v15-структуры проекта дома."""
+    """Загрузка/сохранение v16-структуры проекта дома."""
 
     def __init__(self, project_dir: Path) -> None:
         self.project_dir = Path(project_dir)
@@ -248,7 +248,7 @@ class ProjectStore:
     @classmethod
     def load(cls, project_dir: str | Path) -> "ProjectStore":
         store = cls(Path(project_dir))
-        store.ensure_v15_layout()
+        store.ensure_v16_layout()
         store._load_all()
         return store
 
@@ -310,6 +310,9 @@ class ProjectStore:
             "annotations",
         ):
             (self.project_dir / sub).mkdir(parents=True, exist_ok=True)
+
+    def ensure_v16_layout(self) -> None:
+        self.ensure_v15_layout()
 
     def _load_all(self) -> None:
         self._load_house()
