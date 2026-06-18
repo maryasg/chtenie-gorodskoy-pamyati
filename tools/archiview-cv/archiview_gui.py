@@ -4889,6 +4889,7 @@ class App(tk.Tk):
         if self.historical_sources:
             self._save_historical_sources()
             self._refresh_historical_sources_tree()
+        self._dedupe_historical_sources()
 
     def _load_modern_from_folder(self) -> None:
         if self.modern_img.get() and Path(self.modern_img.get()).exists():
@@ -4955,6 +4956,7 @@ class App(tk.Tk):
             self._clear_markup_cache()
             self._load_historical_sources()
             self._sync_historical_list_from_folder()
+            self._dedupe_historical_sources()
             self._load_modern_from_folder()
             active_item = self._get_active_historical_item()
             if active_item:
@@ -4965,6 +4967,8 @@ class App(tk.Tk):
             self._update_house_status_label()
             if hasattr(self, "_refresh_compare_source_thumbnails"):
                 self.after(0, self._refresh_compare_source_thumbnails)
+            if hasattr(self, "comparisons_tab_frame"):
+                self.after(100, lambda: self.comparisons_tab_frame.refresh())
             if hasattr(self, "_refresh_result_canvas"):
                 self.after(50, self._refresh_result_canvas)
         finally:
@@ -5124,6 +5128,22 @@ class App(tk.Tk):
             on_log=self._log,
         )
         self.comparisons_tab_frame.pack(fill="both", expand=True)
+
+    def _build_comparisons_panel(self, parent: ttk.LabelFrame) -> None:
+        parent.rowconfigure(0, weight=1)
+        parent.columnconfigure(0, weight=1)
+        if ComparisonsTabFrame is None:
+            ttk.Label(parent, text="Модуль archiview_project_ui.py не найден.", foreground="red").pack(
+                anchor="nw", padx=8, pady=8
+            )
+            return
+        self.comparisons_tab_frame = ComparisonsTabFrame(
+            parent,
+            get_store=self._get_project_store,
+            on_open_comparison=self._open_comparison_session,
+            on_log=self._log,
+        )
+        self.comparisons_tab_frame.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
 
     def _get_project_store(self):
         return self.project_store
@@ -6174,7 +6194,58 @@ map.on('click',e=>{{
         for i, item in enumerate(self.historical_sources):
             active = "●" if item.key == self.active_historical_key else ""
             pts = "Да" if item.old_points_text else "Нет"
-            tree.insert("", "end", iid=str(i), values=(active, item.label, pts, item.source_type))
+            short = item.label
+            if len(short) > 48:
+                short = short[:45] + "..."
+            tree.insert("", "end", iid=str(i), values=(active, short, pts, item.source_type))
+
+    def _historical_path_group_key(self, path: str) -> str:
+        stem = Path(path).stem
+        if stem.startswith("manual_old_"):
+            stem = stem[len("manual_old_") :]
+        stem = re.sub(r"_\d+$", "", stem)
+        return stem.casefold()
+
+    def _dedupe_historical_sources(self) -> int:
+        if not self.historical_sources:
+            return 0
+        before = len(self.historical_sources)
+        active_key = self.active_historical_key
+        by_group: Dict[str, List[HistoricalSourceItem]] = {}
+        for item in self.historical_sources:
+            by_group.setdefault(self._historical_path_group_key(item.path), []).append(item)
+        order_keys = [x.key for x in self.historical_sources]
+        kept: List[HistoricalSourceItem] = []
+        for items in by_group.values():
+            if len(items) == 1:
+                kept.append(items[0])
+                continue
+            pick: Optional[HistoricalSourceItem] = None
+            for it in items:
+                if it.key == active_key:
+                    pick = it
+                    break
+            if pick is None:
+                for it in items:
+                    if it.old_points_text:
+                        pick = it
+                        break
+            if pick is None:
+                pick = items[0]
+            kept.append(pick)
+        kept.sort(key=lambda x: order_keys.index(x.key) if x.key in order_keys else 9999)
+        self.historical_sources = kept
+        if active_key and not any(x.key == active_key for x in kept) and kept:
+            self._set_active_historical(kept[0], save=False)
+        removed = before - len(kept)
+        if removed:
+            self._save_historical_sources()
+            self._refresh_historical_sources_tree()
+            self._log(
+                f"Убрано дубликатов в списке исторических фото: {removed}. "
+                f"Оставлено по одному файлу на снимок.\n"
+            )
+        return removed
 
     def _selected_historical_source(self) -> Optional[HistoricalSourceItem]:
         if not hasattr(self, "hist_sources_tree"):
@@ -8445,8 +8516,21 @@ class AppV13(AppV12):
             wraplength=900,
         ).grid(row=8, column=0, columnspan=3, sticky="w", padx=8, pady=(0, 8))
 
-        main_pane = ttk.Panedwindow(body, orient="horizontal")
+        body_split = ttk.Panedwindow(body, orient="vertical")
+        body_split.grid(row=0, column=0, sticky="nsew")
+        photos_body = ttk.Frame(body_split)
+        cmp_body = ttk.LabelFrame(
+            body_split,
+            text="Сравнения проекта — в колонке ID звёздочка ★ = активное (от него разметка и экспорт)",
+        )
+        body_split.add(photos_body, weight=4)
+        body_split.add(cmp_body, weight=1)
+        self._build_comparisons_panel(cmp_body)
+
+        main_pane = ttk.Panedwindow(photos_body, orient="horizontal")
         main_pane.grid(row=0, column=0, sticky="nsew")
+        photos_body.rowconfigure(0, weight=1)
+        photos_body.columnconfigure(0, weight=1)
         left = ttk.LabelFrame(main_pane, text="Историческое фото: PastVu или файл")
         right = ttk.LabelFrame(main_pane, text="Современное фото: файл, буфер или Wikimedia Commons")
         main_pane.add(left, weight=1)
@@ -8502,7 +8586,7 @@ class AppV13(AppV12):
 
         hist_list = ttk.LabelFrame(
             hist_controls,
-            text="Исторические фото для сравнения — можно добавить несколько, у каждого свои 4 угла",
+            text="Исторические фото — ● = активное для углов и выпрямления (это не ★)",
         )
         hist_list.grid(row=7, column=0, columnspan=3, sticky="nsew", padx=8, pady=(0, 8))
         hist_list.columnconfigure(0, weight=1)
@@ -8519,6 +8603,7 @@ class AppV13(AppV12):
         self.hist_sources_tree.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
         hist_list_btns = ttk.Frame(hist_list)
         hist_list_btns.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
+        ttk.Button(hist_list_btns, text="Убрать дубликаты", command=self._dedupe_historical_sources).pack(side="left", padx=6)
         ttk.Button(hist_list_btns, text="Указать 4 угла", command=self.pick_corners_for_selected_historical, style="Big.TButton").pack(side="left")
         ttk.Button(hist_list_btns, text="Сделать активным", command=self.activate_selected_historical_source).pack(side="left", padx=6)
         ttk.Button(hist_list_btns, text="Удалить из списка", command=self.remove_selected_historical_source).pack(side="left", padx=6)
@@ -8660,6 +8745,26 @@ class AppV13(AppV12):
         ttk.Button(small, text="Открыть overlay", command=self.open_overlay).pack(side="left")
         ttk.Button(small, text="Открыть до/после", command=self.open_before_after).pack(side="left", padx=6)
         ttk.Button(small, text="Открыть папку результата", command=lambda: open_path(Path(self.outdir.get()))).pack(side="left", padx=6)
+        export_row = ttk.Frame(parent)
+        export_row.grid(row=row, column=0, columnspan=3, sticky="ew", padx=10, pady=(0, 8))
+        row += 1
+        tk.Button(
+            export_row,
+            text="Отправить на сайт (GitHub)",
+            command=self.export_to_website,
+            bg="#0b6bcb",
+            fg="white",
+            activebackground="#084f96",
+            activeforeground="white",
+            font=("TkDefaultFont", 10, "bold"),
+            padx=12,
+            pady=6,
+        ).pack(side="left")
+        ttk.Checkbutton(
+            export_row,
+            text="Автокопирование на сайт после сохранения (код из «Данные дома»)",
+            variable=self.auto_export_website,
+        ).pack(side="left", padx=10)
 
         ttk.Label(parent, textvariable=self.rectified_status, font=("TkDefaultFont", 10, "bold")).grid(
             row=row, column=0, columnspan=3, sticky="w", padx=10, pady=8
@@ -9081,6 +9186,24 @@ class AppV13(AppV12):
         ttk.Button(side, text="Открыть HTML overlay", command=self.open_overlay).pack(fill="x", padx=10, pady=3)
         ttk.Button(side, text="Открыть HTML до/после", command=self.open_before_after).pack(fill="x", padx=10, pady=3)
         ttk.Button(side, text="Открыть Roboflow export", command=self.open_roboflow_export).pack(fill="x", padx=10, pady=3)
+        tk.Button(
+            side,
+            text="Отправить на сайт (GitHub)",
+            command=self.export_to_website,
+            bg="#0b6bcb",
+            fg="white",
+            activebackground="#084f96",
+            activeforeground="white",
+            font=("TkDefaultFont", 10, "bold"),
+            padx=8,
+            pady=8,
+        ).pack(fill="x", padx=10, pady=(10, 3))
+        ttk.Label(
+            side,
+            text="Дальше: GitHub Desktop → Commit → Push. На сайте Ctrl+F5.",
+            wraplength=280,
+            foreground="#555",
+        ).pack(anchor="w", padx=10, pady=(0, 6))
 
     def _draw_result_labels_on_canvas(self) -> None:
         # v13 draws compact number badges only. Full text belongs to the legend below.
@@ -9816,7 +9939,18 @@ class AppV15(AppV14):
             "v15: курсор-рука при пробеле и перетаскивании; в списке «Области» можно удалить любую.\n"
             "v15: разные ракурсы — две отдельные области разметки (история / современность).\n"
             "v15: редактирование точек полигона — в отдельной папке v16 (см. README_v16_ru.md).\n"
+            "v15/v16: ★ сравнения — таблица внизу вкладки «1. Источники»; «Отправить на сайт» — вкладки 2 и 5.\n"
         )
+
+    def _on_tab_changed(self, _event: tk.Event) -> None:
+        super()._on_tab_changed(_event)
+        try:
+            if hasattr(self, "notebook") and hasattr(self, "tab_select"):
+                if self.notebook.select() == str(self.tab_select):
+                    if hasattr(self, "comparisons_tab_frame"):
+                        self.comparisons_tab_frame.refresh()
+        except Exception:
+            pass
 
     def _setup_dual_markup_panels(self) -> None:
         if not hasattr(self, "markup_canvas"):
