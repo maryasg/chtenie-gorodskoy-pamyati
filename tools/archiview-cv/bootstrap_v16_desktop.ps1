@@ -25,9 +25,14 @@ if (-not $V16Root) {
     $V16Root = Join-Path $parent 'archiview_cv_easy_v16_package'
 }
 
+if (-not (Test-Path -LiteralPath $V15Root)) {
+    throw "v15 folder not found: $V15Root"
+}
+
 if (Test-Path -LiteralPath $V16Root) {
-    Write-Host "v16 folder already exists: $V16Root"
-    Write-Host 'Skip copy. Run sync_to_v16_desktop.ps1 to update code.'
+    Write-Host "v16 folder already exists:"
+    Write-Host "  $V16Root"
+    Write-Host 'Skip copy — will only update files.'
     exit 0
 }
 

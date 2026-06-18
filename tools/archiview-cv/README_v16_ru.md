@@ -5,7 +5,7 @@
 
 ## Первый раз: создать папку v16 (только cmd)
 
-Откройте **cmd** (не PowerShell):
+Откройте **cmd** (PowerShell открывать не нужно — `.bat` сам вызовет его для копирования в папки с русскими буквами в пути):
 
 ```bat
 cd C:\Users\Marusia\Projects\chtenie-gorodskoy-pamyati
