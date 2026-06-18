@@ -1,20 +1,24 @@
-# Archiview CV v15 (копия в репозитории сайта)
+# Archiview CV v16 (копия в репозитории сайта)
 
-**Рабочая программа** — отдельная папка на рабочем столе:
+Актуальная папка на рабочем столе:
+`C:\Users\Marusia\Desktop\Cult Tech\...\archiview_cv_easy_v16_package`
 
-`C:\Users\Marusia\Desktop\Cult Tech\!Проект Память стен\Прототип\archiview_cv_easy_v15_package`
+(или `archiview_cv_easy_v15_package` — синхронизация обновит файлы внутри.)
 
-Здесь в Git — только код, чтобы не потерять версию вместе с сайтом.
+## Быстрый старт
 
-## Запуск программы
+На рабочем столе: `install_windows.bat`, затем `run_gui_windows.bat`.
 
-На рабочем столе в папке v15: `install_windows.bat`, затем `run_gui_windows.bat`.
+## Синхронизация Desktop ← git
 
-## Результат → сайт
+```powershell
+cd C:\Users\Marusia\Projects\chtenie-gorodskoy-pamyati\tools\archiview-cv
+powershell -ExecutionPolicy Bypass -File .\sync_to_v16_desktop.ps1
+```
 
-1. В v15: `copy_to_website.bat`
-2. GitHub Desktop: Commit + Push репозитория `chtenie-gorodskoy-pamyati`
+## На сайт
 
-Файлы сайта: `public/explorer/MOSCOW_003/`
+1. В Archiview: **«На сайт»** или `copy_to_website.bat`
+2. GitHub Desktop → Commit → Push
 
-Подробно: `README_v15_ru.md` в папке v15 на рабочем столе.
+Подробно: `README_v16_ru.md`
