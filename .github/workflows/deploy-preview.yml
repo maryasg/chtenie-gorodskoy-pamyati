@@ -1,0 +1,106 @@
+name: Deploy preview to GitHub Pages
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+  push:
+    branches:
+      - 'cursor/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # The preview deploy writes to the repository Pages site, so it only runs for
+    # branches from this repository. Fork PRs still get normal build checks.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    outputs:
+      preview_path: ${{ steps.preview-meta.outputs.path }}
+      preview_url: ${{ steps.preview-meta.outputs.url }}
+    steps:
+      - name: Check out preview source
+        uses: actions/checkout@v4
+        with:
+          path: preview-src
+
+      - name: Check out current main for site root
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main-src
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: preview-src/package-lock.json
+
+      - name: Compute preview URL
+        id: preview-meta
+        run: |
+          repo_name="${GITHUB_REPOSITORY#*/}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            preview_path="pr-preview/pr-${{ github.event.pull_request.number }}"
+          else
+            safe_ref="${GITHUB_REF_NAME//\//-}"
+            preview_path="branch-preview/${safe_ref}"
+          fi
+
+          base="/${repo_name}/${preview_path}/"
+          url="https://${GITHUB_REPOSITORY_OWNER}.github.io/${repo_name}/${preview_path}/"
+
+          echo "path=${preview_path}" >> "$GITHUB_OUTPUT"
+          echo "base=${base}" >> "$GITHUB_OUTPUT"
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+
+      - name: Build current main site root
+        working-directory: main-src
+        run: |
+          npm ci
+          npm run build
+
+      - name: Stage current main site root
+        run: |
+          mkdir -p site
+          cp -a main-src/dist/. site/
+
+      - name: Build preview site
+        working-directory: preview-src
+        run: |
+          npm ci
+          npm run build -- --base="${{ steps.preview-meta.outputs.base }}"
+
+      - name: Stage preview site
+        run: |
+          preview_path="${{ steps.preview-meta.outputs.path }}"
+          mkdir -p "site/${preview_path}"
+          cp -a preview-src/dist/. "site/${preview_path}/"
+          touch site/.nojekyll
+          cat > "site/${preview_path}/PREVIEW.txt" <<EOF
+          Preview source: ${GITHUB_REF_NAME}
+          Preview URL: ${{ steps.preview-meta.outputs.url }}
+          EOF
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ needs.build.outputs.preview_url }}
+    steps:
+      - name: Deploy preview to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
