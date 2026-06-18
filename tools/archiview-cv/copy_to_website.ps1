@@ -68,6 +68,61 @@ function Sanitize-WebsiteAnnotations([string]$Path) {
     }
 }
 
+function Get-TraceIdMapFromAnnotations([string]$Path) {
+    $map = @{}
+    if (-not (Test-Path -LiteralPath $Path)) { return $map }
+    try {
+        $data = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+        foreach ($ann in @($data.annotations)) {
+            if ($null -eq $ann.id) { continue }
+            try {
+                $id = [int]$ann.id
+            } catch {
+                continue
+            }
+            $traceId = [string]$ann.traceId
+            if ($id -gt 0 -and $traceId) {
+                $map[$id] = $traceId
+            }
+        }
+    } catch {
+        Write-Host "WARN: could not read traceId map from $Path : $_"
+    }
+    return $map
+}
+
+function Merge-WebsiteTraceIds([string]$Path, [hashtable]$TraceIdByAnnotationId) {
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    if ($TraceIdByAnnotationId.Count -eq 0) { return }
+    try {
+        $data = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+        $merged = 0
+        $kept = 0
+        foreach ($ann in @($data.annotations)) {
+            if ($null -eq $ann.id) { continue }
+            try {
+                $id = [int]$ann.id
+            } catch {
+                continue
+            }
+            if (-not $TraceIdByAnnotationId.ContainsKey($id)) { continue }
+            $fromSite = [string]$TraceIdByAnnotationId[$id]
+            if (-not $fromSite) { continue }
+            $existing = [string]$ann.traceId
+            if ($existing -eq $fromSite) {
+                $kept++
+                continue
+            }
+            $ann | Add-Member -NotePropertyName traceId -NotePropertyValue $fromSite -Force
+            $merged++
+        }
+        $data | ConvertTo-Json -Depth 50 | Set-Content -LiteralPath $Path -Encoding UTF8
+        Write-Host "OK: traceId links kept for annotations.json (merged=$merged, unchanged=$kept)"
+    } catch {
+        Write-Host "WARN: traceId merge failed for ${Path}: $_"
+    }
+}
+
 function Get-ProjectDirFromResult([string]$Dir) {
     $p = Get-Item -LiteralPath $Dir
     if ($p.Name -eq 'result') { return $p.Parent.FullName }
@@ -203,6 +258,12 @@ if (Test-Path -LiteralPath $annExport) {
     } catch { }
 }
 
+$existingAnnPath = Join-Path $Web 'annotations.json'
+$traceIdMap = Get-TraceIdMapFromAnnotations $existingAnnPath
+if ($traceIdMap.Count -gt 0) {
+    Write-Host "INFO: will preserve traceId for $($traceIdMap.Count) annotation id(s) from website"
+}
+
 foreach ($pair in $Pairs) {
     $src = Join-Path $Result $pair[0]
     $dst = Join-Path $Web $pair[1]
@@ -216,6 +277,10 @@ foreach ($pair in $Pairs) {
     Write-Host "OK: $($pair[1])"
     if ($pair[1] -eq 'annotations.json') {
         Sanitize-WebsiteAnnotations $dst
+        Merge-WebsiteTraceIds $dst $traceIdMap
+        if ($traceIdMap.Count -gt 0) {
+            Merge-WebsiteTraceIds $src $traceIdMap
+        }
     }
 }
 
