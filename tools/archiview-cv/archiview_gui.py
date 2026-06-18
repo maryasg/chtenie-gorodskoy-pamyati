@@ -1367,6 +1367,11 @@ def next_annotation_id(annotations: List[dict]) -> int:
     return (max(valid) if valid else 0) + 1
 
 
+def read_json_file(path: Path) -> object:
+    """Читает JSON; utf-8-sig — чтобы открывать файлы с BOM (PowerShell)."""
+    return json.loads(path.read_text(encoding="utf-8-sig"))
+
+
 def normalize_annotation_list(annotations: List[dict]) -> List[dict]:
     """Убирает дубликаты полигонов и сохраняет стабильные id областей."""
     seen: set[Tuple[str, Tuple[Tuple[float, float], ...]]] = set()
@@ -5241,7 +5246,7 @@ class App(tk.Tk):
         ann_path = outdir / "annotations" / "manual_annotations.json"
         if ann_path.exists():
             try:
-                data = json.loads(ann_path.read_text(encoding="utf-8"))
+                data = read_json_file(ann_path)
                 anns = data.get("annotations", [])
                 if isinstance(anns, list) and len(anns) > 0:
                     return True
@@ -7325,7 +7330,7 @@ class AppV11(App):
         path = Path(outdir) / "annotations" / "manual_annotations.json"
         if path.exists():
             try:
-                data = json.loads(path.read_text(encoding="utf-8"))
+                data = read_json_file(path)
                 anns = data.get("annotations", [])
                 if isinstance(anns, list):
                     self.embedded_annotations = normalize_annotation_list(anns)
