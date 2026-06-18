@@ -35,6 +35,7 @@ $files = @(
     'sync_to_v15_desktop.ps1',
     'sync_to_v16_desktop.ps1',
     'bootstrap_v16_desktop.ps1',
+    'setup_v16_desktop.ps1',
     'update_website_registry.ps1',
     'export_facade_project.ps1',
     'export_moscow001_from_v15.ps1',
@@ -63,6 +64,10 @@ $launcherV16 = Join-Path $Src 'run_gui_v16.bat'
 $launcherDest = Join-Path $V16Root 'run_gui_windows.bat'
 Copy-Item -LiteralPath $launcherV16 -Destination $launcherDest -Force
 Write-Host 'OK: run_gui_windows.bat (v16 launcher)'
+Copy-Item -LiteralPath $launcherV16 -Destination (Join-Path $V16Root 'ZAPUSK_V16.bat') -Force
+Write-Host 'OK: ZAPUSK_V16.bat'
+Set-Content -LiteralPath (Join-Path $V16Root 'ARCHIVIEW_VERSION.txt') -Value 'v16 polygon edit' -Encoding UTF8
+Write-Host 'OK: ARCHIVIEW_VERSION.txt'
 
 Write-Host ''
 Write-Host "Synced Archiview v16 to: $V16Root"

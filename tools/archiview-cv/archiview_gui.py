@@ -8322,6 +8322,7 @@ class AppV13(AppV12):
             font=("TkDefaultFont", 12, "bold"),
         )
         title.pack(anchor="w", padx=12, pady=(10, 4))
+        self._app_title_label = title
 
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True, padx=12, pady=6)
@@ -9793,6 +9794,11 @@ class AppV15(AppV14):
         APP_VERSION = APP_VERSION_V15
         super()._build_ui()
         self.title(f"Archiview CV {APP_VERSION}")
+        if hasattr(self, "_app_title_label"):
+            self._app_title_label.configure(
+                text="Archiview CV v15 — стабильная версия (без редактирования точек)",
+                foreground="#333333",
+            )
         self.markup_drawing_side = "historical"
         self.current_markup_points_by_side: Dict[str, List[Point]] = {"historical": [], "modern": []}
         self.markup_display_by_side: Dict[str, Tuple[float, int, int, int, int]] = {
@@ -10233,12 +10239,22 @@ class AppV16(AppV15):
         self._markup_edit_active_vertex: Optional[int] = None
         self._markup_pending_insert_point: Optional[Point] = None
         super()._build_ui()
-        self.title(f"Archiview CV {APP_VERSION}")
+        self._apply_v16_chrome()
         self._install_v16_delete_bindings()
         self._log(
             "v16: «Редактировать точки» — тянуть вершины; клик по линии — новая точка; "
             "Delete / Backspace или кнопка — убрать выбранную вершину (минимум 3 точки).\n"
+            "v16: на вкладке «Разметка» — кнопки +/− для масштаба (или колесо над фото).\n"
         )
+
+    def _apply_v16_chrome(self) -> None:
+        self.title(f"Archiview CV {APP_VERSION_V16}")
+        if hasattr(self, "_app_title_label"):
+            self._app_title_label.configure(
+                text="★ Archiview CV v16 — редактирование точек, масштаб +/− на вкладке «Разметка» ★",
+                foreground="#0b5c2e",
+                font=("TkDefaultFont", 13, "bold"),
+            )
 
     def _install_v16_delete_bindings(self) -> None:
         """Replace v13 «Delete = удалить последнюю область» while editing vertices."""
@@ -10628,8 +10644,11 @@ class AppV16(AppV15):
 
 def _main() -> None:
     import os
+    import sys
 
     use_v15 = os.environ.get("ARCHIVIEW_APP_VERSION", "16").strip() == "15"
+    version_label = "v15" if use_v15 else "v16"
+    print(f"Archiview CV {version_label} starting (ARCHIVIEW_APP_VERSION={os.environ.get('ARCHIVIEW_APP_VERSION', '16')})", file=sys.stderr)
     if use_v15:
         AppV15().mainloop()
     else:
