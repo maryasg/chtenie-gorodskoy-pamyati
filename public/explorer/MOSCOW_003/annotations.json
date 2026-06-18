@@ -11,6 +11,7 @@
       "class": "added_floor",
       "label_ru": "Надстройка / новый этаж",
       "comment": "",
+      "traceId": "MOSCOW_003_T001",
       "polygon": [
         [
           519.8450074515648,
@@ -259,6 +260,7 @@
       "class": "lost_balcony",
       "label_ru": "Утраченный балкон",
       "comment": "",
+      "traceId": "MOSCOW_003_T004",
       "polygon": [
         [
           1419.577686148909,
@@ -283,6 +285,7 @@
       "class": "lost_balcony",
       "label_ru": "Утраченный балкон",
       "comment": "",
+      "traceId": "MOSCOW_003_T004",
       "polygon": [
         [
           1904.0834575260803,
@@ -305,8 +308,9 @@
     {
       "id": 11,
       "class": "lost_decor",
-      "label_ru": "Утраченный декор",
+      "label_ru": "Утраченная декоративная решётка",
       "comment": "",
+      "traceId": "MOSCOW_003_T007",
       "polygon": [
         [
           1100.1371087928464,

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
+import { BUILDINGS } from '../data/buildings'
 
 const PIPELINE = [
   {
@@ -75,6 +76,13 @@ const DEMO_CASES = [
     text: 'Side-by-side показывает разные ракурсы: на архивном фото размечено место вывески Фалькевича, а в 2026 видны восстановленные вывесочные слои.',
   },
 ]
+
+const CURATOR_LINKS = BUILDINGS.map((building) => ({
+  title: building.name,
+  cardId: building.cardId,
+  to: `/curator/${building.id}`,
+  text: building.address,
+}))
 
 function MethodSection({
   title,
@@ -202,6 +210,27 @@ export function MethodPage() {
           </div>
         </MethodSection>
       </div>
+
+      <MethodSection title="Кураторская проверка подсветок" kicker="Служебный доступ">
+        <p className="mb-4 max-w-3xl text-sm leading-relaxed text-arch-muted">
+          Эти страницы не вынесены в верхнее меню и нужны для подготовки публикации: проверить,
+          какая подсветка связана с каким историческим текстом, временно поправить формулировку и
+          отметить, что связь подтверждена.
+        </p>
+        <div className="grid gap-3 md:grid-cols-2">
+          {CURATOR_LINKS.map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              className="block rounded-xl border border-arch-line bg-arch-surface-2/40 p-4 transition hover:border-arch-green/40 hover:bg-arch-green-soft"
+            >
+              <span className="arch-kicker">{item.cardId}</span>
+              <h3 className="mt-1 font-semibold text-arch-green-deep">{item.title}</h3>
+              <p className="mt-1 text-sm text-arch-muted">{item.text}</p>
+            </Link>
+          ))}
+        </div>
+      </MethodSection>
 
       <MethodSection title="Слайд, который можно почти сразу перенести в презентацию" kicker="Коротко">
         <div className="rounded-xl border border-arch-green/25 bg-arch-green-soft p-5">

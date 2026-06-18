@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ArchiviewAnnotation, ArchiviewBuildingAssets } from '../data/explorer/archiviewAssets'
+import type { Building, MemoryTrace } from '../types/building'
+import { ConfidenceBadge } from './ConfidenceBadge'
 import {
   polygonCentroid,
   rectifiedPolygonToComparison,
@@ -13,6 +15,7 @@ type DisplayRegion = {
   cls: string
   label: string
   comment: string
+  trace?: MemoryTrace
   polygonPct: Point[]
   cx: number
   cy: number
@@ -67,12 +70,35 @@ function isHomography(H: unknown): H is number[][] {
   )
 }
 
-export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAssets }) {
+function getTraceId(ann: ArchiviewAnnotation): string | undefined {
+  return ann.traceId
+}
+
+function shortText(text: string, maxLength = 260): string {
+  if (text.length <= maxLength) return text
+  const shortened = text.slice(0, maxLength)
+  const sentenceEnd = Math.max(shortened.lastIndexOf('.'), shortened.lastIndexOf('!'), shortened.lastIndexOf('?'))
+  if (sentenceEnd > maxLength * 0.55) return shortened.slice(0, sentenceEnd + 1)
+  return `${shortened.trim()}...`
+}
+
+export function ArchiviewFacadePanel({
+  assets,
+  building,
+}: {
+  assets: ArchiviewBuildingAssets
+  building?: Building
+}) {
   const [regions, setRegions] = useState<DisplayRegion[]>([])
   const [imageOk, setImageOk] = useState(false)
   const [hoverIdx, setHoverIdx] = useState<number | null>(null)
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
   const [imgSize, setImgSize] = useState({ w: 1, h: 1 })
   const [sideBySide, setSideBySide] = useState(false)
+
+  const tracesById = useMemo(() => {
+    return new Map(building?.memoryTraces.map((trace) => [trace.id, trace]) ?? [])
+  }, [building])
 
   const displayImageUrl = useMemo(() => {
     if (assets.labelingLayout === 'side_by_side' && assets.sideBySideMarkedUrl) {
@@ -81,6 +107,24 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
     return assets.markedFacadeUrl
   }, [assets])
 
+  const makeRegion = useCallback(
+    (ann: ArchiviewAnnotation, idx: number, polygonPct: Point[]): DisplayRegion => {
+      const [cx, cy] = polygonCentroid(polygonPct)
+      const traceId = getTraceId(ann)
+      return {
+        idx,
+        cls: ann.class,
+        label: ann.label_ru || ann.class,
+        comment: (ann.comment || '').trim(),
+        trace: traceId ? tracesById.get(traceId) : undefined,
+        polygonPct,
+        cx,
+        cy,
+      }
+    },
+    [tracesById],
+  )
+
   const buildRegionsRectified = useCallback(
     (annotations: ArchiviewAnnotation[], width: number, height: number) => {
       const list: DisplayRegion[] = []
@@ -88,20 +132,11 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
         const raw = ann.polygon as Point[] | undefined
         if (!raw || raw.length < 3) return
         const pct = toPercentPoints(raw, width, height)
-        const [cx, cy] = polygonCentroid(pct)
-        list.push({
-          idx: i + 1,
-          cls: ann.class,
-          label: ann.label_ru || ann.class,
-          comment: (ann.comment || '').trim(),
-          polygonPct: pct,
-          cx,
-          cy,
-        })
+        list.push(makeRegion(ann, i + 1, pct))
       })
       setRegions(list)
     },
-    [],
+    [makeRegion],
   )
 
   const buildRegionsOverlay = useCallback(
@@ -112,20 +147,11 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
         if (!raw || raw.length < 3) return
         const onPhoto = transformPolygon(H, raw)
         const pct = toPercentPoints(onPhoto, width, height)
-        const [cx, cy] = polygonCentroid(pct)
-        list.push({
-          idx: i + 1,
-          cls: ann.class,
-          label: ann.label_ru || ann.class,
-          comment: (ann.comment || '').trim(),
-          polygonPct: pct,
-          cx,
-          cy,
-        })
+        list.push(makeRegion(ann, i + 1, pct))
       })
       setRegions(list)
     },
-    [],
+    [makeRegion],
   )
 
   const buildRegionsSideBySide = useCallback(
@@ -151,20 +177,11 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
           payload.rectified_size,
         )
         const pct = toPercentPoints(onPanel, width, height)
-        const [cx, cy] = polygonCentroid(pct)
-        list.push({
-          idx: i + 1,
-          cls: ann.class,
-          label: ann.label_ru || ann.class,
-          comment: (ann.comment || '').trim(),
-          polygonPct: pct,
-          cx,
-          cy,
-        })
+        list.push(makeRegion(ann, i + 1, pct))
       })
       setRegions(list)
     },
-    [],
+    [makeRegion],
   )
 
   useEffect(() => {
@@ -217,7 +234,13 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
     }
   }, [assets, buildRegionsOverlay, buildRegionsRectified, buildRegionsSideBySide, displayImageUrl])
 
-  const active = hoverIdx !== null ? regions.find((r) => r.idx === hoverIdx) : null
+  const active =
+    hoverIdx !== null
+      ? regions.find((r) => r.idx === hoverIdx)
+      : selectedIdx !== null
+        ? regions.find((r) => r.idx === selectedIdx)
+        : null
+  const selected = selectedIdx !== null ? regions.find((r) => r.idx === selectedIdx) : null
 
   return (
     <div className="space-y-3">
@@ -225,12 +248,12 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
         {sideBySide ? (
           <>
             Слева — историческое фото, справа — современное. Наведите на <strong>номер или область</strong>{' '}
-            — сверху появится название.
+            — сверху появится кураторская плашка.
           </>
         ) : (
           <>
-            Наведите на <strong>номер или область</strong> на фото — сверху появится название. Список
-            справа синхронизирован с подсветкой.
+            Наведите или нажмите на <strong>номер или область</strong> на фото — сверху появится
+            кураторская плашка. Список справа синхронизирован с подсветкой.
           </>
         )}
       </p>
@@ -245,7 +268,10 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
       {imageOk && (
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
           <div className="relative min-w-0 flex-1">
-            <div className="relative inline-block max-w-full">
+            <div
+              className="relative inline-block max-w-full"
+              onMouseLeave={() => setHoverIdx(null)}
+            >
               <img
                 src={displayImageUrl}
                 alt="Фасад с разметкой Archiview"
@@ -291,26 +317,42 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
                       onMouseLeave={() => setHoverIdx(null)}
                       onFocus={() => setHoverIdx(r.idx)}
                       onBlur={() => setHoverIdx(null)}
+                      onClick={() => setSelectedIdx((current) => (current === r.idx ? null : r.idx))}
                     />
                   ))}
                 </svg>
               )}
               {active && (
                 <div
-                  className="pointer-events-none absolute z-20 max-w-[min(92%,280px)] rounded-md border border-arch-gold bg-arch-surface px-2.5 py-1.5 text-center text-xs font-semibold leading-snug text-arch-ink shadow-lg"
+                  className="pointer-events-none absolute z-20 max-w-[min(92%,360px)] rounded-xl border border-arch-gold/70 bg-arch-green-deep/90 px-3 py-2.5 text-left text-xs leading-snug text-arch-surface shadow-xl backdrop-blur-md"
                   style={{
                     left: `${active.cx}%`,
                     top: `${active.cy}%`,
                     transform: 'translate(-50%, calc(-100% - 8px))',
                   }}
                 >
-                  <span className="text-[11px] font-bold text-arch-green">{active.idx}.</span>{' '}
-                  {active.label}
-                  {active.comment ? (
-                    <span className="mt-0.5 block text-[10px] font-normal text-arch-muted">
-                      {active.comment}
+                  <div className="flex items-start gap-2">
+                    <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-arch-gold text-[11px] font-bold text-arch-green-deep">
+                      {active.idx}
                     </span>
-                  ) : null}
+                    <span>
+                      <span className="block font-semibold">{active.trace?.title ?? active.label}</span>
+                      {active.trace ? (
+                        <>
+                          <span className="mt-0.5 block text-[11px] text-arch-surface/75">
+                            {active.trace.period}
+                          </span>
+                          <span className="mt-1 block text-[11px] font-normal text-arch-surface/90">
+                            {shortText(active.trace.userMessage)}
+                          </span>
+                        </>
+                      ) : active.comment ? (
+                        <span className="mt-1 block text-[11px] font-normal text-arch-surface/80">
+                          {active.comment}
+                        </span>
+                      ) : null}
+                    </span>
+                  </div>
                 </div>
               )}
             </div>
@@ -329,8 +371,9 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
                       onMouseLeave={() => setHoverIdx(null)}
                       onFocus={() => setHoverIdx(r.idx)}
                       onBlur={() => setHoverIdx(null)}
+                      onClick={() => setSelectedIdx((current) => (current === r.idx ? null : r.idx))}
                       className={`flex w-full gap-2 rounded-lg border px-2.5 py-2 text-left transition ${
-                        on
+                        on || selectedIdx === r.idx
                           ? 'border-arch-green/50 bg-arch-green-soft shadow-sm'
                           : 'border-arch-line bg-arch-surface hover:border-arch-green/30'
                       }`}
@@ -343,9 +386,13 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
                       </span>
                       <span className="min-w-0">
                         <span className="block font-medium leading-tight text-arch-ink">
-                          {r.label}
+                          {r.trace?.title ?? r.label}
                         </span>
-                        {r.comment ? (
+                        {r.trace ? (
+                          <span className="mt-0.5 block text-xs text-arch-muted">
+                            {r.trace.period} · кураторская заметка
+                          </span>
+                        ) : r.comment ? (
                           <span className="mt-0.5 block text-xs text-arch-muted">{r.comment}</span>
                         ) : null}
                       </span>
@@ -353,6 +400,21 @@ export function ArchiviewFacadePanel({ assets }: { assets: ArchiviewBuildingAsse
                   </li>
                 )
               })}
+              {selected?.trace && (
+                <li className="rounded-xl border border-arch-green/25 bg-arch-green-soft p-3">
+                  <p className="arch-kicker mb-1">Информация от куратора</p>
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <h3 className="font-semibold leading-tight text-arch-green-deep">
+                      {selected.trace.title}
+                    </h3>
+                    <ConfidenceBadge level={selected.trace.confidence} />
+                  </div>
+                  <p className="text-xs text-arch-muted">{selected.trace.period}</p>
+                  <p className="mt-2 text-sm leading-relaxed text-arch-ink/80">
+                    {selected.trace.userMessage}
+                  </p>
+                </li>
+              )}
             </ol>
           )}
         </div>
