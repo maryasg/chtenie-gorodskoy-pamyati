@@ -3,12 +3,17 @@ import { Link, useParams } from 'react-router-dom'
 import { getArchiviewAssets } from '../data/explorer/archiviewAssets'
 import type { ArchiviewAnnotation } from '../data/explorer/archiviewAssets'
 import { getBuildingById } from '../data/buildings'
-import type { Confidence, MemoryTrace } from '../types/building'
+import type { Building, Confidence, MemoryTrace } from '../types/building'
 import { ConfidenceBadge } from '../components/ConfidenceBadge'
 
 type CuratorAnnotation = ArchiviewAnnotation & {
   traceId?: string
   image_side?: string
+}
+
+type AnnotationsPayload = {
+  annotations?: CuratorAnnotation[]
+  [key: string]: unknown
 }
 
 type DraftRow = {
@@ -19,6 +24,8 @@ type DraftRow = {
   userMessage: string
   confirmed: boolean
 }
+
+type ConfirmedRow = { ann: CuratorAnnotation; draft: DraftRow }
 
 const CONFIDENCE_OPTIONS: { value: Confidence; label: string }[] = [
   { value: 'confirmed', label: 'Подтверждено' },
@@ -41,7 +48,7 @@ function nextTraceId(buildingId: string, index: number): string {
   return `${card}_T${String(index + 1).padStart(3, '0')}`
 }
 
-function buildExportSnippet(rows: { ann: CuratorAnnotation; draft: DraftRow }[]): string {
+function buildExportSnippet(rows: ConfirmedRow[]): string {
   return rows
     .map(({ ann, draft }) => {
       return [
@@ -58,11 +65,156 @@ function buildExportSnippet(rows: { ann: CuratorAnnotation; draft: DraftRow }[])
     .join('\n\n')
 }
 
+function buildingDataFileName(cardId: string): string {
+  const num = cardId.match(/MOSCOW_(\d+)/)?.[1]
+  return num ? `moscow${num.padStart(3, '0')}.ts` : 'moscow.ts'
+}
+
+function tsString(value: string): string {
+  return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
+}
+
+function downloadTextFile(filename: string, content: string, mimeType: string): void {
+  const blob = new Blob([content], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function buildMemoryTraceFromDraft(
+  ann: CuratorAnnotation,
+  draft: DraftRow,
+  existing?: MemoryTrace,
+): MemoryTrace & { type: string } {
+  return {
+    id: draft.traceId,
+    type: existing?.type ?? ann.class,
+    title: draft.title || ann.label_ru,
+    period: draft.period || 'уточняется',
+    confidence: draft.confidence,
+    userMessage: draft.userMessage || 'Добавить текст куратора',
+    ...(existing?.overallConfidence !== undefined
+      ? { overallConfidence: existing.overallConfidence }
+      : {}),
+    ...(existing?.imagePath ? { imagePath: existing.imagePath } : {}),
+    ...(existing?.imageCaption ? { imageCaption: existing.imageCaption } : {}),
+  }
+}
+
+function formatMemoryTrace(trace: MemoryTrace & { type: string }): string {
+  const lines = [
+    '    {',
+    `      id: ${tsString(trace.id)},`,
+    `      type: ${tsString(trace.type)},`,
+    `      title: ${tsString(trace.title)},`,
+    `      period: ${tsString(trace.period)},`,
+    `      confidence: ${tsString(trace.confidence)},`,
+  ]
+  if (trace.overallConfidence !== undefined) {
+    lines.push(`      overallConfidence: ${trace.overallConfidence},`)
+  }
+  lines.push(`      userMessage: ${tsString(trace.userMessage)},`)
+  if (trace.imagePath) {
+    lines.push(`      imagePath: ${tsString(trace.imagePath)},`)
+  }
+  if (trace.imageCaption) {
+    lines.push(`      imageCaption: ${tsString(trace.imageCaption)},`)
+  }
+  lines.push('    },')
+  return lines.join('\n')
+}
+
+function buildMemoryTracesExport(
+  confirmedRows: ConfirmedRow[],
+  tracesById: Map<string, MemoryTrace>,
+): string {
+  const entries = confirmedRows.map(({ ann, draft }) => {
+    const existing = tracesById.get(draft.traceId) ?? (ann.traceId ? tracesById.get(ann.traceId) : undefined)
+    return formatMemoryTrace(buildMemoryTraceFromDraft(ann, draft, existing))
+  })
+
+  return [
+    '// Вставьте эти записи в блок memoryTraces в src/data/buildings/moscow00X.ts',
+    '// Если id уже есть — замените запись; если нет — добавьте в конец массива.',
+    '',
+    ...entries,
+  ].join('\n')
+}
+
+function buildUpdatedAnnotationsPayload(
+  rawPayload: AnnotationsPayload,
+  confirmedById: Map<number, DraftRow>,
+): AnnotationsPayload {
+  const payload = structuredClone(rawPayload)
+  payload.annotations = (payload.annotations ?? []).map((ann) => {
+    const draft = confirmedById.get(ann.id)
+    if (!draft) return ann
+    return { ...ann, traceId: draft.traceId }
+  })
+  return payload
+}
+
+function buildReadme(building: Building, confirmedCount: number): string {
+  const buildingFile = buildingDataFileName(building.cardId)
+  return [
+    `КУРАТОРСКИЙ ЭКСПОРТ — ${building.cardId}`,
+    `Здание: ${building.name}`,
+    `Подтверждено подсветок: ${confirmedCount}`,
+    `Дата: ${new Date().toLocaleString('ru-RU')}`,
+    '',
+    '1. annotations.json',
+    `   Куда: public/explorer/${building.cardId}/annotations.json`,
+    '   Действие: заменить файл целиком на GitHub (Edit → вставить → Commit).',
+    '',
+    '2. memory-traces.ts',
+    `   Куда: src/data/buildings/${buildingFile}`,
+    '   Действие: в блоке memoryTraces: [ ... ] для каждой записи из файла:',
+    '   — если id уже есть, заменить эту запись;',
+    '   — если id новый, добавить в конец массива.',
+    '',
+    '3. Commit → Push → на сайте Ctrl+F5.',
+    '',
+    'Важно: в скачанные файлы попали только строки с галочкой «Подтверждаю».',
+  ].join('\n')
+}
+
+function downloadCuratorFiles(
+  building: Building,
+  rawPayload: AnnotationsPayload,
+  confirmedRows: ConfirmedRow[],
+  tracesById: Map<string, MemoryTrace>,
+): void {
+  const confirmedById = new Map(confirmedRows.map(({ ann, draft }) => [ann.id, draft]))
+  const annotationsContent = `${JSON.stringify(buildUpdatedAnnotationsPayload(rawPayload, confirmedById), null, 2)}\n`
+  const memoryTracesContent = `${buildMemoryTracesExport(confirmedRows, tracesById)}\n`
+  const readmeContent = `${buildReadme(building, confirmedRows.length)}\n`
+
+  downloadTextFile('annotations.json', annotationsContent, 'application/json;charset=utf-8')
+  window.setTimeout(() => {
+    downloadTextFile(
+      `memory-traces-${building.cardId}.ts`,
+      memoryTracesContent,
+      'text/plain;charset=utf-8',
+    )
+  }, 200)
+  window.setTimeout(() => {
+    downloadTextFile(
+      `README-${building.cardId}.txt`,
+      readmeContent,
+      'text/plain;charset=utf-8',
+    )
+  }, 400)
+}
+
 export function CuratorReviewPage() {
   const { id } = useParams<{ id: string }>()
   const building = id ? getBuildingById(id) : undefined
   const assets = building ? getArchiviewAssets(building.id) : undefined
   const [annotations, setAnnotations] = useState<CuratorAnnotation[]>([])
+  const [rawPayload, setRawPayload] = useState<AnnotationsPayload | null>(null)
   const [drafts, setDrafts] = useState<Record<number, DraftRow>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -81,9 +233,10 @@ export function CuratorReviewPage() {
       try {
         const response = await fetch(assets.annotationsUrl)
         if (!response.ok) throw new Error(`Не удалось загрузить annotations.json (${response.status})`)
-        const payload = (await response.json()) as { annotations?: CuratorAnnotation[] }
+        const payload = (await response.json()) as AnnotationsPayload
         const list = payload.annotations ?? []
         if (cancelled) return
+        setRawPayload(payload)
         setAnnotations(list)
         setDrafts(
           Object.fromEntries(
@@ -124,9 +277,12 @@ export function CuratorReviewPage() {
   }
 
   const rows = annotations.map((ann) => ({ ann, draft: drafts[ann.id] }))
-  const readyCount = rows.filter((row) => row.draft?.confirmed).length
+  const confirmedRows = rows.filter(
+    (row): row is ConfirmedRow => Boolean(row.draft?.confirmed),
+  )
+  const readyCount = confirmedRows.length
   const hasMissingLinks = rows.some((row) => !row.ann.traceId)
-  const exportSnippet = buildExportSnippet(rows.filter((row): row is { ann: CuratorAnnotation; draft: DraftRow } => Boolean(row.draft)))
+  const exportSnippet = buildExportSnippet(confirmedRows)
 
   return (
     <div className="space-y-6">
@@ -139,8 +295,10 @@ export function CuratorReviewPage() {
           Проверка подсветок: {building.name}
         </h1>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-arch-muted">
-          Это рабочий экран для сверки: какая подсветка к какому кураторскому тексту привязана.
-          Изменения ниже живут только в браузере; после проверки их нужно перенести в GitHub.
+          Отметьте галочкой проверенные строки и нажмите «Скачать готовые файлы» — получите
+          <code className="mx-1 rounded bg-arch-surface-2/80 px-1">annotations.json</code>,
+          фрагмент для <code className="mx-1 rounded bg-arch-surface-2/80 px-1">memoryTraces</code>
+          и короткую инструкцию. Затем загрузите их в репозиторий на GitHub.
         </p>
       </header>
 
@@ -375,11 +533,55 @@ export function CuratorReviewPage() {
 
       {!loading && !error && rows.length > 0 && (
         <section className="arch-section">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="arch-kicker mb-1">Экспорт</p>
+              <h2 className="arch-section-title">Скачать готовые файлы</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-arch-muted">
+                В скачивание попадут только строки с галочкой «Подтверждаю» ({readyCount} из{' '}
+                {annotations.length}).
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={readyCount === 0 || !rawPayload}
+              onClick={() => {
+                if (!building || !rawPayload) return
+                downloadCuratorFiles(building, rawPayload, confirmedRows, tracesById)
+              }}
+              className="rounded-full bg-arch-green-deep px-5 py-2.5 text-sm font-semibold text-arch-surface transition hover:bg-arch-green disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Скачать готовые файлы
+            </button>
+          </div>
+          {readyCount === 0 ? (
+            <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+              Сначала отметьте галочкой хотя бы одну проверенную подсветку.
+            </p>
+          ) : (
+            <ul className="list-inside list-disc space-y-1 text-sm text-arch-muted">
+              <li>
+                <code>annotations.json</code> — полный файл для{' '}
+                <code>public/explorer/{building.cardId}/</code>
+              </li>
+              <li>
+                <code>memory-traces-{building.cardId}.ts</code> — записи для{' '}
+                <code>src/data/buildings/{buildingDataFileName(building.cardId)}</code>
+              </li>
+              <li>
+                <code>README-{building.cardId}.txt</code> — куда положить каждый файл
+              </li>
+            </ul>
+          )}
+        </section>
+      )}
+
+      {!loading && !error && rows.length > 0 && confirmedRows.length > 0 && (
+        <section className="arch-section">
           <p className="arch-kicker mb-1">Черновик для переноса</p>
-          <h2 className="arch-section-title mb-3">Что нужно перенести в GitHub</h2>
+          <h2 className="arch-section-title mb-3">Текстовый чек-лист (только подтверждённые)</h2>
           <p className="mb-3 text-sm leading-relaxed text-arch-muted">
-            Этот блок не сохраняет изменения автоматически. Его можно использовать как чек-лист:
-            открыть нужные файлы на GitHub и перенести только проверенные строки.
+            Если удобнее копировать вручную — ниже те же данные, что попадут в скачанные файлы.
           </p>
           <textarea
             readOnly
