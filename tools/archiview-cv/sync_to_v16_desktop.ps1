@@ -75,5 +75,9 @@ Set-Content -LiteralPath (Join-Path $V16Root 'ARCHIVIEW_VERSION.txt') -Value 'v1
 Write-Host 'OK: ARCHIVIEW_VERSION.txt'
 
 Write-Host ''
-Write-Host "Synced Archiview v16 to: $V16Root"
-Write-Host 'Run run_gui_windows.bat — title should contain v16 polygon edit.'
+Write-Host '============================================'
+Write-Host "ГОТОВО. Папка v16:"
+Write-Host $V16Root
+Write-Host 'Запустите: ZAPUSK_V16.bat'
+Write-Host 'Заголовок окна: v16 polygon edit'
+Write-Host '============================================'
