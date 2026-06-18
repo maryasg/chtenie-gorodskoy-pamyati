@@ -47,6 +47,7 @@ $files = @(
     'restore_markup_from_website.bat',
     'website_buildings.json',
     'README_v16_ru.md',
+    'ENCODING_RULES.md',
     'archiview_gui.py',
     'archiview_project_model.py',
     'archiview_project_ui.py',
@@ -76,8 +77,8 @@ Write-Host 'OK: ARCHIVIEW_VERSION.txt'
 
 Write-Host ''
 Write-Host '============================================'
-Write-Host "ГОТОВО. Папка v16:"
+Write-Host 'DONE. v16 folder:'
 Write-Host $V16Root
-Write-Host 'Запустите: ZAPUSK_V16.bat'
-Write-Host 'Заголовок окна: v16 polygon edit'
+Write-Host 'Run: ZAPUSK_V16.bat'
+Write-Host 'Window title must say: v16 polygon edit'
 Write-Host '============================================'

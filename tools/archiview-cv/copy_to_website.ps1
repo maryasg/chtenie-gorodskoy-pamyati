@@ -23,11 +23,11 @@ if (-not $CardId -and -not $NoPrompt) {
     Write-Host '  MOSCOW_003 - Dom so zveryami'
     Write-Host '  MOSCOW_004 - Dom s vyveskoy Falkevicha (Krivokolennyy)'
     Write-Host '  MOSCOW_002 - when added to json'
-    $CardId = Read-Host 'CardId (required — no default)'
+    $CardId = Read-Host 'CardId (required - no default)'
 }
 $CardId = Normalize-CardId $CardId
 if (-not $CardId) {
-    Write-Host 'ERROR: CardId is required (MOSCOW_001, MOSCOW_003, …).'
+    Write-Host 'ERROR: CardId is required (MOSCOW_001, MOSCOW_003, ...).'
     if (-not $NoPrompt) { Read-Host 'Press Enter to close' }
     exit 1
 }

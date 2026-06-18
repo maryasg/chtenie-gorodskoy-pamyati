@@ -34,6 +34,6 @@ Write-Host 'Or double-click: ZAPUSK_V16.bat' -ForegroundColor Cyan
 Write-Host '============================================' -ForegroundColor Cyan
 Write-Host ''
 Write-Host 'Window title must say: v16 polygon edit' -ForegroundColor Green
-Write-Host 'NOT v15 — if you see v15, you opened the wrong folder.' -ForegroundColor Yellow
+Write-Host 'NOT v15 - if you see v15, you opened the wrong folder.' -ForegroundColor Yellow
 
 Start-Process explorer.exe $v16.FullName
