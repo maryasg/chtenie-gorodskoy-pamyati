@@ -1,31 +1,40 @@
 # Archiview CV v16
 
 **Отдельная папка на рабочем столе:** `archiview_cv_easy_v16_package`  
-**Старая стабильная v15** остаётся в `archiview_cv_easy_v15_package` — не трогаем.
+**Стабильная v15** остаётся в `archiview_cv_easy_v15_package` — не трогаем.
 
-## Первый раз: создать папку v16
+## Первый раз: создать папку v16 (только cmd)
 
-```powershell
-cd C:\Users\Marusia\Projects\chtenie-gorodskoy-pamyati\tools\archiview-cv
+Откройте **cmd** (не PowerShell):
+
+```bat
+cd C:\Users\Marusia\Projects\chtenie-gorodskoy-pamyati
 git pull
-powershell -ExecutionPolicy Bypass -File .\setup_v16_desktop.ps1
+cd tools\archiview-cv
+setup_v16_desktop.bat
 ```
 
-Откроется папка v16. В ней:
+Скрипт создаст папку v16 на рабочем столе и скопирует туда файлы.
+
+В папке **archiview_cv_easy_v16_package** на рабочем столе:
 
 ```bat
 install_windows.bat
 ZAPUSK_V16.bat
 ```
 
-В заголовке окна: **v16 polygon edit**. Зелёная строка: **★ Archiview CV v16 ★**.  
-Если **v15** — вы в папке `archiview_cv_easy_v15_package` (не та).
+**Проверка:** заголовок окна — **v16 polygon edit**, зелёная строка **★ Archiview CV v16 ★**.  
+Если видите **v15** — открыта папка `archiview_cv_easy_v15_package` (не та).
 
 ## Обновление после git pull
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\setup_v16_desktop.ps1
+```bat
+cd C:\Users\Marusia\Projects\chtenie-gorodskoy-pamyati\tools\archiview-cv
+git pull
+setup_v16_desktop.bat
 ```
+
+Потом снова **ZAPUSK_V16.bat** из папки v16 на рабочем столе.
 
 ## Редактирование областей (новое в v16)
 
@@ -42,14 +51,18 @@ powershell -ExecutionPolicy Bypass -File .\setup_v16_desktop.ps1
 
 В режиме «два окна» (разные ракурсы) редактирование точек пока недоступно — только overlay (одно окно).
 
+На вкладке **Разметка** — кнопки **+** и **−** для масштаба, колесо мыши тоже работает.
+
 ## На сайт
 
 «На сайт» или `copy_to_website.bat` → GitHub Desktop → Push.
 
 ## Если разметка пропала
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\restore_markup_from_website.ps1 -CardId MOSCOW_003
+Из папки v16 на рабочем столе (или из `tools\archiview-cv`):
+
+```bat
+restore_markup_from_website.bat MOSCOW_003
 ```
 
 (укажите свой CardId)
