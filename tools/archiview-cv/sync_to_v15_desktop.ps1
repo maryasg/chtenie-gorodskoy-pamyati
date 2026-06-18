@@ -68,4 +68,4 @@ Write-Host 'OK: run_gui_windows.bat (v15 launcher)'
 
 Write-Host ''
 Write-Host "Synced Archiview v15 to: $V15Root"
-Write-Host 'Run run_gui_windows.bat — title should say v15 (not v16).'
+Write-Host 'Run run_gui_windows.bat - title should say v15 (not v16).'

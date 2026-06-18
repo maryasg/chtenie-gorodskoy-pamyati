@@ -32,7 +32,7 @@ if (-not (Test-Path -LiteralPath $V15Root)) {
 if (Test-Path -LiteralPath $V16Root) {
     Write-Host "v16 folder already exists:"
     Write-Host "  $V16Root"
-    Write-Host 'Skip copy — will only update files.'
+    Write-Host 'Skip copy - will only update files.'
     exit 0
 }
 
