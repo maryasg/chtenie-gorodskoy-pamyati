@@ -10202,11 +10202,33 @@ class AppV16(AppV15):
         self._markup_pending_insert_point: Optional[Point] = None
         super()._build_ui()
         self.title(f"Archiview CV {APP_VERSION}")
-        self.bind_all("<KeyPress-Delete>", self._on_markup_edit_delete_key, add="+")
+        self._install_v16_delete_bindings()
         self._log(
             "v16: «Редактировать точки» — тянуть вершины; клик по линии — новая точка; "
-            "Delete — убрать выбранную вершину (минимум 3 точки).\n"
+            "Delete / Backspace или кнопка — убрать выбранную вершину (минимум 3 точки).\n"
         )
+
+    def _install_v16_delete_bindings(self) -> None:
+        """Replace v13 «Delete = удалить последнюю область» while editing vertices."""
+        self.bind("<Delete>", self._on_markup_v16_delete_key)
+        self.bind("<BackSpace>", self._on_markup_v16_delete_key)
+
+    def _on_markup_v16_delete_key(self, event: tk.Event) -> Optional[str]:
+        if self._widget_accepts_typing(event.widget):
+            return None
+        if self._markup_edit_list_index is not None:
+            if self._markup_edit_active_vertex is None:
+                messagebox.showinfo(
+                    "Точка не выбрана",
+                    "Сначала кликните по жёлтой точке полигона,\n"
+                    "которую хотите удалить (она станет белой).",
+                )
+                return "break"
+            if self._delete_markup_edit_active_vertex():
+                return "break"
+            return "break"
+        self._undo_markup_polygon()
+        return "break"
 
     def _inject_markup_regions_panel(self) -> None:
         tools = self._markup_tools_inner()
@@ -10235,6 +10257,11 @@ class AppV16(AppV15):
             box,
             text="Завершить редактирование",
             command=self._end_markup_edit,
+        ).pack(fill="x", padx=8, pady=(0, 4))
+        ttk.Button(
+            box,
+            text="Удалить выбранную точку",
+            command=self._delete_markup_edit_active_vertex,
         ).pack(fill="x", padx=8, pady=(0, 4))
         ttk.Button(
             box,
@@ -10342,6 +10369,7 @@ class AppV16(AppV15):
         if vertex is not None:
             self._markup_edit_drag_vertex = vertex
             self._markup_edit_active_vertex = vertex
+            self._draw_markup_edit_handles()
             return True
         insert_at = self._markup_insert_on_nearest_edge(img_pt, pts, scale)
         if insert_at is not None and self._markup_pending_insert_point is not None:
@@ -10372,30 +10400,56 @@ class AppV16(AppV15):
         self._refresh_markup_canvas()
         return True
 
-    def _on_markup_edit_delete_key(self, event: tk.Event) -> Optional[str]:
-        if self._widget_accepts_typing(event.widget):
-            return None
+    def _delete_markup_edit_active_vertex(self) -> bool:
         if self._markup_edit_list_index is None:
-            return None
+            messagebox.showinfo(
+                "Режим редактирования",
+                "Сначала нажмите «Редактировать точки выбранной области».",
+            )
+            return False
         if self._markup_edit_active_vertex is None:
-            return None
+            messagebox.showinfo(
+                "Точка не выбрана",
+                "Кликните по жёлтой точке полигона (она станет белой), затем удалите.",
+            )
+            return False
         ann = self._markup_edit_annotation()
         if ann is None:
-            return None
+            return False
         pts = self._markup_edit_polygon_points(ann)
         if len(pts) <= 3:
             messagebox.showinfo("Нельзя удалить", "У полигона должно остаться минимум 3 точки.")
-            return "break"
+            return False
         vi = self._markup_edit_active_vertex
         if vi < 0 or vi >= len(pts):
-            return None
+            return False
         del pts[vi]
         self._markup_write_polygon_points(ann, pts)
         self._markup_edit_active_vertex = None
         self._markup_edit_drag_vertex = None
         self._mark_dirty()
         self._refresh_markup_canvas()
-        return "break"
+        return True
+
+    def _on_markup_edit_delete_key(self, event: tk.Event) -> Optional[str]:
+        if self._widget_accepts_typing(event.widget):
+            return None
+        if self._delete_markup_edit_active_vertex():
+            return "break"
+        return "break" if self._markup_edit_list_index is not None else None
+
+    def _undo_markup_polygon(self) -> None:
+        if self._markup_edit_list_index is not None:
+            if self._markup_edit_active_vertex is not None:
+                self._delete_markup_edit_active_vertex()
+            else:
+                messagebox.showinfo(
+                    "Точка не выбрана",
+                    "В режиме редактирования Delete удаляет точку.\n"
+                    "Сначала кликните по жёлтой вершине полигона.",
+                )
+            return
+        super()._undo_markup_polygon()
 
     def _markup_click(self, event: tk.Event) -> Optional[str]:
         if self._markup_edit_list_index is not None and not self._space_down:
