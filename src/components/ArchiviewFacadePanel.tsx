@@ -74,9 +74,12 @@ function getTraceId(ann: ArchiviewAnnotation): string | undefined {
   return ann.traceId
 }
 
-function shortText(text: string, maxLength = 140): string {
+function shortText(text: string, maxLength = 260): string {
   if (text.length <= maxLength) return text
-  return `${text.slice(0, maxLength).trim()}...`
+  const shortened = text.slice(0, maxLength)
+  const sentenceEnd = Math.max(shortened.lastIndexOf('.'), shortened.lastIndexOf('!'), shortened.lastIndexOf('?'))
+  if (sentenceEnd > maxLength * 0.55) return shortened.slice(0, sentenceEnd + 1)
+  return `${shortened.trim()}...`
 }
 
 export function ArchiviewFacadePanel({

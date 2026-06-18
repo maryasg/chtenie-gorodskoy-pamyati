@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { ARPage } from './pages/ARPage'
 import { BuildingPage } from './pages/BuildingPage'
+import { CuratorReviewPage } from './pages/CuratorReviewPage'
 import { ExplorerPage } from './pages/ExplorerPage'
 import { MapPage } from './pages/MapPage'
 import { MethodPage } from './pages/MethodPage'
@@ -18,6 +19,7 @@ export default function App() {
           <Route path="explorer" element={<ExplorerPage />} />
           <Route path="building/:id" element={<BuildingPage />} />
           <Route path="building/:id/ar" element={<ARPage />} />
+          <Route path="curator/:id" element={<CuratorReviewPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
