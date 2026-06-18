@@ -308,9 +308,9 @@
     {
       "id": 11,
       "class": "lost_decor",
-      "label_ru": "Утраченный декор",
+      "label_ru": "Утраченная декоративная решётка",
       "comment": "",
-      "traceId": "MOSCOW_003_T003",
+      "traceId": "MOSCOW_003_T007",
       "polygon": [
         [
           1100.1371087928464,
