@@ -3814,15 +3814,6 @@ class App(tk.Tk):
             return
         if hasattr(self, "markup_background_mode"):
             self.markup_background_mode.set("overlay")
-        # Reset zoom only once per work folder — not on every canvas refresh (that broke the wheel).
-        outdir = str(Path(self.outdir.get()).resolve()) if self.outdir.get() else ""
-        if getattr(self, "_overlay_zoom_reset_for", None) == outdir:
-            return
-        self._overlay_zoom_reset_for = outdir
-        if hasattr(self, "markup_zoom"):
-            self.markup_zoom = 1.0
-            self.markup_pan_x = 0.0
-            self.markup_pan_y = 0.0
 
     def _markup_uses_dual_panels(self) -> bool:
         return bool(self._is_side_by_side_project())
@@ -5245,7 +5236,6 @@ class App(tk.Tk):
         self.embedded_annotations = []
         self.current_markup_points = []
         self._annotation_loaded_for = None
-        self._overlay_zoom_reset_for = None
         if hasattr(self, "_preview_base_cache"):
             self._preview_base_cache.clear()
 
@@ -8871,6 +8861,11 @@ class AppV13(AppV12):
         ttk.Button(action_box, text="Очистить всё", command=self._clear_markup_all).pack(fill="x", padx=8, pady=3)
         tk.Button(action_box, text="СОХРАНИТЬ РАЗМЕТКУ И ПЕРЕЙТИ К РЕЗУЛЬТАТУ", command=self._save_markup_annotations, bg="#0b7a3b", fg="white", activebackground="#075a2c", activeforeground="white", font=("TkDefaultFont", 9, "bold"), padx=8, pady=8).pack(fill="x", padx=8, pady=(9, 3))
         ttk.Button(action_box, text="Сбросить приближение", command=self._reset_markup_zoom_and_refresh).pack(fill="x", padx=8, pady=3)
+        zoom_row = ttk.Frame(action_box)
+        zoom_row.pack(fill="x", padx=8, pady=3)
+        ttk.Label(zoom_row, text="Масштаб:").pack(side="left")
+        ttk.Button(zoom_row, text=" + ", width=4, command=lambda: self._markup_zoom_step(1)).pack(side="left", padx=(6, 2))
+        ttk.Button(zoom_row, text=" − ", width=4, command=lambda: self._markup_zoom_step(-1)).pack(side="left", padx=2)
         ttk.Button(action_box, text="Открыть папку результата", command=lambda: open_path(Path(self.outdir.get()))).pack(fill="x", padx=8, pady=3)
         ttk.Label(tools, textvariable=self.markup_status, wraplength=285, foreground="#555").grid(row=5, column=0, sticky="ew", padx=10, pady=(8, 10))
 
@@ -8883,9 +8878,6 @@ class AppV13(AppV12):
         self.markup_canvas.bind("<Configure>", lambda _e: self._schedule_markup_refresh(delay=120))
         self.markup_canvas.bind("<Button-1>", self._markup_click)
         self.markup_canvas.bind("<Double-Button-1>", lambda _e: self._finish_markup_polygon())
-        self.markup_canvas.bind("<MouseWheel>", self._markup_mousewheel)
-        self.markup_canvas.bind("<Button-4>", self._markup_mousewheel)
-        self.markup_canvas.bind("<Button-5>", self._markup_mousewheel)
         self.markup_canvas.bind("<ButtonPress-2>", self._markup_pan_begin)
         self.markup_canvas.bind("<B2-Motion>", self._markup_pan_move)
         self.markup_canvas.bind("<ButtonPress-3>", self._markup_pan_begin)
@@ -8914,38 +8906,75 @@ class AppV13(AppV12):
         ch = max(10, self.markup_canvas.winfo_height())
         return min(cw / float(w), ch / float(h), 1.0)
 
+    def _markup_zoom_canvas(self) -> tk.Canvas:
+        if self._markup_uses_dual_panels():
+            hist = getattr(self, "markup_canvas_by_side", {}).get("historical")
+            if hist is not None:
+                return hist
+        return self.markup_canvas
+
+    def _markup_zoom_image_size(self, canvas: tk.Canvas) -> Tuple[int, int]:
+        if (
+            self._markup_uses_dual_panels()
+            and canvas in getattr(self, "markup_canvas_by_side", {}).values()
+        ):
+            side = next((s for s, c in self.markup_canvas_by_side.items() if c is canvas), "historical")
+            img = self._side_rectified_pil(side)
+            return img.width, img.height
+        disp = getattr(self, "markup_display", (1.0, 0, 0, 0, 0))
+        scale, _ox, _oy, dw, dh = disp
+        if dw > 0 and dh > 0 and scale > 1e-9:
+            return max(1, int(round(dw / scale))), max(1, int(round(dh / scale)))
+        return self._markup_current_full_size()
+
+    def _markup_zoom_step(self, direction: int, focal_x: Optional[int] = None, focal_y: Optional[int] = None) -> None:
+        canvas = self._markup_zoom_canvas()
+        cw = max(10, canvas.winfo_width())
+        ch = max(10, canvas.winfo_height())
+        w, h = self._markup_zoom_image_size(canvas)
+        base = min(cw / float(w), ch / float(h), 1.0)
+        old_zoom = float(getattr(self, "markup_zoom", 1.0))
+        old_scale = base * old_zoom
+        old_ox = (cw - w * old_scale) / 2.0 + self.markup_pan_x
+        old_oy = (ch - h * old_scale) / 2.0 + self.markup_pan_y
+        fx = float(focal_x if focal_x is not None else cw / 2.0)
+        fy = float(focal_y if focal_y is not None else ch / 2.0)
+        img_x = (fx - old_ox) / max(old_scale, 1e-9)
+        img_y = (fy - old_oy) / max(old_scale, 1e-9)
+        factor = 1.18 if direction > 0 else 1 / 1.18
+        new_zoom = max(1.0, min(6.0, old_zoom * factor))
+        self.markup_zoom = new_zoom
+        new_scale = base * new_zoom
+        self.markup_pan_x = fx - img_x * new_scale - (cw - w * new_scale) / 2.0
+        self.markup_pan_y = fy - img_y * new_scale - (ch - h * new_scale) / 2.0
+        self._schedule_markup_refresh(delay=20)
+
+    def _bind_markup_wheel_navigation(self, *widgets: tk.Widget) -> None:
+        for widget in widgets:
+            if widget is None:
+                continue
+            for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+                widget.bind(seq, self._markup_mousewheel)
+            if isinstance(widget, tk.Canvas):
+                widget.bind("<Enter>", lambda _e, c=widget: c.focus_set(), add="+")
+
     def _markup_mousewheel(self, event: tk.Event) -> str:
         try:
-            canvas = event.widget if isinstance(event.widget, tk.Canvas) else self.markup_canvas
-            cw = max(10, canvas.winfo_width())
-            ch = max(10, canvas.winfo_height())
-            if self._markup_uses_dual_panels() and canvas in getattr(self, "markup_canvas_by_side", {}).values():
-                side = next((s for s, c in self.markup_canvas_by_side.items() if c is canvas), "historical")
-                img = self._side_rectified_pil(side)
-                w, h = img.width, img.height
-            else:
-                w, h = self._markup_current_full_size()
-            base = min(cw / float(w), ch / float(h), 1.0)
-            old_zoom = float(self.markup_zoom)
-            old_scale = base * old_zoom
-            old_ox = (cw - w * old_scale) / 2.0 + self.markup_pan_x
-            old_oy = (ch - h * old_scale) / 2.0 + self.markup_pan_y
-            img_x = (event.x - old_ox) / max(old_scale, 1e-9)
-            img_y = (event.y - old_oy) / max(old_scale, 1e-9)
-            direction = 1
+            canvas = event.widget if isinstance(event.widget, tk.Canvas) else self._markup_zoom_canvas()
+            direction = 0
             if hasattr(event, "delta") and event.delta:
                 direction = 1 if event.delta > 0 else -1
+            elif getattr(event, "num", None) == 4:
+                direction = 1
             elif getattr(event, "num", None) == 5:
                 direction = -1
-            factor = 1.18 if direction > 0 else 1 / 1.18
-            new_zoom = max(1.0, min(6.0, old_zoom * factor))
-            self.markup_zoom = new_zoom
-            new_scale = base * new_zoom
-            desired_ox = event.x - img_x * new_scale
-            desired_oy = event.y - img_y * new_scale
-            self.markup_pan_x = desired_ox - (cw - w * new_scale) / 2.0
-            self.markup_pan_y = desired_oy - (ch - h * new_scale) / 2.0
-            self._schedule_markup_refresh(delay=20)
+            if direction:
+                if isinstance(event.widget, tk.Canvas):
+                    fx, fy = event.x, event.y
+                else:
+                    fx = max(1, canvas.winfo_width()) // 2
+                    fy = max(1, canvas.winfo_height()) // 2
+                self._markup_zoom_step(direction, fx, fy)
         except Exception:
             pass
         return "break"
@@ -9275,6 +9304,10 @@ class AppV14(AppV13):
 
     def _upgrade_markup_canvas_navigation(self) -> None:
         self.markup_canvas.bind("<B1-Motion>", self._markup_b1_motion, add="+")
+        if hasattr(self, "markup_canvas"):
+            view = self.markup_canvas.master
+            if view is not None:
+                self._bind_markup_wheel_navigation(view, self.markup_canvas)
         help_old = (
             "Колесо — zoom. Пробел + ЛКМ — двигать изображение. "
             "Средняя/правая кнопка — тоже перемещение."
@@ -9816,10 +9849,9 @@ class AppV15(AppV14):
             canvas.bind("<Configure>", lambda _e, s=side: self._schedule_dual_markup_refresh(s, delay=120))
             canvas.bind("<Button-1>", lambda e, s=side: self._markup_click_side(s, e))
             canvas.bind("<Double-Button-1>", lambda _e, s=side: self._finish_markup_polygon_side(s))
-            canvas.bind("<MouseWheel>", self._markup_mousewheel)
-            canvas.bind("<Button-4>", self._markup_mousewheel)
-            canvas.bind("<Button-5>", self._markup_mousewheel)
             self.markup_canvas_by_side[side] = canvas
+
+        self._bind_markup_wheel_navigation(*self.markup_canvas_by_side.values())
 
         self._dual_markup_container.grid_remove()
 
