@@ -5,11 +5,27 @@ set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
 set ARCHIVIEW_APP_VERSION=16
 
+echo.
+echo ============================================
+echo   ARCHIVIEW CV v16
+echo   Papka: %~dp0
+echo ============================================
+echo.
+echo Esli v zagolovke okna "v15" - vy v ne tot papke!
+echo Nuzhna papka: archiview_cv_easy_v16_package
+echo.
+
 if not exist "archiview_gui.py" (
     echo ERROR: archiview_gui.py not found in:
     echo   %~dp0
     pause
     exit /b 1
+)
+
+findstr /C:"class AppV16" archiview_gui.py >nul 2>&1
+if errorlevel 1 (
+    echo WARNING: staryj archiview_gui.py bez v16. Zapustite sync_to_v16_desktop.ps1
+    pause
 )
 
 if exist ".venv\Scripts\python.exe" (
