@@ -104,7 +104,9 @@ except Exception:
     ComparisonsTabFrame = None  # type: ignore[assignment,misc]
     MyProjectsPanel = None  # type: ignore[assignment,misc]
 
-APP_VERSION = "v15 projects + hand cursor + delete any region"
+APP_VERSION_V15 = "v15 projects + hand cursor + delete any region"
+APP_VERSION_V16 = "v16 polygon edit + stable site links"
+APP_VERSION = APP_VERSION_V16
 APP_DIR = Path(__file__).resolve().parent
 SCRIPT = APP_DIR / "archiview_cv.py"
 USER_AGENT = "ArchiviewCV-v13/0.1 desktop research tool"
@@ -9742,6 +9744,8 @@ class AppV15(AppV14):
     CURSOR_DEFAULT = ""
 
     def _build_ui(self) -> None:
+        global APP_VERSION
+        APP_VERSION = APP_VERSION_V15
         super()._build_ui()
         self.title(f"Archiview CV {APP_VERSION}")
         self.markup_drawing_side = "historical"
@@ -10162,5 +10166,372 @@ class AppV15(AppV14):
             self._refresh_markup_regions_list()
 
 
+# ---------------------------------------------------------------------------
+# v16: редактирование вершин полигонов + стабильные id при удалении
+# ---------------------------------------------------------------------------
+
+class AppV16(AppV15):
+    """v16 — правка точек области без перерисовки; новые области — новый id."""
+
+    MARKUP_VERTEX_HIT_PX = 12.0
+    MARKUP_EDGE_HIT_PX = 10.0
+
+    def _build_ui(self) -> None:
+        global APP_VERSION
+        APP_VERSION = APP_VERSION_V16
+        self._markup_edit_list_index: Optional[int] = None
+        self._markup_edit_drag_vertex: Optional[int] = None
+        self._markup_edit_active_vertex: Optional[int] = None
+        self._markup_pending_insert_point: Optional[Point] = None
+        super()._build_ui()
+        self.title(f"Archiview CV {APP_VERSION}")
+        self.bind_all("<KeyPress-Delete>", self._on_markup_edit_delete_key, add="+")
+        self._log(
+            "v16: «Редактировать точки» — тянуть вершины; клик по линии — новая точка; "
+            "Delete — убрать выбранную вершину (минимум 3 точки).\n"
+        )
+
+    def _inject_markup_regions_panel(self) -> None:
+        tools = self._markup_tools_inner()
+        if tools is None:
+            return
+        for child in tools.winfo_children():
+            info = child.grid_info()
+            if info.get("row") == 5:
+                child.grid(row=6, column=0, sticky="ew", padx=10, pady=(8, 10))
+        box = ttk.LabelFrame(tools, text="Области — выберите, отредактируйте или удалите")
+        box.grid(row=5, column=0, sticky="ew", padx=10, pady=6)
+        row = ttk.Frame(box)
+        row.pack(fill="x", padx=8, pady=6)
+        self.markup_regions_list = tk.Listbox(row, height=6, activestyle="dotbox")
+        scroll = ttk.Scrollbar(row, orient="vertical", command=self.markup_regions_list.yview)
+        self.markup_regions_list.configure(yscrollcommand=scroll.set)
+        self.markup_regions_list.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+        self.markup_regions_list.bind("<<ListboxSelect>>", self._on_markup_region_select)
+        ttk.Button(
+            box,
+            text="Редактировать точки выбранной области",
+            command=self._start_markup_edit_selected,
+        ).pack(fill="x", padx=8, pady=(0, 4))
+        ttk.Button(
+            box,
+            text="Завершить редактирование",
+            command=self._end_markup_edit,
+        ).pack(fill="x", padx=8, pady=(0, 4))
+        ttk.Button(
+            box,
+            text="Удалить выбранную область",
+            command=self._delete_selected_markup_region,
+        ).pack(fill="x", padx=8, pady=(0, 8))
+        self._refresh_markup_regions_list()
+
+    def _markup_event_to_image_point(self, event: tk.Event) -> Optional[Point]:
+        if self._markup_uses_dual_panels():
+            return None
+        scale, ox, oy, dw, dh = self.markup_display
+        if dw <= 0 or dh <= 0:
+            return None
+        x = (event.x - ox) / max(scale, 1e-9)
+        y = (event.y - oy) / max(scale, 1e-9)
+        w, h = self._markup_current_full_size()
+        if x < 0 or y < 0 or x > w or y > h:
+            return None
+        return (float(x), float(y))
+
+    def _markup_edit_annotation(self) -> Optional[dict]:
+        idx = self._markup_edit_list_index
+        if idx is None or idx < 0 or idx >= len(self.embedded_annotations):
+            return None
+        return self.embedded_annotations[idx]
+
+    def _markup_edit_polygon_points(self, ann: dict) -> List[List[float]]:
+        project = self._project_json_dict() or {}
+        side = str(ann.get("image_side") or annotation_image_side(ann, project) or "modern")
+        return [list(p) for p in self._polygon_points_for_markup_display(ann, display_side=side)]
+
+    def _markup_write_polygon_points(self, ann: dict, pts: List[List[float]]) -> None:
+        ann["polygon"] = [[float(x), float(y)] for x, y in pts]
+
+    def _markup_hit_vertex_index(self, img_pt: Point, pts: List[List[float]], scale: float) -> Optional[int]:
+        thr2 = (self.MARKUP_VERTEX_HIT_PX / max(scale, 1e-9)) ** 2
+        best_i: Optional[int] = None
+        best_d = thr2
+        for i, p in enumerate(pts):
+            d = _point_dist2(img_pt, (float(p[0]), float(p[1])))
+            if d <= best_d:
+                best_d = d
+                best_i = i
+        return best_i
+
+    def _markup_insert_on_nearest_edge(self, img_pt: Point, pts: List[List[float]], scale: float) -> Optional[int]:
+        thr2 = (self.MARKUP_EDGE_HIT_PX / max(scale, 1e-9)) ** 2
+        best_insert: Optional[int] = None
+        best_d = thr2
+        n = len(pts)
+        for i in range(n):
+            a = (float(pts[i][0]), float(pts[i][1]))
+            b = (float(pts[(i + 1) % n][0]), float(pts[(i + 1) % n][1]))
+            d2, closest = _closest_point_on_segment(img_pt, a, b)
+            if d2 <= best_d:
+                best_d = d2
+                best_insert = i + 1
+                self._markup_pending_insert_point = closest
+        return best_insert
+
+    def _start_markup_edit_selected(self) -> None:
+        sel = self.markup_regions_list.curselection()
+        if not sel:
+            messagebox.showinfo("Область не выбрана", "Выберите строку в списке «Области».")
+            return
+        if self._markup_uses_dual_panels():
+            messagebox.showinfo(
+                "Редактирование точек",
+                "В режиме «два окна» (разные ракурсы) пока используйте удаление и новую область.\n"
+                "Редактирование вершин работает в overlay-режиме (одно окно разметки).",
+            )
+            return
+        self._markup_edit_list_index = int(sel[0])
+        self._markup_edit_drag_vertex = None
+        self._markup_edit_active_vertex = None
+        self._markup_pending_insert_point = None
+        self._highlight_markup_region_index(self._markup_edit_list_index)
+        self._draw_markup_edit_handles()
+        self._update_markup_status_text()
+
+    def _end_markup_edit(self) -> None:
+        if self._markup_edit_list_index is None:
+            return
+        self._markup_edit_list_index = None
+        self._markup_edit_drag_vertex = None
+        self._markup_edit_active_vertex = None
+        self._markup_pending_insert_point = None
+        if hasattr(self, "markup_canvas"):
+            self.markup_canvas.delete("markup_edit_handle")
+        self._update_markup_status_text()
+
+    def _markup_edit_click(self, event: tk.Event) -> bool:
+        ann = self._markup_edit_annotation()
+        if ann is None:
+            return False
+        img_pt = self._markup_event_to_image_point(event)
+        if img_pt is None:
+            return False
+        scale, _ox, _oy, _dw, _dh = self.markup_display
+        pts = self._markup_edit_polygon_points(ann)
+        if len(pts) < 3:
+            return False
+        vertex = self._markup_hit_vertex_index(img_pt, pts, scale)
+        if vertex is not None:
+            self._markup_edit_drag_vertex = vertex
+            self._markup_edit_active_vertex = vertex
+            return True
+        insert_at = self._markup_insert_on_nearest_edge(img_pt, pts, scale)
+        if insert_at is not None and self._markup_pending_insert_point is not None:
+            cx, cy = self._markup_pending_insert_point
+            pts.insert(insert_at, [cx, cy])
+            self._markup_write_polygon_points(ann, pts)
+            self._markup_edit_active_vertex = insert_at
+            self._markup_edit_drag_vertex = None
+            self._refresh_markup_canvas()
+            return True
+        return False
+
+    def _markup_edit_drag(self, event: tk.Event) -> bool:
+        if self._markup_edit_drag_vertex is None:
+            return False
+        ann = self._markup_edit_annotation()
+        if ann is None:
+            return False
+        img_pt = self._markup_event_to_image_point(event)
+        if img_pt is None:
+            return False
+        pts = self._markup_edit_polygon_points(ann)
+        vi = self._markup_edit_drag_vertex
+        if vi is None or vi < 0 or vi >= len(pts):
+            return False
+        pts[vi] = [img_pt[0], img_pt[1]]
+        self._markup_write_polygon_points(ann, pts)
+        self._refresh_markup_canvas()
+        return True
+
+    def _on_markup_edit_delete_key(self, event: tk.Event) -> Optional[str]:
+        if self._widget_accepts_typing(event.widget):
+            return None
+        if self._markup_edit_list_index is None:
+            return None
+        if self._markup_edit_active_vertex is None:
+            return None
+        ann = self._markup_edit_annotation()
+        if ann is None:
+            return None
+        pts = self._markup_edit_polygon_points(ann)
+        if len(pts) <= 3:
+            messagebox.showinfo("Нельзя удалить", "У полигона должно остаться минимум 3 точки.")
+            return "break"
+        vi = self._markup_edit_active_vertex
+        if vi < 0 or vi >= len(pts):
+            return None
+        del pts[vi]
+        self._markup_write_polygon_points(ann, pts)
+        self._markup_edit_active_vertex = None
+        self._markup_edit_drag_vertex = None
+        self._mark_dirty()
+        self._refresh_markup_canvas()
+        return "break"
+
+    def _markup_click(self, event: tk.Event) -> Optional[str]:
+        if self._markup_edit_list_index is not None and not self._space_down:
+            if self._markup_edit_click(event):
+                self._mark_dirty()
+            return "break"
+        return super()._markup_click(event)
+
+    def _markup_b1_motion(self, event: tk.Event) -> Optional[str]:
+        if self._markup_edit_drag_vertex is not None and not self._space_down:
+            if self._markup_edit_drag(event):
+                self._mark_dirty()
+                return "break"
+        return super()._markup_b1_motion(event)
+
+    def _markup_pan_end(self, _event: tk.Event) -> None:
+        self._markup_edit_drag_vertex = None
+        super()._markup_pan_end(_event)
+
+    def _draw_markup_vectors(self) -> None:
+        super()._draw_markup_vectors()
+        self._draw_markup_edit_handles()
+
+    def _draw_markup_edit_handles(self) -> None:
+        if self._markup_edit_list_index is None or self._markup_uses_dual_panels():
+            return
+        ann = self._markup_edit_annotation()
+        if ann is None or not hasattr(self, "markup_canvas"):
+            return
+        self.markup_canvas.delete("markup_edit_handle")
+        scale, ox, oy, _dw, _dh = self.markup_display
+        pts = self._markup_edit_polygon_points(ann)
+        active = self._markup_edit_active_vertex
+        for i, p in enumerate(pts):
+            x = ox + float(p[0]) * scale
+            y = oy + float(p[1]) * scale
+            r = 7 if i == active else 5
+            fill = "#ffffff" if i == active else "#ffee88"
+            self.markup_canvas.create_oval(
+                x - r,
+                y - r,
+                x + r,
+                y + r,
+                fill=fill,
+                outline="#1a5fb4",
+                width=2,
+                tags="markup_edit_handle",
+            )
+
+    def _on_markup_region_select(self, _event: tk.Event) -> None:
+        if self._markup_edit_list_index is not None:
+            self._end_markup_edit()
+        sel = self.markup_regions_list.curselection()
+        if not sel:
+            return
+        self._highlight_markup_region_index(sel[0])
+
+    def _delete_selected_markup_region(self) -> None:
+        sel = self.markup_regions_list.curselection()
+        if not sel:
+            messagebox.showinfo("Область не выбрана", "Выберите строку в списке «Области».")
+            return
+        idx = int(sel[0])
+        if idx < 0 or idx >= len(self.embedded_annotations):
+            return
+        ann = self.embedded_annotations[idx]
+        label = ann.get("label_ru") or CLASS_LABELS.get(ann.get("class", ""), "")
+        if not messagebox.askyesno("Удалить область", f"Удалить область {idx + 1}: {label}?"):
+            return
+        if self._markup_edit_list_index == idx:
+            self._end_markup_edit()
+        elif self._markup_edit_list_index is not None and self._markup_edit_list_index > idx:
+            self._markup_edit_list_index -= 1
+        del self.embedded_annotations[idx]
+        self._mark_dirty()
+        self.markup_canvas.delete("markup_highlight")
+        self._draw_markup_vectors()
+        self._refresh_markup_regions_list()
+        self._update_markup_status_text()
+
+    def _save_markup_annotations(self) -> None:
+        if len(self.current_markup_points) >= 3:
+            self._finish_markup_polygon()
+        if not self.embedded_annotations:
+            messagebox.showinfo("Разметки нет", "Сначала обведите хотя бы одну область.")
+            return
+        outdir = Path(self.outdir.get())
+        ann_path = outdir / "annotations" / "manual_annotations.json"
+        before_count = len(self.embedded_annotations)
+        normalized = normalize_annotation_list(list(self.embedded_annotations))
+        after_count = len(normalized)
+        if before_count > 0 and after_count == 0:
+            messagebox.showerror(
+                "Сохранение отменено",
+                "После проверки не осталось ни одной области.\n"
+                "Разметка на диске не перезаписана. "
+                "Если файл уже пустой — восстановите из public/explorer/MOSCOW_NNN/annotations.json "
+                "или из .bak рядом с manual_annotations.json.",
+            )
+            return
+        if after_count < before_count:
+            if not messagebox.askyesno(
+                "Проверьте области",
+                f"Перед сохранением областей было {before_count}, после проверки — {after_count}.\n"
+                "Возможно, часть полигонов слишком мала или совпала с другой.\n\n"
+                "Всё равно сохранить?",
+            ):
+                return
+        if ann_path.exists():
+            backup = ann_path.with_name(ann_path.name + ".bak")
+            try:
+                backup.write_bytes(ann_path.read_bytes())
+            except Exception:
+                backup = None
+        else:
+            backup = None
+        self.embedded_annotations = normalized
+        try:
+            super()._save_markup_annotations()
+        except Exception:
+            if backup is not None and ann_path.exists() and ann_path.stat().st_size < 32:
+                try:
+                    backup.replace(ann_path)
+                except Exception:
+                    pass
+            raise
+
+    def _update_markup_status_text(self) -> None:
+        prefix = "● Есть несохранённые изменения · " if getattr(self, "_markup_dirty", False) else ""
+        edit_note = ""
+        if self._markup_edit_list_index is not None:
+            edit_note = (
+                f"Режим редактирования области {self._markup_edit_list_index + 1}: "
+                "тяните точки, клик по линии — новая точка, Delete — убрать точку. "
+            )
+        self.markup_status.set(
+            prefix
+            + edit_note
+            + f"Областей: {len(self.embedded_annotations)}. "
+            f"Точек: {len(self.current_markup_points)}. "
+            f"Масштаб: {self.markup_zoom:.1f}×"
+        )
+
+
+def _main() -> None:
+    import os
+
+    use_v15 = os.environ.get("ARCHIVIEW_APP_VERSION", "16").strip() == "15"
+    if use_v15:
+        AppV15().mainloop()
+    else:
+        AppV16().mainloop()
+
+
 if __name__ == "__main__":
-    AppV15().mainloop()
+    _main()
