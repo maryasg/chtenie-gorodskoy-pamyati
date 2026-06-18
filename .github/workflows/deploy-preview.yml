@@ -1,0 +1,126 @@
+name: Deploy preview to GitHub Pages
+
+on:
+  workflow_run:
+    workflows: ['Build preview source']
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      preview_ref:
+        description: 'Branch, tag, or SHA to preview'
+        required: true
+        default: 'cursor/curator-hotspot-cards-a0b3'
+      pr_number:
+        description: 'Optional PR number for /pr-preview/pr-N/ URL'
+        required: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    outputs:
+      preview_path: ${{ steps.preview-meta.outputs.path }}
+      preview_url: ${{ steps.preview-meta.outputs.url }}
+    steps:
+      - name: Compute preview URL
+        id: preview-meta
+        run: |
+          repo_name="${GITHUB_REPOSITORY#*/}"
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            preview_ref="${{ github.event.workflow_run.head_sha }}"
+            source_label="${{ github.event.workflow_run.head_branch }}"
+            pr_number="${{ github.event.workflow_run.pull_requests[0].number }}"
+          else
+            preview_ref="${{ inputs.preview_ref }}"
+            source_label="${{ inputs.preview_ref }}"
+            pr_number="${{ inputs.pr_number }}"
+          fi
+
+          if [ -n "${pr_number}" ]; then
+            preview_path="pr-preview/pr-${pr_number}"
+          else
+            safe_ref="${source_label//\//-}"
+            preview_path="branch-preview/${safe_ref}"
+          fi
+
+          base="/${repo_name}/${preview_path}/"
+          url="https://${GITHUB_REPOSITORY_OWNER}.github.io/${repo_name}/${preview_path}/"
+
+          echo "ref=${preview_ref}" >> "$GITHUB_OUTPUT"
+          echo "source_label=${source_label}" >> "$GITHUB_OUTPUT"
+          echo "path=${preview_path}" >> "$GITHUB_OUTPUT"
+          echo "base=${base}" >> "$GITHUB_OUTPUT"
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+
+      - name: Check out preview source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.preview-meta.outputs.ref }}
+          path: preview-src
+
+      - name: Check out current main for site root
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main-src
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: preview-src/package-lock.json
+
+      - name: Build current main site root
+        working-directory: main-src
+        run: |
+          npm ci
+          npm run build
+
+      - name: Stage current main site root
+        run: |
+          mkdir -p site
+          cp -a main-src/dist/. site/
+
+      - name: Build preview site
+        working-directory: preview-src
+        run: |
+          npm ci
+          npm run build -- --base="${{ steps.preview-meta.outputs.base }}"
+
+      - name: Stage preview site
+        run: |
+          preview_path="${{ steps.preview-meta.outputs.path }}"
+          mkdir -p "site/${preview_path}"
+          cp -a preview-src/dist/. "site/${preview_path}/"
+          touch site/.nojekyll
+          cat > "site/${preview_path}/PREVIEW.txt" <<EOF
+          Preview source: ${{ steps.preview-meta.outputs.source_label }}
+          Preview URL: ${{ steps.preview-meta.outputs.url }}
+          EOF
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ needs.build.outputs.preview_url }}
+    steps:
+      - name: Deploy preview to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
