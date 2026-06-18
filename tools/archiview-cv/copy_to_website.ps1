@@ -34,6 +34,12 @@ if (-not $CardId) {
 
 $Web = Join-Path $RepoRoot ("public\explorer\{0}" -f $CardId)
 
+function Write-JsonUtf8NoBom([string]$Path, [object]$Data) {
+    $json = $Data | ConvertTo-Json -Depth 50
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($Path, $json, $utf8NoBom)
+}
+
 function Test-HasExportFiles([string]$Dir) {
     if (-not (Test-Path -LiteralPath $Dir)) { return $false }
     $markers = @(
@@ -60,7 +66,7 @@ function Sanitize-WebsiteAnnotations([string]$Path) {
         }
         if ($leaf -and $leaf -ne $imageRef) {
             $data.image = $leaf
-            $data | ConvertTo-Json -Depth 50 | Set-Content -LiteralPath $Path -Encoding UTF8
+            Write-JsonUtf8NoBom $Path $data
             Write-Host 'OK: annotations.json image path sanitized'
         }
     } catch {
@@ -116,7 +122,7 @@ function Merge-WebsiteTraceIds([string]$Path, [hashtable]$TraceIdByAnnotationId)
             $ann | Add-Member -NotePropertyName traceId -NotePropertyValue $fromSite -Force
             $merged++
         }
-        $data | ConvertTo-Json -Depth 50 | Set-Content -LiteralPath $Path -Encoding UTF8
+        Write-JsonUtf8NoBom $Path $data
         Write-Host "OK: traceId links kept for annotations.json (merged=$merged, unchanged=$kept)"
     } catch {
         Write-Host "WARN: traceId merge failed for ${Path}: $_"
