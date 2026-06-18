@@ -148,4 +148,4 @@ foreach ($targetDir in $targetDirs) {
 
 Write-Host ''
 Write-Host 'Done. Fully quit Archiview (close window), run again, open this project, tab 4 Markup.'
-Write-Host 'Status line should show: Областей: ' + $annCount
+Write-Host ("Regions in status bar (tab 4): " + $annCount)
