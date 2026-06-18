@@ -7,27 +7,25 @@
 
 ```powershell
 cd C:\Users\Marusia\Projects\chtenie-gorodskoy-pamyati\tools\archiview-cv
-powershell -ExecutionPolicy Bypass -File .\bootstrap_v16_desktop.ps1
-powershell -ExecutionPolicy Bypass -File .\sync_to_v16_desktop.ps1
+git pull
+powershell -ExecutionPolicy Bypass -File .\setup_v16_desktop.ps1
 ```
 
-В папке v16 на рабочем столе:
+Откроется папка v16. В ней:
 
 ```bat
 install_windows.bat
-run_gui_windows.bat
+ZAPUSK_V16.bat
 ```
 
-В заголовке окна: **v16 polygon edit + stable site links**.
+В заголовке окна: **v16 polygon edit**. Зелёная строка: **★ Archiview CV v16 ★**.  
+Если **v15** — вы в папке `archiview_cv_easy_v15_package` (не та).
 
 ## Обновление после git pull
 
 ```powershell
-cd C:\Users\Marusia\Projects\chtenie-gorodskoy-pamyati\tools\archiview-cv
-powershell -ExecutionPolicy Bypass -File .\sync_to_v16_desktop.ps1
+powershell -ExecutionPolicy Bypass -File .\setup_v16_desktop.ps1
 ```
-
-v15 обновляется отдельно: `sync_to_v15_desktop.ps1` — в папку v15.
 
 ## Редактирование областей (новое в v16)
 
