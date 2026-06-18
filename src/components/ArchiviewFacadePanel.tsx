@@ -3,6 +3,7 @@ import type { ArchiviewAnnotation, ArchiviewBuildingAssets } from '../data/explo
 import type { Building, MemoryTrace } from '../types/building'
 import { ConfidenceBadge } from './ConfidenceBadge'
 import {
+  polygonAreaAbs,
   polygonCentroid,
   rectifiedPolygonToComparison,
   toPercentPoints,
@@ -242,6 +243,12 @@ export function ArchiviewFacadePanel({
         : null
   const selected = selectedIdx !== null ? regions.find((r) => r.idx === selectedIdx) : null
 
+  /** Large regions (e.g. #12) must not block clicks on smaller ones (#6, #9) underneath. */
+  const regionsForHit = useMemo(
+    () => [...regions].sort((a, b) => polygonAreaAbs(a.polygonPct) - polygonAreaAbs(b.polygonPct)),
+    [regions],
+  )
+
   return (
     <div className="space-y-3">
       <p className="text-sm text-arch-muted">
@@ -306,7 +313,7 @@ export function ArchiviewFacadePanel({
                   viewBox="0 0 100 100"
                   preserveAspectRatio="none"
                 >
-                  {regions.map((r) => (
+                  {regionsForHit.map((r) => (
                     <polygon
                       key={`hit-${r.idx}`}
                       points={r.polygonPct.map(([x, y]) => `${x},${y}`).join(' ')}
