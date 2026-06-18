@@ -7,6 +7,12 @@ Preview-деплой нужен, чтобы посмотреть изменен�
 После пуша в ветку `cursor/...` или обновления Pull Request'а запускается GitHub Actions workflow:
 
 ```txt
+Build preview source
+```
+
+После его успешного завершения автоматически запускается второй workflow:
+
+```txt
 Deploy preview to GitHub Pages
 ```
 
@@ -54,7 +60,12 @@ https://maryasg.github.io/chtenie-gorodskoy-pamyati/branch-preview/ИМЯ-ВЕТ
 
 ## Как это работает технически
 
-Workflow собирает два варианта сайта:
+Preview работает в два шага:
+
+1. `Build preview source` запускается на Pull Request или ветку `cursor/...` и проверяет, что ветка собирается.
+2. `Deploy preview to GitHub Pages` запускается из `main`, забирает нужную ветку и публикует preview.
+
+Второй workflow собирает два варианта сайта:
 
 1. текущий `main` кладётся в корень GitHub Pages, чтобы основной сайт не заменялся содержимым ветки;
 2. preview-ветка или PR кладётся в отдельную подпапку:
@@ -69,6 +80,28 @@ Preview-деплой использует тот же GitHub Pages сайт, ч�
 - preview кладётся в отдельную подпапку.
 
 Если основной deploy из `main` запустится позже, preview-папка может временно исчезнуть. Чтобы вернуть preview, достаточно ещё раз запушить ветку или закрыть/открыть Pull Request.
+
+## Как запустить preview вручную
+
+Если автоматический запуск не сработал или нужно пересобрать preview:
+
+1. Откройте GitHub → **Actions**.
+2. Выберите workflow **Deploy preview to GitHub Pages**.
+3. Нажмите **Run workflow**.
+4. В выпадающем списке ветки выберите `main`.
+5. В поле `preview_ref` укажите ветку, например:
+
+   ```txt
+   cursor/curator-hotspot-cards-a0b3
+   ```
+
+6. Если нужна ссылка вида `/pr-preview/pr-4/`, в поле `pr_number` укажите:
+
+   ```txt
+   4
+   ```
+
+7. Запустите workflow и дождитесь зелёной галочки.
 
 ## Для прямых ссылок внутри preview
 
