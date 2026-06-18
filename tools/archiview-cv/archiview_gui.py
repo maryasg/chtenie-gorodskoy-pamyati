@@ -1350,10 +1350,28 @@ def reverse_geocode_address(lat: float, lon: float) -> Tuple[str, str]:
     return best_display, best_short
 
 
+def _annotation_int_id(ann: dict) -> Optional[int]:
+    try:
+        value = ann.get("id")
+        if value is None:
+            return None
+        parsed = int(value)
+        return parsed if parsed > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def next_annotation_id(annotations: List[dict]) -> int:
+    ids = [_annotation_int_id(ann) for ann in annotations]
+    valid = [item for item in ids if item is not None]
+    return (max(valid) if valid else 0) + 1
+
+
 def normalize_annotation_list(annotations: List[dict]) -> List[dict]:
-    """Убирает дубликаты полигонов и перенумеровывает id."""
+    """Убирает дубликаты полигонов и сохраняет стабильные id областей."""
     seen: set[Tuple[str, Tuple[Tuple[float, float], ...]]] = set()
     out: List[dict] = []
+    used_ids: set[int] = set()
     for ann in annotations:
         if not isinstance(ann, dict):
             continue
@@ -1376,9 +1394,14 @@ def normalize_annotation_list(annotations: List[dict]) -> List[dict]:
         seen.add(key)
         clean = dict(ann)
         clean["polygon"] = [[float(x), float(y)] for x, y in pts]
+        ann_id = _annotation_int_id(clean)
+        if ann_id is None or ann_id in used_ids:
+            ann_id = next_annotation_id(out)
+            while ann_id in used_ids:
+                ann_id += 1
+        clean["id"] = ann_id
+        used_ids.add(ann_id)
         out.append(clean)
-    for idx, ann in enumerate(out, start=1):
-        ann["id"] = idx
     return out
 
 
@@ -6545,6 +6568,9 @@ map.on('click',e=>{{
                     "Скопировано на сайт",
                     f"Папка сайта обновлена: public/explorer/{card_id}/\n"
                     f"Код взят из поля «Код на сайте»: {card_id}\n\n"
+                    "Связи traceId для существующих областей (по номеру id) сохранены с сайта.\n"
+                    "Новые области появятся на сайте без кураторского текста — "
+                    "привяжите их на кураторской странице.\n\n"
                     "Дальше в GitHub Desktop: Commit → Push.\n\n" + text,
                 )
 
@@ -7384,7 +7410,7 @@ class AppV11(App):
             return
         cls = self.markup_class.get()
         ann = self._decorate_markup_annotation({
-            "id": len(self.embedded_annotations) + 1,
+            "id": next_annotation_id(self.embedded_annotations),
             "class": cls,
             "label_ru": CLASS_LABELS.get(cls, cls),
             "comment": self.markup_comment.get().strip(),
@@ -7908,7 +7934,7 @@ class AppV12(AppV11):
             return
         cls = self.markup_class.get()
         ann = self._decorate_markup_annotation({
-            "id": len(self.embedded_annotations) + 1,
+            "id": next_annotation_id(self.embedded_annotations),
             "class": cls,
             "label_ru": CLASS_LABELS.get(cls, cls),
             "comment": self.markup_comment.get().strip(),
@@ -9904,7 +9930,7 @@ class AppV15(AppV14):
         cls = self.markup_class.get()
         ann = self._decorate_markup_annotation(
             {
-                "id": len(self.embedded_annotations) + 1,
+                "id": next_annotation_id(self.embedded_annotations),
                 "class": cls,
                 "label_ru": CLASS_LABELS.get(cls, cls),
                 "comment": self.markup_comment.get().strip(),
