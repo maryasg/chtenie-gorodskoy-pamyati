@@ -10373,7 +10373,7 @@ class AppV16(AppV15):
         if self._markup_edit_list_index is not None and not self._space_down:
             if self._markup_edit_click(event):
                 self._mark_dirty()
-                return "break"
+            return "break"
         return super()._markup_click(event)
 
     def _markup_b1_motion(self, event: tk.Event) -> Optional[str]:
@@ -10447,6 +10447,53 @@ class AppV16(AppV15):
         self._draw_markup_vectors()
         self._refresh_markup_regions_list()
         self._update_markup_status_text()
+
+    def _save_markup_annotations(self) -> None:
+        if len(self.current_markup_points) >= 3:
+            self._finish_markup_polygon()
+        if not self.embedded_annotations:
+            messagebox.showinfo("Разметки нет", "Сначала обведите хотя бы одну область.")
+            return
+        outdir = Path(self.outdir.get())
+        ann_path = outdir / "annotations" / "manual_annotations.json"
+        before_count = len(self.embedded_annotations)
+        normalized = normalize_annotation_list(list(self.embedded_annotations))
+        after_count = len(normalized)
+        if before_count > 0 and after_count == 0:
+            messagebox.showerror(
+                "Сохранение отменено",
+                "После проверки не осталось ни одной области.\n"
+                "Разметка на диске не перезаписана. "
+                "Если файл уже пустой — восстановите из public/explorer/MOSCOW_NNN/annotations.json "
+                "или из .bak рядом с manual_annotations.json.",
+            )
+            return
+        if after_count < before_count:
+            if not messagebox.askyesno(
+                "Проверьте области",
+                f"Перед сохранением областей было {before_count}, после проверки — {after_count}.\n"
+                "Возможно, часть полигонов слишком мала или совпала с другой.\n\n"
+                "Всё равно сохранить?",
+            ):
+                return
+        if ann_path.exists():
+            backup = ann_path.with_name(ann_path.name + ".bak")
+            try:
+                backup.write_bytes(ann_path.read_bytes())
+            except Exception:
+                backup = None
+        else:
+            backup = None
+        self.embedded_annotations = normalized
+        try:
+            super()._save_markup_annotations()
+        except Exception:
+            if backup is not None and ann_path.exists() and ann_path.stat().st_size < 32:
+                try:
+                    backup.replace(ann_path)
+                except Exception:
+                    pass
+            raise
 
     def _update_markup_status_text(self) -> None:
         prefix = "● Есть несохранённые изменения · " if getattr(self, "_markup_dirty", False) else ""

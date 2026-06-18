@@ -31,6 +31,7 @@ $files = @(
     'update_website_registry.ps1',
     'export_facade_project.ps1',
     'export_moscow001_from_v15.ps1',
+    'restore_markup_from_website.ps1',
     'website_buildings.json',
     'README_v16_ru.md',
     'archiview_gui.py',

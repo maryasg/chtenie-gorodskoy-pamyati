@@ -49,10 +49,16 @@ powershell -ExecutionPolicy Bypass -File .\sync_to_v16_desktop.ps1
 | **5. Результат** | Итог |
 | **6. Отдельно выпрямить** | Одно фото |
 
-## На сайт
+## Если разметка пропала в Archiview
 
-1. **«На сайт»** в Archiview или `copy_to_website.bat`
-2. GitHub Desktop → Commit → Push
-3. Ctrl+F5 на сайте
+1. Проверьте **другое сравнение** (★) во вкладке «Сравнения».
+2. Рядом с `manual_annotations.json` может быть **`manual_annotations.json.bak`** — переименуйте в `.json`.
+3. Восстановление с сайта (дом со зверями = MOSCOW_003):
 
-Подробнее: `README.md`, `КАК_РАБОТАЕТ_ПАПКА_ПРОЕКТА_ru.md`.
+```powershell
+cd C:\Users\Marusia\Projects\chtenie-gorodskoy-pamyati\tools\archiview-cv
+powershell -ExecutionPolicy Bypass -File .\restore_markup_from_website.ps1 -CardId MOSCOW_003
+```
+
+Скрипт спросит имя папки проекта в `archiview_projects` и скопирует `annotations.json` с сайта обратно в Archiview.
+
