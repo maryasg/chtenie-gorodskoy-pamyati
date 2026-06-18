@@ -3814,6 +3814,11 @@ class App(tk.Tk):
             return
         if hasattr(self, "markup_background_mode"):
             self.markup_background_mode.set("overlay")
+        # Reset zoom only once per work folder — not on every canvas refresh (that broke the wheel).
+        outdir = str(Path(self.outdir.get()).resolve()) if self.outdir.get() else ""
+        if getattr(self, "_overlay_zoom_reset_for", None) == outdir:
+            return
+        self._overlay_zoom_reset_for = outdir
         if hasattr(self, "markup_zoom"):
             self.markup_zoom = 1.0
             self.markup_pan_x = 0.0
@@ -5240,6 +5245,7 @@ class App(tk.Tk):
         self.embedded_annotations = []
         self.current_markup_points = []
         self._annotation_loaded_for = None
+        self._overlay_zoom_reset_for = None
         if hasattr(self, "_preview_base_cache"):
             self._preview_base_cache.clear()
 
@@ -8910,9 +8916,15 @@ class AppV13(AppV12):
 
     def _markup_mousewheel(self, event: tk.Event) -> str:
         try:
-            cw = max(10, self.markup_canvas.winfo_width())
-            ch = max(10, self.markup_canvas.winfo_height())
-            w, h = self._markup_current_full_size()
+            canvas = event.widget if isinstance(event.widget, tk.Canvas) else self.markup_canvas
+            cw = max(10, canvas.winfo_width())
+            ch = max(10, canvas.winfo_height())
+            if self._markup_uses_dual_panels() and canvas in getattr(self, "markup_canvas_by_side", {}).values():
+                side = next((s for s, c in self.markup_canvas_by_side.items() if c is canvas), "historical")
+                img = self._side_rectified_pil(side)
+                w, h = img.width, img.height
+            else:
+                w, h = self._markup_current_full_size()
             base = min(cw / float(w), ch / float(h), 1.0)
             old_zoom = float(self.markup_zoom)
             old_scale = base * old_zoom
@@ -9761,6 +9773,7 @@ class AppV15(AppV14):
         self._log(
             "v15: курсор-рука при пробеле и перетаскивании; в списке «Области» можно удалить любую.\n"
             "v15: разные ракурсы — две отдельные области разметки (история / современность).\n"
+            "v15: редактирование точек полигона — в отдельной папке v16 (см. README_v16_ru.md).\n"
         )
 
     def _setup_dual_markup_panels(self) -> None:
@@ -9803,6 +9816,9 @@ class AppV15(AppV14):
             canvas.bind("<Configure>", lambda _e, s=side: self._schedule_dual_markup_refresh(s, delay=120))
             canvas.bind("<Button-1>", lambda e, s=side: self._markup_click_side(s, e))
             canvas.bind("<Double-Button-1>", lambda _e, s=side: self._finish_markup_polygon_side(s))
+            canvas.bind("<MouseWheel>", self._markup_mousewheel)
+            canvas.bind("<Button-4>", self._markup_mousewheel)
+            canvas.bind("<Button-5>", self._markup_mousewheel)
             self.markup_canvas_by_side[side] = canvas
 
         self._dual_markup_container.grid_remove()
@@ -9868,11 +9884,12 @@ class AppV15(AppV14):
             img = self._side_rectified_pil(side)
             cw = max(10, canvas.winfo_width())
             ch = max(10, canvas.winfo_height())
-            scale = min(cw / float(img.width), ch / float(img.height), 1.0)
+            base = min(cw / float(img.width), ch / float(img.height), 1.0)
+            scale = base * float(getattr(self, "markup_zoom", 1.0))
             dw = max(1, int(round(img.width * scale)))
             dh = max(1, int(round(img.height * scale)))
-            ox = int((cw - dw) / 2)
-            oy = int((ch - dh) / 2)
+            ox = int(round((cw - dw) / 2.0 + getattr(self, "markup_pan_x", 0.0)))
+            oy = int(round((ch - dh) / 2.0 + getattr(self, "markup_pan_y", 0.0)))
             filt = self._resize_filter_fast()
             disp = img.resize((dw, dh), filt) if img.size != (dw, dh) else img.copy()
             photo = ImageTk.PhotoImage(disp)  # type: ignore[union-attr]
