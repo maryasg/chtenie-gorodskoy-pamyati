@@ -3907,6 +3907,9 @@ class App(tk.Tk):
             rect_poly = annotation_polygon_rectified(ann, project)
             return rectified_polygon_to_comparison(rect_poly, side, project)
         if not project_is_side_by_side(project):
+            pts = ann.get("polygon") or []
+            if len(pts) >= 3:
+                return [[float(x), float(y)] for x, y in pts]
             return annotation_polygon_rectified(ann, project)
         side = annotation_image_side(ann, project)
         if side == "historical":
@@ -9659,13 +9662,13 @@ class AppV14(AppV13):
         if Image is None or cv is None:
             raise RuntimeError("Pillow/OpenCV не установлены.")
         outdir = Path(self.outdir.get())
-        sb_marked = outdir / "10_side_by_side_marked.png"
-        if sb_marked.exists():
-            return Image.open(sb_marked).convert("RGB")  # type: ignore[union-attr]
         project_path = self._project_json_path()
         if project_path is None:
             raise RuntimeError("Сначала подготовьте выпрямленную пару (вкладка 2).")
         project = json.loads(project_path.read_text(encoding="utf-8"))
+        sb_marked = outdir / "10_side_by_side_marked.png"
+        if project_is_side_by_side(project) and sb_marked.exists():
+            return Image.open(sb_marked).convert("RGB")  # type: ignore[union-attr]
         if project_is_side_by_side(project):
             comp = outdir / "06_marked_rectified.png"
             if comp.exists():
@@ -9681,7 +9684,7 @@ class AppV14(AppV13):
                 )
             base_bgr = cv_read(labeling_path)
             if anns:
-                base_bgr = draw_polygons_on_image(base_bgr, anns, transform=None, draw_indices=True)
+                base_bgr = draw_polygons_on_image(base_bgr, anns, transform=None, draw_indices=False)
             return Image.fromarray(cv.cvtColor(base_bgr, cv.COLOR_BGR2RGB))  # type: ignore[union-attr]
         modern_path = Path(str(project.get("modern_image") or ""))
         if not modern_path.exists():
