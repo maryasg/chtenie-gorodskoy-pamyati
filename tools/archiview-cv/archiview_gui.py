@@ -82,7 +82,13 @@ try:
         website_display_name,
         export_matches_site_card,
     )
-    from archiview_project_ui import CombinedHousesTab, ComparisonsTabFrame, MyProjectsPanel, PhotosTabFrame
+    from archiview_project_ui import (
+        CombinedHousesTab,
+        ComparisonsTabFrame,
+        HouseWorkflowWizardFrame,
+        MyProjectsPanel,
+        PhotosTabFrame,
+    )
 except Exception:
     ComparisonSession = None  # type: ignore[assignment,misc]
     ProjectStore = None  # type: ignore[assignment,misc]
@@ -102,6 +108,7 @@ except Exception:
     CombinedHousesTab = None  # type: ignore[assignment,misc]
     PhotosTabFrame = None  # type: ignore[assignment,misc]
     ComparisonsTabFrame = None  # type: ignore[assignment,misc]
+    HouseWorkflowWizardFrame = None  # type: ignore[assignment,misc]
     MyProjectsPanel = None  # type: ignore[assignment,misc]
 
 APP_VERSION_V15 = "v15 projects + hand cursor + delete any region"
@@ -4788,6 +4795,7 @@ class App(tk.Tk):
         return cmp
 
     def _offer_new_comparison_for_historical(self, item: HistoricalSourceItem) -> None:
+        """При добавлении фото — только перейти к уже существующему сравнению, не создавать новое."""
         if not self._ensure_project_store_attached():
             return
         existing = self.project_store.find_comparison_for_sources(item.key, self.modern_img.get())
@@ -4801,24 +4809,10 @@ class App(tk.Tk):
             if cmp:
                 self._activate_comparison_workdir(cmp)
                 return
-        current_has_work = self._work_dir_has_saved_markup() or (
-            Path(self.outdir.get()) / "03_historical_rectified.png"
-        ).exists()
-        if current_has_work:
-            create_new = messagebox.askyesno(
-                "Новое фото — новое сравнение?",
-                f"Добавлено историческое фото «{item.label}».\n\n"
-                "В текущей папке уже есть выпрямление или разметка от другого фото.\n\n"
-                "Создать отдельное сравнение с чистой папкой?\n"
-                "(Старая работа сохранится в своём сравнении.)",
-            )
-            if not create_new:
-                self._log(f"Фото «{item.label}» добавлено в список; активная папка не менялась.\n")
-                return
-        if not self.modern_img.get() or not Path(self.modern_img.get()).exists():
-            self._log(f"Фото «{item.label}» добавлено. Выберите современное фото — затем выпрямление.\n")
-            return
-        self._create_comparison_for_historical_item(item)
+        self._log(
+            f"Фото «{item.label}» добавлено в список. "
+            f"Новое сравнение — только вручную: таблица внизу → «Создать новое…» → «Сделать текущим ★».\n"
+        )
 
     def _work_dir_matches_historical(self, work_dir: Path, item: HistoricalSourceItem) -> bool:
         if self.project_store:
@@ -4857,27 +4851,30 @@ class App(tk.Tk):
         current = Path(self.outdir.get())
         has_work = (current / "03_historical_rectified.png").exists() or self._work_dir_has_saved_markup()
         if has_work and not self._work_dir_matches_historical(current, item):
-            if self.modern_img.get() and Path(self.modern_img.get()).exists():
-                self._create_comparison_for_historical_item(item)
-                return
+            self._log(
+                f"Фото «{item.label}» — отдельного сравнения нет. "
+                f"Активно ★ «{self.project_store.active_comparison_id or '—'}». "
+                f"Для новой пары создайте сравнение вручную («Создать новое…»).\n"
+            )
         self._clear_markup_cache()
 
     def _ensure_work_session_for_active_pair(self) -> Optional[Path]:
         item = self._get_active_historical_item()
-        if not item or not self.modern_img.get() or not Path(self.modern_img.get()).exists():
-            return Path(self.outdir.get()) if self.outdir.get() else None
         if not self._ensure_project_store_attached():
-            return Path(self.outdir.get())
-        self._switch_session_for_historical(item)
-        if item.comparison_id:
-            cmp = self.project_store.get_comparison(item.comparison_id)
-            if cmp:
-                return cmp.work_path(self.project_store.project_dir)
-        if not self._work_dir_has_saved_markup() and not (Path(self.outdir.get()) / "03_historical_rectified.png").exists():
-            cmp = self._create_comparison_for_historical_item(item)
-            if cmp:
-                return cmp.work_path(self.project_store.project_dir)
-        return Path(self.outdir.get())
+            return Path(self.outdir.get()) if self.outdir.get() else None
+        if item:
+            self._switch_session_for_historical(item)
+            if item.comparison_id:
+                cmp = self.project_store.get_comparison(item.comparison_id)
+                if cmp:
+                    work = cmp.work_path(self.project_store.project_dir)
+                    self.outdir.set(str(work))
+                    return work
+        work = self.project_store.work_dir_for_active()
+        if work:
+            self.outdir.set(str(work))
+            return work
+        return Path(self.outdir.get()) if self.outdir.get() else None
 
     def _sync_historical_list_from_folder(self) -> None:
         hist_dir = self.project_root() / "historical_sources"
@@ -4981,6 +4978,74 @@ class App(tk.Tk):
                 self.after(100, lambda: self.comparisons_tab_frame.refresh())
             if hasattr(self, "_refresh_result_canvas"):
                 self.after(50, self._refresh_result_canvas)
+        finally:
+            self._suppress_house_autosave = False
+
+    def _load_project_metadata_only(self, project_dir: str | Path) -> None:
+        """Открыть дом без подстановки фото — для пошагового мастера."""
+        path = Path(project_dir)
+        self._suppress_house_autosave = True
+        try:
+            self.project_dir.set(str(path))
+            self._ensure_project_dirs()
+            self.project_store = None
+            self.site_card_id.set("")
+            self.object_name.set("")
+            self.address.set("")
+            self.lat.set("")
+            self.lon.set("")
+            if ProjectStore is not None:
+                try:
+                    self.project_store = ProjectStore.load(path)
+                    house = self.project_store.house
+                    if house.address:
+                        self.address.set(house.address)
+                    if house.site_card_id:
+                        card = (
+                            normalize_site_card_id(house.site_card_id)  # type: ignore[misc]
+                            if normalize_site_card_id is not None
+                            else house.site_card_id.strip().upper()
+                        )
+                        self.site_card_id.set(card or house.site_card_id)
+                    if house.object_name:
+                        self.object_name.set(house.object_name)
+                    if house.lat is not None:
+                        self.lat.set(str(house.lat))
+                    if house.lon is not None:
+                        self.lon.set(str(house.lon))
+                    work = self.project_store.work_dir_for_active()
+                    self.outdir.set(str(work))
+                    self._apply_site_card_autofill()
+                except Exception as exc:
+                    self._log(f"Метаданные проекта: {exc}\n")
+                    self.outdir.set(str(path / "result"))
+            else:
+                self.outdir.set(str(path / "result"))
+            self._load_legacy_metadata_coords(path)
+            self._sync_house_identity_from_catalog()
+            self.historical_sources = []
+            self.active_historical_key = ""
+            self.old_points_text = ""
+            self.modern_crop_rect_text = ""
+            self.historical_img.set("")
+            self.modern_img.set("")
+            self._clear_markup_cache()
+            self._load_historical_sources()
+            self._sync_historical_list_from_folder()
+            self._dedupe_historical_sources()
+            self.historical_img.set("")
+            self.modern_img.set("")
+            self._persist_house_metadata(quiet=True)
+            self._refresh_my_projects_panel()
+            label = self.site_card_id.get() or self.object_name.get() or path.name
+            self._log(f"Дом открыт (без фото): {label}\n")
+            self._update_house_status_label()
+            if hasattr(self, "workflow_wizard"):
+                self.workflow_wizard.refresh_summary(house_text=self._wizard_house_summary_text())
+            if hasattr(self, "comparisons_tab_frame"):
+                self.after(100, lambda: self.comparisons_tab_frame.refresh())
+            if hasattr(self, "workflow_wizard"):
+                self.after(100, lambda: self.workflow_wizard.refresh_comparisons())
         finally:
             self._suppress_house_autosave = False
 
@@ -5287,78 +5352,14 @@ class App(tk.Tk):
         return legacy_marked.exists()
 
     def _after_project_photo_added(self, photo) -> None:
-        """После добавления фото — предложить новое сравнение, чтобы не смешивать со старой разметкой."""
+        """После добавления фото в библиотеку — без автосоздания сравнений."""
         if not self.project_store:
             return
-
-        cmp = self.project_store.get_active_comparison()
-        cmp_label = cmp.comparison_id if cmp else "result/"
-        has_old = self._work_dir_has_saved_markup() or (cmp is not None and cmp.is_legacy)
-
-        if photo.kind == "historical":
-            pair_list = self.project_store.list_photos("modern")
-            question = (
-                f"Добавлено историческое фото {photo.photo_id}.\n\n"
-                f"Сейчас активно сравнение «{cmp_label}»"
-                + (" — там уже есть разметка." if has_old else ".")
-                + "\n\nСоздать новое сравнение для этой пары?\n"
-                "Старая разметка в result/ и cmp_legacy_001 не изменится."
-            )
-        else:
-            pair_list = self.project_store.list_photos("historical")
-            question = (
-                f"Добавлено современное фото {photo.photo_id}.\n\n"
-                f"Создать новое сравнение с этим фото?\n"
-                "Старая разметка останется в прежнем сравнении."
-            )
-
-        if not pair_list:
-            messagebox.showinfo(
-                "Фото добавлено",
-                f"{photo.photo_id} сохранено в проект.\n\n"
-                f"Добавьте также {'современное' if photo.kind == 'historical' else 'историческое'} фото, "
-                "затем создайте сравнение во вкладке «2. Сравнения».",
-            )
-            return
-
-        if has_old or cmp is not None:
-            create_new = messagebox.askyesno("Новое фото — новое сравнение?", question)
-        else:
-            create_new = messagebox.askyesno(
-                "Создать сравнение?",
-                f"Фото {photo.photo_id} добавлено.\n\nСразу создать для него новое сравнение?",
-            )
-
-        if not create_new:
-            self._log(
-                f"Фото {photo.photo_id} только добавлено в библиотеку. "
-                f"Активная разметка по-прежнему в «{cmp_label}».\n"
-            )
-            return
-
-        if photo.kind == "historical":
-            modern_id = pair_list[0].photo_id
-            hist_ids = [photo.photo_id]
-        else:
-            modern_id = photo.photo_id
-            hist_ids = [pair_list[0].photo_id]
-
-        title = f"{photo.photo_id} + {modern_id if photo.kind == 'historical' else hist_ids[0]}"
-        new_cmp = self.project_store.create_comparison(
-            title=title,
-            modern_photo_id=modern_id,
-            historical_photo_ids=hist_ids,
-        )
-        self.outdir.set(str(new_cmp.work_path(self.project_store.project_dir)))
-        self._apply_active_comparison_photos()
-        self._clear_markup_cache()
-        self._ensure_project_dirs()
         self._log(
-            f"Создано новое сравнение {new_cmp.comparison_id} — чистая папка, старая разметка не затронута.\n"
+            f"Фото {photo.photo_id} добавлено в библиотеку. "
+            f"Новое сравнение — вручную: таблица «Сравнения» → «Создать новое…» → «Сделать текущим ★».\n"
         )
         self._refresh_project_tabs()
-        if hasattr(self, "notebook") and hasattr(self, "tab_select"):
-            self.notebook.select(self.tab_select)
 
     def _open_comparison_session(self, comparison) -> None:
         if not self.project_store:
@@ -5374,16 +5375,52 @@ class App(tk.Tk):
             work = self.project_store.work_dir_for_active()
             self.outdir.set(str(work))
             self._apply_active_comparison_photos()
+            self._sync_historical_for_active_comparison()
             self._clear_markup_cache()
             self._ensure_project_dirs()
             self._log(f"Активно сравнение: {comparison.comparison_id} → {work}\n")
             if comparison.is_legacy:
                 self._log("Legacy-сравнение использует папку result/ — существующая разметка сохранена.\n")
+            if hasattr(self, "workflow_wizard"):
+                self.workflow_wizard.refresh_summary(
+                    house_text=self._wizard_house_summary_text(),
+                    comparison_text=self._wizard_comparison_summary_text(comparison),
+                    work_dir=str(work),
+                    historical_path=self.historical_img.get() or "—",
+                    modern_path=self.modern_img.get() or "—",
+                )
             if hasattr(self, "notebook") and hasattr(self, "tab_select"):
-                self.notebook.select(self.tab_select)
+                if not hasattr(self, "tab_workflow") or str(self.notebook.select()) != str(self.tab_workflow):
+                    self.notebook.select(self.tab_select)
             self._refresh_project_tabs()
         except Exception as exc:
             messagebox.showerror("Ошибка открытия сравнения", str(exc))
+
+    def _sync_historical_for_active_comparison(self) -> None:
+        if not self.project_store:
+            return
+        cmp = self.project_store.get_active_comparison()
+        if not cmp:
+            return
+        hist_id = cmp.active_historical_photo_id or (
+            cmp.historical_photo_ids[0] if cmp.historical_photo_ids else ""
+        )
+        if not hist_id:
+            return
+        photo = self.project_store.photos.get(hist_id)
+        if not photo:
+            return
+        path = self.project_store.resolve_photo_path(photo)
+        if not path:
+            return
+        resolved = str(Path(path).resolve())
+        for item in self.historical_sources:
+            if str(Path(item.path).resolve()) == resolved:
+                self.active_historical_key = item.key
+                self.historical_img.set(item.path)
+                self.old_points_text = item.old_points_text
+                self._refresh_historical_sources_tree()
+                return
 
     def _use_house_from_db(self, record, paths) -> None:
         """Дом из Excel — создаёт папку и открывает на вкладке «Источники»."""
@@ -9949,7 +9986,7 @@ class AppV15(AppV14):
             "v15: курсор-рука при пробеле и перетаскивании; в списке «Области» можно удалить любую.\n"
             "v15: разные ракурсы — две отдельные области разметки (история / современность).\n"
             "v15: редактирование точек полигона — в отдельной папке v16 (см. README_v16_ru.md).\n"
-            "v15/v16: ★ сравнения — таблица внизу вкладки «1. Источники»; «Отправить на сайт» — вкладки 2 и 5.\n"
+            "v15/v16: ★ сравнения — таблица внизу вкладки «1. Источники»; создавать только «Создать новое…»; «Отправить на сайт» — вкладки 2 и 5.\n"
         )
 
     def _on_tab_changed(self, _event: tk.Event) -> None:
@@ -10386,9 +10423,11 @@ class AppV16(AppV15):
         self._markup_edit_active_vertex: Optional[int] = None
         self._markup_pending_insert_point: Optional[Point] = None
         super()._build_ui()
+        self._insert_workflow_wizard_tab()
         self._apply_v16_chrome()
         self._install_v16_delete_bindings()
         self._log(
+            "v16: вкладка «0. Дом и сравнение» — по шагам: дом → сравнение ★ → фото.\n"
             "v16: «Редактировать точки» — тянуть вершины; клик по линии — новая точка; "
             "Delete / Backspace или кнопка — убрать выбранную вершину (минимум 3 точки).\n"
             "v16: «Ниже / Выше» в списке областей — порядок слоёв (большую область можно увести под мелкие).\n"
@@ -10845,6 +10884,100 @@ class AppV16(AppV15):
             f"Точек: {len(self.current_markup_points)}. "
             f"Масштаб: {self.markup_zoom:.1f}×"
         )
+
+    def _insert_workflow_wizard_tab(self) -> None:
+        if HouseWorkflowWizardFrame is None or not hasattr(self, "notebook"):
+            return
+        self.tab_workflow = ttk.Frame(self.notebook)
+        self.notebook.insert(0, self.tab_workflow, text="0. Дом и сравнение")
+        self.workflow_wizard = HouseWorkflowWizardFrame(
+            self.tab_workflow,
+            project_root=APP_DIR / "archiview_projects",
+            get_store=self._get_project_store,
+            on_house_selected=self._wizard_on_house_selected,
+            on_comparison_opened=self._wizard_on_comparison_opened,
+            on_new_project=self.new_house_project,
+            on_import_excel=self.open_excel_import_dialog,
+            on_projects_deleted=self._after_projects_deleted,
+            on_go_tab=self._wizard_go_work_tab,
+            on_log=self._log,
+        )
+        self.workflow_wizard.pack(fill="both", expand=True)
+        for i in range(self.notebook.index("end")):
+            if self.notebook.tab(i, "text") == "1. Источники":
+                self.notebook.tab(i, text="7. Источники (старая)")
+                break
+        self.notebook.select(self.tab_workflow)
+
+    def _wizard_house_summary_text(self) -> str:
+        parts = []
+        if self.site_card_id.get().strip():
+            parts.append(self.site_card_id.get().strip())
+        if self.object_name.get().strip():
+            parts.append(self.object_name.get().strip())
+        if self.address.get().strip():
+            parts.append(self.address.get().strip())
+        if not parts and self.project_dir.get():
+            parts.append(Path(self.project_dir.get()).name)
+        return " — ".join(parts) if parts else "Дом не выбран"
+
+    def _wizard_comparison_summary_text(self, comparison) -> str:
+        suffix = " (legacy)" if comparison.is_legacy else ""
+        ann = f", разметок: {comparison.annotation_count}"
+        title = comparison.title or ""
+        line = f"★ {comparison.comparison_id}{suffix}{ann}"
+        if title:
+            line += f" — {title}"
+        return line
+
+    def _wizard_on_house_selected(self, project_dir: Path) -> None:
+        self._load_project_metadata_only(project_dir)
+        if hasattr(self, "workflow_wizard"):
+            self.workflow_wizard.refresh_summary(house_text=self._wizard_house_summary_text())
+
+    def _wizard_on_comparison_opened(self, comparison) -> None:
+        self._open_comparison_session(comparison)
+        if hasattr(self, "workflow_wizard"):
+            self.workflow_wizard.refresh_summary(
+                house_text=self._wizard_house_summary_text(),
+                comparison_text=self._wizard_comparison_summary_text(comparison),
+                work_dir=self.outdir.get() or "—",
+                historical_path=self.historical_img.get() or "—",
+                modern_path=self.modern_img.get() or "—",
+            )
+
+    def _wizard_go_work_tab(self, key: str) -> None:
+        if not hasattr(self, "notebook"):
+            return
+        tab_map = {
+            "rectify": getattr(self, "tab_rectify", None),
+            "compare": getattr(self, "tab_compare", None),
+            "markup": getattr(self, "tab_markup", None),
+            "result": getattr(self, "tab_result", None),
+        }
+        target = tab_map.get(key)
+        if target is not None:
+            self.notebook.select(target)
+        if key == "result" and hasattr(self, "_refresh_result_canvas"):
+            self._refresh_result_canvas()
+        elif key == "compare" and hasattr(self, "_refresh_compare_canvas"):
+            self._refresh_compare_canvas(save=False)
+
+    def _refresh_project_tabs(self) -> None:
+        super()._refresh_project_tabs()
+        if hasattr(self, "workflow_wizard"):
+            self.workflow_wizard.refresh_comparisons()
+
+    def new_house_project(self) -> None:
+        super().new_house_project()
+        if not self.project_dir.get():
+            return
+        if hasattr(self, "workflow_wizard"):
+            self._load_project_metadata_only(self.project_dir.get())
+            self.workflow_wizard.refresh_summary(house_text=self._wizard_house_summary_text())
+            self.workflow_wizard.show_step(2)
+            if hasattr(self, "notebook") and hasattr(self, "tab_workflow"):
+                self.notebook.select(self.tab_workflow)
 
 
 def _main() -> None:
