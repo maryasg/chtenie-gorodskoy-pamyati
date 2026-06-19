@@ -80,6 +80,7 @@ $files = @(
     'setup_v16_desktop.ps1',
     'setup_v16_desktop.bat',
     'OBNOVIT_IZ_GITA.bat',
+    'PROVERIT_OBNOVLENIE.bat',
     'update_website_registry.ps1',
     'export_facade_project.ps1',
     'export_moscow001_from_v15.ps1',
@@ -106,14 +107,43 @@ foreach ($name in $files) {
     Write-Host "OK: $name"
 }
 
+function Get-BuildVersionLabel {
+    param([string]$RepoRoot)
+    if (-not $RepoRoot -or -not (Test-Path -LiteralPath $RepoRoot)) {
+        return 'v16 polygon edit'
+    }
+    try {
+        Push-Location -LiteralPath $RepoRoot
+        $hash = (git rev-parse --short HEAD 2>$null)
+        if ($hash) {
+            $date = Get-Date -Format 'yyyy-MM-dd'
+            return "v16 $date $hash"
+        }
+    } catch {
+    } finally {
+        Pop-Location
+    }
+    return 'v16 polygon edit'
+}
+
+$repoForVersion = $Src
+$gitTools = Find-GitArchiviewTools
+if ($gitTools) {
+    $maybeRepo = (Resolve-Path -LiteralPath (Join-Path $gitTools '..\..')).Path
+    if (Test-Path -LiteralPath (Join-Path $maybeRepo '.git')) {
+        $repoForVersion = $maybeRepo
+    }
+}
+$versionLabel = Get-BuildVersionLabel $repoForVersion
+
 $launcherV16 = Join-Path $Src 'run_gui_v16.bat'
 $launcherDest = Join-Path $V16Root 'run_gui_windows.bat'
 Copy-Item -LiteralPath $launcherV16 -Destination $launcherDest -Force
 Write-Host 'OK: run_gui_windows.bat (v16 launcher)'
 Copy-Item -LiteralPath $launcherV16 -Destination (Join-Path $V16Root 'ZAPUSK_V16.bat') -Force
 Write-Host 'OK: ZAPUSK_V16.bat'
-Set-Content -LiteralPath (Join-Path $V16Root 'ARCHIVIEW_VERSION.txt') -Value 'v16 polygon edit' -Encoding UTF8
-Write-Host 'OK: ARCHIVIEW_VERSION.txt'
+Set-Content -LiteralPath (Join-Path $V16Root 'ARCHIVIEW_VERSION.txt') -Value $versionLabel -Encoding UTF8
+Write-Host "OK: ARCHIVIEW_VERSION.txt ($versionLabel)"
 
 Write-Host ''
 Write-Host '============================================'

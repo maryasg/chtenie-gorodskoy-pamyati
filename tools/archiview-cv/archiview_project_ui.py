@@ -912,6 +912,8 @@ class HouseWorkflowWizardFrame(ttk.Frame):
         on_log: Optional[Callable[[str], None]] = None,
         build_house_panel: Optional[Callable[[ttk.Widget], None]] = None,
         on_persist_house: Optional[Callable[[], None]] = None,
+        rakurs_var: Optional[tk.StringVar] = None,
+        on_rakurs_changed: Optional[Callable[[], None]] = None,
     ) -> None:
         super().__init__(parent)
         self.project_root = Path(project_root)
@@ -925,6 +927,8 @@ class HouseWorkflowWizardFrame(ttk.Frame):
         self.on_log = on_log
         self.build_house_panel = build_house_panel
         self.on_persist_house = on_persist_house
+        self.rakurs_var = rakurs_var
+        self.on_rakurs_changed = on_rakurs_changed
         self._current_step = 1
         self._house_label = tk.StringVar(value="Дом не выбран")
         self._cmp_label = tk.StringVar(value="Сравнение не выбрано")
@@ -1055,14 +1059,63 @@ class HouseWorkflowWizardFrame(ttk.Frame):
             ttk.Label(wrap, textvariable=var, wraplength=760, foreground="#222").grid(
                 row=i, column=1, sticky="w", padx=6, pady=4
             )
+        next_row = len(rows)
+        if self.rakurs_var is not None:
+            rakurs_box = ttk.LabelFrame(wrap, text="Тип пары фото — куда перейти дальше")
+            rakurs_box.grid(row=next_row, column=0, columnspan=2, sticky="ew", padx=10, pady=(8, 4))
+            inner = ttk.Frame(rakurs_box)
+            inner.pack(fill="x", padx=8, pady=8)
+
+            def _rakurs_changed() -> None:
+                if self.on_rakurs_changed:
+                    self.on_rakurs_changed()
+                self._update_step3_primary_action()
+
+            ttk.Radiobutton(
+                inner,
+                text="Похожие ракурсы — выпрямление, 4 угла, наложение",
+                variable=self.rakurs_var,
+                value="similar",
+                command=_rakurs_changed,
+            ).pack(anchor="w")
+            ttk.Radiobutton(
+                inner,
+                text="Разные ракурсы — два фото рядом (side-by-side), без 4 углов",
+                variable=self.rakurs_var,
+                value="different",
+                command=_rakurs_changed,
+            ).pack(anchor="w", pady=(6, 0))
+            self._rakurs_route_hint = ttk.Label(
+                inner,
+                wraplength=900,
+                foreground="#1a5c9e",
+                font=("TkDefaultFont", 10, "bold"),
+            )
+            self._rakurs_route_hint.pack(anchor="w", pady=(8, 0))
+            next_row += 1
         ttk.Label(
             wrap,
             text="Сохранение и «Отправить на сайт» идут из папки сравнения со звёздочкой ★.",
             wraplength=900,
             foreground="#555",
-        ).grid(row=len(rows), column=0, columnspan=2, sticky="w", padx=10, pady=(8, 4))
+        ).grid(row=next_row, column=0, columnspan=2, sticky="w", padx=10, pady=(8, 4))
+        next_row += 1
         btns = ttk.Frame(wrap)
-        btns.grid(row=len(rows) + 1, column=0, columnspan=2, sticky="w", padx=10, pady=(4, 8))
+        btns.grid(row=next_row, column=0, columnspan=2, sticky="w", padx=10, pady=(4, 8))
+        if self.rakurs_var is not None:
+            self._step3_primary_btn = tk.Button(
+                btns,
+                text="→ Далее",
+                command=lambda: self._go_tab("rectify"),
+                bg="#0b6bcb",
+                fg="white",
+                activebackground="#084f96",
+                activeforeground="white",
+                font=("TkDefaultFont", 10, "bold"),
+                padx=10,
+                pady=6,
+            )
+            self._step3_primary_btn.pack(side="left", padx=(0, 10))
         for text, key in (
             ("2. Выпрямление", "rectify"),
             ("3. Сравнение", "compare"),
@@ -1071,7 +1124,7 @@ class HouseWorkflowWizardFrame(ttk.Frame):
         ):
             ttk.Button(btns, text=text, command=lambda k=key: self._go_tab(k)).pack(side="left", padx=(0, 6))
         nav = ttk.Frame(wrap)
-        nav.grid(row=len(rows) + 2, column=0, columnspan=2, sticky="ew", padx=8, pady=(0, 8))
+        nav.grid(row=next_row + 1, column=0, columnspan=2, sticky="ew", padx=8, pady=(0, 8))
         ttk.Button(nav, text="← Другое сравнение", command=lambda: self.show_step(2)).pack(side="left")
         ttk.Button(nav, text="← Другой дом", command=lambda: self.show_step(1)).pack(side="left", padx=8)
 
@@ -1091,12 +1144,36 @@ class HouseWorkflowWizardFrame(ttk.Frame):
         hints = {
             1: "Выберите дом в таблице слева. Справа проверьте MOSCOW_XXX и адрес → «Сохранить данные дома».",
             2: "★ = активное сравнение. Разметка и экспорт идут из его папки.",
-            3: "Проверьте пути к фото ниже, затем перейдите на вкладки 2–5.",
+            3: "Проверьте фото и тип пары. Синяя кнопка ведёт на нужный шаг.",
         }
         self.step_title.configure(text=titles[step])
         self.step_hint.configure(text=hints[step])
         if step == 2:
             self.refresh_comparisons()
+        if step == 3:
+            self._update_step3_primary_action()
+
+    def _update_step3_primary_action(self) -> None:
+        if not hasattr(self, "_step3_primary_btn"):
+            return
+        if self.rakurs_var is not None and self.rakurs_var.get() == "different":
+            self._step3_primary_btn.configure(
+                text="→ 3. Сравнение (side-by-side)",
+                command=lambda: self._go_tab("compare"),
+            )
+            if hasattr(self, "_rakurs_route_hint"):
+                self._rakurs_route_hint.configure(
+                    text="Выпрямление и 4 угла не нужны — на «Сравнение» нажмите «Подготовить», затем разметка."
+                )
+        else:
+            self._step3_primary_btn.configure(
+                text="→ 2. Выпрямление (4 угла)",
+                command=lambda: self._go_tab("rectify"),
+            )
+            if hasattr(self, "_rakurs_route_hint"):
+                self._rakurs_route_hint.configure(
+                    text="Сначала 4 угла на вкладке «Выпрямление», затем «Подготовить» и разметка."
+                )
 
     def refresh_projects(self) -> None:
         if self.projects_panel is not None:

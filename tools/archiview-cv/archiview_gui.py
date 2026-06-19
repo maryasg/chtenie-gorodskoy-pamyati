@@ -11162,6 +11162,8 @@ class AppV16(AppV15):
             on_log=self._log,
             build_house_panel=self._build_house_metadata_panel,
             on_persist_house=lambda: self._persist_house_metadata(quiet=True),
+            rakurs_var=self.comparison_rakurs,
+            on_rakurs_changed=self._on_comparison_rakurs_changed,
         )
         self.workflow_wizard.pack(fill="both", expand=True)
         for i in range(self.notebook.index("end")):
@@ -11199,6 +11201,7 @@ class AppV16(AppV15):
 
     def _wizard_on_comparison_opened(self, comparison) -> None:
         self._open_comparison_session(comparison)
+        self._sync_rakurs_from_workdir()
         if hasattr(self, "workflow_wizard"):
             self.workflow_wizard.refresh_summary(
                 house_text=self._wizard_house_summary_text(),
@@ -11207,6 +11210,18 @@ class AppV16(AppV15):
                 historical_path=self.historical_img.get() or "—",
                 modern_path=self.modern_img.get() or "—",
             )
+
+    def _sync_rakurs_from_workdir(self) -> None:
+        project = self._project_json_dict()
+        if not project:
+            return
+        if project_is_side_by_side(project):
+            self.comparison_rakurs.set("different")
+        else:
+            self.comparison_rakurs.set("similar")
+        self._on_comparison_rakurs_changed()
+        if hasattr(self, "workflow_wizard"):
+            self.workflow_wizard._update_step3_primary_action()
 
     def _wizard_go_work_tab(self, key: str) -> None:
         if not hasattr(self, "notebook"):
