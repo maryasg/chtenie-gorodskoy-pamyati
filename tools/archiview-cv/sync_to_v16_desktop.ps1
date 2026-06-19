@@ -5,6 +5,22 @@ param(
 $ErrorActionPreference = 'Stop'
 $Src = $PSScriptRoot
 
+function Resolve-PathNormalized([string]$Path) {
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) { return $null }
+    return (Resolve-Path -LiteralPath $Path).ProviderPath.TrimEnd('\')
+}
+
+function Find-GitArchiviewTools {
+    $candidates = @(
+        (Join-Path $env:USERPROFILE 'Projects\chtenie-gorodskoy-pamyati\tools\archiview-cv')
+    )
+    foreach ($candidate in $candidates) {
+        $gui = Join-Path $candidate 'archiview_gui.py'
+        if (Test-Path -LiteralPath $gui) { return $candidate }
+    }
+    return $null
+}
+
 function Find-DesktopPackage([string]$FolderName) {
     $root = Join-Path $env:USERPROFILE 'Desktop\Cult Tech'
     if (-not (Test-Path -LiteralPath $root)) { return $null }
@@ -24,6 +40,29 @@ First time: run bootstrap_v16_desktop.ps1 (copies v15 folder to v16), then run t
     $V16Root = $found.FullName
 }
 
+$V16Resolved = Resolve-PathNormalized $V16Root
+$SrcResolved = Resolve-PathNormalized $Src
+if ($SrcResolved -and $V16Resolved -and $SrcResolved -eq $V16Resolved) {
+    $gitSrc = Find-GitArchiviewTools
+    if ($gitSrc) {
+        Write-Host 'NOTE: using git tools as sync source (not Desktop v16 folder):'
+        Write-Host "  $gitSrc"
+        $Src = $gitSrc
+    } else {
+        throw @'
+SYNC ERROR: setup was run from the Desktop v16 package folder.
+
+Run from git repo in cmd:
+  cd C:\Users\Marusia\Projects\chtenie-gorodskoy-pamyati
+  git pull
+  cd tools\archiview-cv
+  setup_v16_desktop.bat
+
+Or double-click OBNOVIT_IZ_GITA.bat in the v16 Desktop folder.
+'@
+    }
+}
+
 $files = @(
     'install_windows.bat',
     'requirements_archiview.txt',
@@ -40,6 +79,7 @@ $files = @(
     'bootstrap_v16_desktop.bat',
     'setup_v16_desktop.ps1',
     'setup_v16_desktop.bat',
+    'OBNOVIT_IZ_GITA.bat',
     'update_website_registry.ps1',
     'export_facade_project.ps1',
     'export_moscow001_from_v15.ps1',

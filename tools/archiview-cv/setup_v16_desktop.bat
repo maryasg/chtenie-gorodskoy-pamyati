@@ -2,6 +2,32 @@
 chcp 65001 >nul 2>&1
 cd /d "%~dp0"
 
+if exist "%~dp0ARCHIVIEW_VERSION.txt" (
+    if not exist "%~dp0..\..\..\.git" (
+        echo.
+        echo ============================================
+        echo   ОШИБКА: неверная папка для setup
+        echo ============================================
+        echo.
+        echo Вы запустили setup из папки v16 на Рабочем столе.
+        echo Здесь нет git - обновление так не работает.
+        echo.
+        echo Правильно - один из вариантов:
+        echo.
+        echo   А) Дважды щёлкните в этой папке v16:
+        echo      OBNOVIT_IZ_GITA.bat
+        echo.
+        echo   Б) Или в cmd:
+        echo      cd %USERPROFILE%\Projects\chtenie-gorodskoy-pamyati
+        echo      git pull
+        echo      cd tools\archiview-cv
+        echo      setup_v16_desktop.bat
+        echo.
+        pause
+        exit /b 1
+    )
+)
+
 echo.
 echo ============================================
 echo   ARCHIVIEW v16 - настройка (запуск из cmd)
