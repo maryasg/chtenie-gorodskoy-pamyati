@@ -4017,6 +4017,8 @@ class App(tk.Tk):
             self.markup_background_mode.set("side_by_side")
         if different and hasattr(self, "compare_mode"):
             self.compare_mode.set("side_by_side")
+        if hasattr(self, "_update_sources_primary_action"):
+            self._update_sources_primary_action()
 
     def _build_rakurs_mode_block(self, parent: ttk.Frame, row: int) -> int:
         box = ttk.LabelFrame(parent, text="Шаг 1 — похожие или разные ракурсы?")
@@ -4803,6 +4805,8 @@ class App(tk.Tk):
             if hasattr(self, "_refresh_result_canvas"):
                 self._refresh_result_canvas()
         self._refresh_active_comparison_banner()
+        if hasattr(self, "_refresh_sources_cmp_label"):
+            self._refresh_sources_cmp_label()
 
     def _create_comparison_for_historical_item(self, item: HistoricalSourceItem) -> Optional["ComparisonSession"]:
         if not self._ensure_project_store_attached():
@@ -5444,6 +5448,10 @@ class App(tk.Tk):
         except Exception as exc:
             messagebox.showerror("Ошибка открытия сравнения", str(exc))
         self._refresh_active_comparison_banner()
+        if hasattr(self, "_refresh_sources_cmp_label"):
+            self._refresh_sources_cmp_label()
+        if hasattr(self, "_update_sources_primary_action"):
+            self._update_sources_primary_action()
 
     def _sync_historical_for_active_comparison(self) -> None:
         if not self.project_store:
@@ -8797,11 +8805,18 @@ class AppV13(AppV12):
         body_split.add(photos_body, weight=4)
         body_split.add(cmp_body, weight=1)
         self._build_comparisons_panel(cmp_body)
-
-        main_pane = ttk.Panedwindow(photos_body, orient="horizontal")
-        main_pane.grid(row=0, column=0, sticky="nsew")
         photos_body.rowconfigure(0, weight=1)
         photos_body.columnconfigure(0, weight=1)
+        self._build_sources_photos_pane(photos_body)
+        self._configure_vertical_pane(outer_pane, header, body, top_minsize=180, bottom_minsize=260, initial_top=260)
+        self.after(0, self._refresh_workflow_steps)
+
+    def _build_sources_photos_pane(self, parent: ttk.Frame) -> None:
+        """Историческое и современное фото — общий блок для вкладки «Источники»."""
+        parent.rowconfigure(0, weight=1)
+        parent.columnconfigure(0, weight=1)
+        main_pane = ttk.Panedwindow(parent, orient="horizontal")
+        main_pane.grid(row=0, column=0, sticky="nsew")
         left = ttk.LabelFrame(main_pane, text="Историческое фото: PastVu или файл")
         right = ttk.LabelFrame(main_pane, text="Современное фото: файл, буфер или Wikimedia Commons")
         main_pane.add(left, weight=1)
@@ -8821,9 +8836,14 @@ class AppV13(AppV12):
         hist_controls.columnconfigure(1, weight=1)
         self._configure_vertical_pane(hist_pane, hist_controls_wrap, hist_preview, top_minsize=240, bottom_minsize=120, initial_top=340)
 
+        addr_hint = (
+            "Адрес и координаты — на вкладке «0. Дом и сравнение», справа. Здесь — поиск PastVu."
+            if getattr(self, "_rakurs_on_sources_tab", False)
+            else "Адрес и координаты — в блоке «Данные дома» выше. Здесь — поиск PastVu по этим координатам."
+        )
         ttk.Label(
             hist_controls,
-            text="Адрес и координаты — в блоке «Данные дома» выше. Здесь — поиск PastVu по этим координатам.",
+            text=addr_hint,
             foreground="#555",
             wraplength=560,
         ).grid(row=0, column=0, columnspan=3, sticky="w", padx=8, pady=(8, 6))
@@ -8857,7 +8877,7 @@ class AppV13(AppV12):
 
         hist_list = ttk.LabelFrame(
             hist_controls,
-            text="Исторические фото — ● = активное для углов и выпрямления (это не ★)",
+            text="Исторические фото — ● = активное для углов (это не ★ сравнения)",
         )
         hist_list.grid(row=7, column=0, columnspan=3, sticky="nsew", padx=8, pady=(0, 8))
         hist_list.columnconfigure(0, weight=1)
@@ -8883,7 +8903,6 @@ class AppV13(AppV12):
         self.thumb_area = ScrollableFrame(hist_preview)
         self.thumb_area.pack(fill="both", expand=True, padx=6, pady=6)
 
-        # Modern pane.
         right.rowconfigure(0, weight=1)
         right.columnconfigure(0, weight=1)
         modern_pane = ttk.Panedwindow(right, orient="vertical")
@@ -8897,7 +8916,6 @@ class AppV13(AppV12):
         modern_controls = modern_scroll.inner
         self._configure_vertical_pane(modern_pane, modern_controls_wrap, modern_preview, top_minsize=220, bottom_minsize=120, initial_top=300)
         modern_controls.columnconfigure(1, weight=1)
-        self._configure_vertical_pane(outer_pane, header, body, top_minsize=180, bottom_minsize=260, initial_top=260)
 
         ttk.Label(modern_controls, text="Историческое фото:").grid(row=0, column=0, sticky="w", padx=8, pady=5)
         ttk.Entry(modern_controls, textvariable=self.historical_img).grid(row=0, column=1, sticky="ew", padx=6, pady=5)
@@ -8927,21 +8945,14 @@ class AppV13(AppV12):
         ttk.Button(row1, text="Ещё +30", command=self.load_more_modern_photos).pack(side="left", padx=8)
         ttk.Label(
             open_box,
-            text="Commons чаще даёт обычные фотографии зданий с понятной страницей источника. KartaView и Panoramax убраны из интерфейса, потому что на практике часто не дают нужный фасадный ракурс.",
+            text="Commons чаще даёт обычные фотографии зданий с понятной страницей источника.",
             foreground="#555",
             wraplength=640,
         ).grid(row=2, column=0, columnspan=3, sticky="w", padx=6, pady=(2, 6))
-        ttk.Label(modern_controls, text="↓ Ниже миниатюры современных фото. На карточке есть кнопки ‘Миниатюра’, ‘Страница’, ‘Картинка’. Она помогает вручную догрузить превью.", foreground="#777", wraplength=640).grid(row=5, column=0, columnspan=3, sticky="w", padx=8, pady=6)
+        ttk.Label(modern_controls, text="↓ Ниже миниатюры современных фото.", foreground="#777", wraplength=640).grid(row=5, column=0, columnspan=3, sticky="w", padx=8, pady=6)
 
         self.modern_thumb_area = ScrollableFrame(modern_preview)
         self.modern_thumb_area.pack(fill="both", expand=True, padx=6, pady=6)
-
-        help_text = (
-            "Добавьте одно или несколько исторических фото слева и современное справа. "
-            "Для каждого исторического фото нажмите «Указать 4 угла», затем вкладка «2. Выпрямление»."
-        )
-        ttk.Label(modern_controls, text=help_text, wraplength=640, foreground="#333").grid(row=6, column=0, columnspan=3, sticky="w", padx=8, pady=6)
-        self.after(0, self._refresh_workflow_steps)
 
     def _build_house_metadata_panel(self, parent: ttk.Widget) -> None:
         """Папка, название, код сайта, адрес, координаты — общий блок для мастера и старой вкладки."""
@@ -8983,7 +8994,9 @@ class AppV13(AppV12):
     def _build_rectify_tab(self, parent: ttk.Frame) -> None:
         skip_photos = bool(getattr(self, "_rectify_skip_photo_step", False))
         parent.columnconfigure(1, weight=1)
-        row = self._build_rakurs_mode_block(parent, 0)
+        row = 0
+        if not getattr(self, "_rakurs_on_sources_tab", False):
+            row = self._build_rakurs_mode_block(parent, 0)
         if not skip_photos:
             box = ttk.LabelFrame(parent, text="Шаг 2 — фото и папка результата")
             box.grid(row=row, column=0, columnspan=3, sticky="ew", padx=10, pady=6)
@@ -8993,7 +9006,7 @@ class AppV13(AppV12):
             self._row_folder(box, "Папка результата:", self.outdir, self.choose_result_dir, 2)
             row += 1
         else:
-            photo_box = ttk.LabelFrame(parent, text="Фото сравнения (из вкладки «0. Дом и сравнение»)")
+            photo_box = ttk.LabelFrame(parent, text="Фото сравнения (из вкладки «1. Источники»)")
             photo_box.grid(row=row, column=0, columnspan=3, sticky="ew", padx=10, pady=6)
             photo_box.columnconfigure(1, weight=1)
             ttk.Label(
@@ -10751,17 +10764,125 @@ class AppV16(AppV15):
         self._markup_edit_active_vertex: Optional[int] = None
         self._markup_pending_insert_point: Optional[Point] = None
         self._rectify_skip_photo_step = True
+        self._rakurs_on_sources_tab = True
         super()._build_ui()
         self._insert_workflow_wizard_tab()
         self._apply_v16_chrome()
         self._install_v16_delete_bindings()
         self._log(
-            "v16: вкладка «0. Дом и сравнение» — по шагам: дом → сравнение ★ → фото.\n"
+            "v16: «0. Дом и сравнение» — дом и таблица сравнений; «1. Источники» — фото и тип пары.\n"
             "v16: «Редактировать точки» — тянуть вершины; клик по линии — новая точка; "
             "Delete / Backspace или кнопка — убрать выбранную вершину (минимум 3 точки).\n"
             "v16: «Ниже / Выше» в списке областей — порядок слоёв (большую область можно увести под мелкие).\n"
             "v16: на вкладке «Разметка» — кнопки +/− для масштаба (или колесо над фото).\n"
         )
+
+    def _build_select_tab(self, parent: ttk.Frame) -> None:
+        """v16: только фото-источники и выбор типа пары (без дубля дома/сравнений)."""
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(0, weight=1)
+        outer = ttk.Panedwindow(parent, orient="vertical")
+        outer.grid(row=0, column=0, sticky="nsew", padx=8, pady=6)
+        photos_wrap = ttk.Frame(outer)
+        footer_wrap = ttk.LabelFrame(outer, text="Тип пары и переход к работе")
+        outer.add(photos_wrap, weight=5)
+        outer.add(footer_wrap, weight=0)
+        photos_wrap.columnconfigure(0, weight=1)
+        photos_wrap.rowconfigure(0, weight=1)
+        self._build_sources_photos_pane(photos_wrap)
+        self._build_v16_sources_footer(footer_wrap)
+        self._configure_vertical_pane(outer, photos_wrap, footer_wrap, top_minsize=380, bottom_minsize=130, initial_top=520)
+
+    def _build_v16_sources_footer(self, parent: ttk.LabelFrame) -> None:
+        parent.columnconfigure(0, weight=1)
+        self._sources_cmp_label = tk.StringVar(value="Сравнение не выбрано — выберите ★ на вкладке «0. Дом и сравнение»")
+        ttk.Label(parent, textvariable=self._sources_cmp_label, font=("TkDefaultFont", 10, "bold")).grid(
+            row=0, column=0, sticky="w", padx=10, pady=(8, 4)
+        )
+        rakurs_inner = ttk.Frame(parent)
+        rakurs_inner.grid(row=1, column=0, sticky="ew", padx=10, pady=4)
+
+        def _rakurs_changed() -> None:
+            self._on_comparison_rakurs_changed()
+            self._update_sources_primary_action()
+
+        ttk.Radiobutton(
+            rakurs_inner,
+            text="Похожие ракурсы → выпрямление и 4 угла (наложение)",
+            variable=self.comparison_rakurs,
+            value="similar",
+            command=_rakurs_changed,
+        ).pack(side="left", padx=(0, 16))
+        ttk.Radiobutton(
+            rakurs_inner,
+            text="Разные ракурсы → side-by-side, без 4 углов",
+            variable=self.comparison_rakurs,
+            value="different",
+            command=_rakurs_changed,
+        ).pack(side="left")
+        self._sources_rakurs_hint = ttk.Label(
+            parent,
+            wraplength=980,
+            foreground="#1a5c9e",
+            font=("TkDefaultFont", 10, "bold"),
+        )
+        self._sources_rakurs_hint.grid(row=2, column=0, sticky="w", padx=10, pady=(0, 4))
+        btns = ttk.Frame(parent)
+        btns.grid(row=3, column=0, sticky="w", padx=10, pady=(4, 10))
+        self._sources_primary_btn = tk.Button(
+            btns,
+            text="→ Далее",
+            command=lambda: self._wizard_go_work_tab("rectify"),
+            bg="#0b6bcb",
+            fg="white",
+            activebackground="#084f96",
+            activeforeground="white",
+            font=("TkDefaultFont", 10, "bold"),
+            padx=10,
+            pady=6,
+        )
+        self._sources_primary_btn.pack(side="left", padx=(0, 10))
+        for text, key in (
+            ("2. Выпрямление", "rectify"),
+            ("3. Сравнение", "compare"),
+            ("4. Разметка", "markup"),
+            ("5. Результат", "result"),
+        ):
+            ttk.Button(btns, text=text, command=lambda k=key: self._wizard_go_work_tab(k)).pack(side="left", padx=(0, 6))
+        self._update_sources_primary_action()
+
+    def _update_sources_primary_action(self) -> None:
+        if not hasattr(self, "_sources_primary_btn"):
+            return
+        if self.comparison_rakurs.get() == "different":
+            self._sources_primary_btn.configure(
+                text="→ 3. Сравнение (side-by-side)",
+                command=lambda: self._wizard_go_work_tab("compare"),
+            )
+            if hasattr(self, "_sources_rakurs_hint"):
+                self._sources_rakurs_hint.configure(
+                    text="Выпрямление не нужно — «Подготовить» на вкладке «3. Сравнение», затем разметка."
+                )
+        else:
+            self._sources_primary_btn.configure(
+                text="→ 2. Выпрямление (4 угла)",
+                command=lambda: self._wizard_go_work_tab("rectify"),
+            )
+            if hasattr(self, "_sources_rakurs_hint"):
+                self._sources_rakurs_hint.configure(
+                    text="Сначала 4 угла на «2. Выпрямление», затем «Подготовить» и разметка."
+                )
+
+    def _refresh_sources_cmp_label(self) -> None:
+        if not hasattr(self, "_sources_cmp_label"):
+            return
+        if self.project_store:
+            cmp = self.project_store.get_active_comparison()
+            if cmp:
+                title = f" — {cmp.title}" if cmp.title else ""
+                self._sources_cmp_label.set(f"★ {cmp.comparison_id}{title}")
+                return
+        self._sources_cmp_label.set("Сравнение не выбрано — выберите ★ на вкладке «0. Дом и сравнение»")
 
     def _apply_v16_chrome(self) -> None:
         self.title(f"Archiview CV {APP_VERSION_V16}")
@@ -11228,19 +11349,12 @@ class AppV16(AppV15):
             on_new_project=self.new_house_project,
             on_import_excel=self.open_excel_import_dialog,
             on_projects_deleted=self._after_projects_deleted,
-            on_go_tab=self._wizard_go_work_tab,
             on_log=self._log,
             build_house_panel=self._build_house_metadata_panel,
             on_persist_house=lambda: self._persist_house_metadata(quiet=True),
-            rakurs_var=self.comparison_rakurs,
-            on_rakurs_changed=self._on_comparison_rakurs_changed,
             on_need_photos=lambda: self._wizard_go_work_tab("sources"),
         )
         self.workflow_wizard.pack(fill="both", expand=True)
-        for i in range(self.notebook.index("end")):
-            if self.notebook.tab(i, "text") == "1. Источники":
-                self.notebook.tab(i, text="7. Источники (старая)")
-                break
         self.notebook.select(self.tab_workflow)
 
     def _wizard_house_summary_text(self) -> str:
@@ -11291,8 +11405,8 @@ class AppV16(AppV15):
         else:
             self.comparison_rakurs.set("similar")
         self._on_comparison_rakurs_changed()
-        if hasattr(self, "workflow_wizard"):
-            self.workflow_wizard._update_primary_action()
+        if hasattr(self, "_update_sources_primary_action"):
+            self._update_sources_primary_action()
 
     def _wizard_go_work_tab(self, key: str) -> None:
         if not hasattr(self, "notebook"):
