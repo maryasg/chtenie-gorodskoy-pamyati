@@ -111,7 +111,8 @@ export function ArchiviewFacadePanel({
     if (assets.labelingLayout === 'side_by_side' && assets.sideBySideMarkedUrl) {
       return assets.sideBySideMarkedUrl
     }
-    return assets.modernRectifiedUrl
+    // marked-facade.png = 06_marked_rectified: выпрямленный фасад с обводками подсветки
+    return assets.markedFacadeUrl
   }, [assets])
 
   const makeRegion = useCallback(
@@ -269,8 +270,8 @@ export function ArchiviewFacadePanel({
           </>
         ) : (
           <>
-            Современное выпрямленное фото. Наведите или нажмите на <strong>номер или область</strong> —
-            сверху появится кураторская плашка. Список справа синхронизирован с подсветкой.
+            Выпрямленное фото с подсветкой областей. Наведите на <strong>область</strong> — сверху
+            появится кураторская плашка с историей. Список справа синхронизирован с подсветкой.
           </>
         )}
       </p>
@@ -294,7 +295,7 @@ export function ArchiviewFacadePanel({
                 alt={
                   sideBySide
                     ? 'Историческое и современное фото с разметкой Archiview'
-                    : 'Современное выпрямленное фото с подсветкой Archiview'
+                    : 'Выпрямленное фото фасада с подсветкой Archiview'
                 }
                 width={imgSize.w}
                 height={imgSize.h}
@@ -309,13 +310,14 @@ export function ArchiviewFacadePanel({
                 >
                   {regions.map((r) => {
                     const on = hoverIdx === r.idx
+                    const color = CLASS_COLORS[r.cls] ?? '#444'
                     return (
                       <polygon
                         key={r.idx}
                         points={r.polygonPct.map(([x, y]) => `${x},${y}`).join(' ')}
-                        fill={on ? 'rgba(251,191,36,0.42)' : 'transparent'}
-                        stroke={on ? '#d97706' : 'transparent'}
-                        strokeWidth={on ? 0.45 : 0}
+                        fill={on ? `${color}66` : 'transparent'}
+                        stroke={on ? color : 'transparent'}
+                        strokeWidth={on ? 0.5 : 0}
                       />
                     )
                   })}
