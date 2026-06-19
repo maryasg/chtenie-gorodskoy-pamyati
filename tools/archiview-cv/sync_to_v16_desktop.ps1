@@ -65,6 +65,7 @@ Or double-click OBNOVIT_IZ_GITA.bat in the v16 Desktop folder.
 
 $files = @(
     'install_windows.bat',
+    'PERESOZDAT_VENV.bat',
     'requirements_archiview.txt',
     'run_gui_windows.bat',
     'run_gui_v15.bat',
