@@ -464,11 +464,16 @@ class ComparisonsTabFrame(ttk.Frame):
         get_store: Callable[[], Optional[ProjectStore]],
         on_open_comparison: Callable[[ComparisonSession], None],
         on_log: Optional[Callable[[str], None]] = None,
+        on_need_photos: Optional[Callable[[], None]] = None,
+        *,
+        compact: bool = False,
     ) -> None:
         super().__init__(parent)
         self.get_store = get_store
         self.on_open_comparison = on_open_comparison
         self.on_log = on_log
+        self.on_need_photos = on_need_photos
+        self._compact = compact
         self._items: List[ComparisonSession] = []
         self.hide_legacy = tk.BooleanVar(value=True)
         self.columnconfigure(0, weight=1)
@@ -486,7 +491,8 @@ class ComparisonsTabFrame(ttk.Frame):
         ).grid(row=0, column=0, sticky="w", padx=10, pady=(10, 6))
 
         cols = ("id", "modern", "historical", "ann", "status", "updated", "title")
-        self.tree = ttk.Treeview(self, columns=cols, show="headings", height=12, selectmode="browse")
+        cmp_height = 6 if self._compact else 12
+        self.tree = ttk.Treeview(self, columns=cols, show="headings", height=cmp_height, selectmode="browse")
         headers = {
             "id": "ID",
             "modern": "Совр. фото",
@@ -520,6 +526,8 @@ class ComparisonsTabFrame(ttk.Frame):
         ttk.Button(btm, text="Обновить", command=self.refresh).pack(side="left")
         ttk.Button(btm, text="Открыть сравнение", command=self.open_selected).pack(side="left", padx=6)
         ttk.Button(btm, text="Создать новое…", command=self.create_new).pack(side="left", padx=6)
+        if self.on_need_photos is not None:
+            ttk.Button(btm, text="Добавить фото…", command=self.on_need_photos).pack(side="left", padx=6)
         ttk.Button(btm, text="Дублировать", command=self.duplicate_selected).pack(side="left", padx=6)
         ttk.Button(btm, text="Сделать текущим ★", command=self.make_active).pack(side="left", padx=6)
         ttk.Button(btm, text="Пометить «к удалению»", command=self.mark_discarded).pack(side="left", padx=6)
@@ -577,17 +585,18 @@ class ComparisonsTabFrame(ttk.Frame):
         store = self._require_store()
         if not store:
             return
-        if not store.list_photos("historical"):
-            messagebox.showwarning("Нет фото", "Сначала добавьте историческое фото в проект.")
-            return
-        if not store.list_photos("modern") and not any(
+        has_modern = bool(store.list_photos("modern")) or any(
             (c.work_path(store.project_dir) / "04_modern_rectified.png").exists()
             for c in store.list_comparisons()
-        ):
-            messagebox.showwarning(
-                "Нет фото",
-                "Добавьте современное фото или сделайте выпрямление в другом сравнении.",
+        )
+        if not store.list_photos("historical") or not has_modern:
+            messagebox.showinfo(
+                "Нужны фото",
+                "Сначала добавьте историческое и современное фото на вкладке «7. Источники (старая)».\n\n"
+                "Для второго сравнения можно выбрать уже выпрямленное modern из другого сравнения.",
             )
+            if self.on_need_photos:
+                self.on_need_photos()
             return
         title = simpledialog.askstring("Новое сравнение", "Название сравнения:", parent=self)
         if title is None:
@@ -717,6 +726,8 @@ class MyProjectsPanel(ttk.LabelFrame):
         on_import_excel: Callable[[], None],
         on_projects_deleted: Optional[Callable[[List[Path]], None]] = None,
         on_log: Optional[Callable[[str], None]] = None,
+        *,
+        compact: bool = False,
     ) -> None:
         super().__init__(parent, text="Мои проекты")
         self.project_root = Path(project_root)
@@ -725,8 +736,12 @@ class MyProjectsPanel(ttk.LabelFrame):
         self.on_import_excel = on_import_excel
         self.on_projects_deleted = on_projects_deleted
         self.on_log = on_log
+        self._compact = compact
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(1, weight=1)
+        if compact:
+            self.rowconfigure(1, weight=0)
+        else:
+            self.rowconfigure(1, weight=1)
 
         top = ttk.Frame(self)
         top.grid(row=0, column=0, sticky="ew", padx=8, pady=6)
@@ -734,11 +749,13 @@ class MyProjectsPanel(ttk.LabelFrame):
         ttk.Button(top, text="Обновить", command=self.refresh).pack(side="left", padx=6)
         ttk.Button(top, text="Новый дом…", command=self.on_new_project).pack(side="left", padx=6)
         ttk.Button(top, text="Импорт Excel/CSV…", command=self.on_import_excel).pack(side="left", padx=6)
-        ttk.Button(top, text="Удалить выбранные…", command=self.delete_selected).pack(side="left", padx=(12, 0))
-        ttk.Button(top, text="Удалить без разметки…", command=self.delete_without_markup).pack(side="left", padx=6)
+        if not compact:
+            ttk.Button(top, text="Удалить выбранные…", command=self.delete_selected).pack(side="left", padx=(12, 0))
+            ttk.Button(top, text="Удалить без разметки…", command=self.delete_without_markup).pack(side="left", padx=6)
 
         cols = ("site_id", "name", "address", "folder", "markup", "updated")
-        self.tree = ttk.Treeview(self, columns=cols, show="headings", height=4, selectmode="extended")
+        tree_height = 3 if compact else 4
+        self.tree = ttk.Treeview(self, columns=cols, show="headings", height=tree_height, selectmode="extended")
         self.tree.heading("site_id", text="Код сайта")
         self.tree.heading("name", text="Название дома")
         self.tree.heading("address", text="Адрес")
@@ -751,7 +768,7 @@ class MyProjectsPanel(ttk.LabelFrame):
         self.tree.column("folder", width=140, anchor="w")
         self.tree.column("markup", width=70, anchor="center")
         self.tree.column("updated", width=110, anchor="center")
-        self.tree.grid(row=1, column=0, sticky="nsew", padx=(8, 0), pady=(0, 8))
+        self.tree.grid(row=1, column=0, sticky="nsew" if not compact else "ew", padx=(8, 0), pady=(0, 8))
         y = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
         y.grid(row=1, column=1, sticky="ns", pady=(0, 8))
         self.tree.configure(yscrollcommand=y.set)
@@ -896,7 +913,7 @@ class MyProjectsPanel(ttk.LabelFrame):
 
 
 class HouseWorkflowWizardFrame(ttk.Frame):
-    """Пошаговый мастер: дом → сравнение ★ → фото и переход к работе."""
+    """Одна страница: дом → данные → сравнения ★ → переход к работе."""
 
     def __init__(
         self,
@@ -914,6 +931,7 @@ class HouseWorkflowWizardFrame(ttk.Frame):
         on_persist_house: Optional[Callable[[], None]] = None,
         rakurs_var: Optional[tk.StringVar] = None,
         on_rakurs_changed: Optional[Callable[[], None]] = None,
+        on_need_photos: Optional[Callable[[], None]] = None,
     ) -> None:
         super().__init__(parent)
         self.project_root = Path(project_root)
@@ -929,79 +947,59 @@ class HouseWorkflowWizardFrame(ttk.Frame):
         self.on_persist_house = on_persist_house
         self.rakurs_var = rakurs_var
         self.on_rakurs_changed = on_rakurs_changed
-        self._current_step = 1
+        self.on_need_photos = on_need_photos
         self._house_label = tk.StringVar(value="Дом не выбран")
         self._cmp_label = tk.StringVar(value="Сравнение не выбрано")
-        self._hist_path = tk.StringVar(value="—")
-        self._mod_path = tk.StringVar(value="—")
-        self._work_dir = tk.StringVar(value="—")
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
 
         header = ttk.Frame(self)
-        header.grid(row=0, column=0, sticky="ew", padx=12, pady=(10, 6))
+        header.grid(row=0, column=0, sticky="ew", padx=12, pady=(10, 4))
         header.columnconfigure(0, weight=1)
-        self.step_title = ttk.Label(header, text="", font=("TkDefaultFont", 12, "bold"))
-        self.step_title.grid(row=0, column=0, sticky="w")
-        self.step_hint = ttk.Label(header, text="", wraplength=920, foreground="#555")
-        self.step_hint.grid(row=1, column=0, sticky="w", pady=(4, 0))
-
-        self.steps_host = ttk.Frame(self)
-        self.steps_host.grid(row=1, column=0, sticky="nsew", padx=8, pady=6)
-        self.steps_host.columnconfigure(0, weight=1)
-        self.steps_host.rowconfigure(0, weight=1)
-
-        self._step1 = ttk.Frame(self.steps_host)
-        self._step2 = ttk.Frame(self.steps_host)
-        self._step3 = ttk.Frame(self.steps_host)
-        for frame in (self._step1, self._step2, self._step3):
-            frame.columnconfigure(0, weight=1)
-            frame.rowconfigure(0, weight=1)
-
-        self._build_step1()
-        self._build_step2()
-        self._build_step3()
-        self.show_step(1)
-
-    def _build_step1(self) -> None:
-        wrap = ttk.LabelFrame(self._step1, text="Шаг 1 — дом и данные для сайта")
-        wrap.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
-        wrap.columnconfigure(0, weight=1)
-        wrap.rowconfigure(1, weight=1)
         ttk.Label(
-            wrap,
-            text="Выберите дом в таблице — справа подгрузятся папка, название, код MOSCOW_XXX, адрес, координаты. Сохраните, затем «Далее к сравнениям».",
-            wraplength=900,
+            header,
+            text="Дом → данные → сравнение ★ → тип пары → работа",
+            font=("TkDefaultFont", 12, "bold"),
+        ).grid(row=0, column=0, sticky="w")
+        ttk.Label(
+            header,
+            text="Выберите дом, сохраните данные, выберите или создайте сравнение. Новое сравнение — «Добавить фото» или «Создать новое…».",
+            wraplength=980,
             foreground="#555",
-        ).grid(row=0, column=0, sticky="w", padx=10, pady=(8, 4))
+        ).grid(row=1, column=0, sticky="w", pady=(4, 0))
 
-        split = ttk.Panedwindow(wrap, orient="horizontal")
-        split.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
-        list_wrap = ttk.Frame(split)
-        meta_wrap = ttk.LabelFrame(split, text="Данные дома")
-        split.add(list_wrap, weight=3)
-        split.add(meta_wrap, weight=2)
-        list_wrap.columnconfigure(0, weight=1)
-        list_wrap.rowconfigure(0, weight=1)
+        self._build_main_page()
+
+    def _build_main_page(self) -> None:
+        wrap = ttk.Frame(self)
+        wrap.grid(row=1, column=0, sticky="nsew", padx=8, pady=6)
+        wrap.columnconfigure(0, weight=1)
+        wrap.rowconfigure(2, weight=1)
+
+        top_split = ttk.Panedwindow(wrap, orient="horizontal")
+        top_split.grid(row=0, column=0, sticky="nsew", padx=4, pady=(0, 6))
+        houses_wrap = ttk.Frame(top_split)
+        meta_wrap = ttk.LabelFrame(top_split, text="Данные дома")
+        top_split.add(houses_wrap, weight=2)
+        top_split.add(meta_wrap, weight=3)
+        houses_wrap.columnconfigure(0, weight=1)
         meta_wrap.columnconfigure(0, weight=1)
 
         if MyProjectsPanel is not None:
             self.projects_panel = MyProjectsPanel(
-                list_wrap,
+                houses_wrap,
                 project_root=self.project_root,
                 on_open_project=self._house_opened,
                 on_new_project=self.on_new_project,
                 on_import_excel=self.on_import_excel,
                 on_projects_deleted=self.on_projects_deleted,
                 on_log=self.on_log,
+                compact=True,
             )
-            self.projects_panel.grid(row=0, column=0, sticky="nsew")
+            self.projects_panel.grid(row=0, column=0, sticky="ew")
         else:
             self.projects_panel = None
-            ttk.Label(list_wrap, text="Модуль списка проектов не найден.", foreground="red").grid(
-                row=0, column=0, sticky="w", padx=10, pady=8
-            )
 
         if self.build_house_panel is not None:
             self.build_house_panel(meta_wrap)
@@ -1010,98 +1008,65 @@ class HouseWorkflowWizardFrame(ttk.Frame):
                 anchor="w", padx=8, pady=8
             )
 
-        nav = ttk.Frame(wrap)
-        nav.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 8))
-        ttk.Button(nav, text="Обновить список домов", command=self.refresh_projects).pack(side="left")
-        ttk.Button(nav, text="Далее к сравнениям →", command=self._continue_to_comparisons).pack(side="right")
+        save_row = ttk.Frame(wrap)
+        save_row.grid(row=1, column=0, sticky="ew", padx=4, pady=(0, 4))
+        ttk.Button(save_row, text="Обновить список домов", command=self.refresh_projects).pack(side="left")
+        ttk.Button(save_row, text="Сохранить данные дома", command=self._persist_house).pack(side="left", padx=8)
+        ttk.Label(save_row, textvariable=self._house_label, foreground="#333").pack(side="left", padx=12)
 
-    def _build_step2(self) -> None:
-        wrap = ttk.LabelFrame(self._step2, text="Шаг 2 — выберите сравнение")
-        wrap.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
-        wrap.columnconfigure(0, weight=1)
-        wrap.rowconfigure(2, weight=1)
-        ttk.Label(
-            wrap,
-            textvariable=self._house_label,
-            font=("TkDefaultFont", 10, "bold"),
-        ).grid(row=0, column=0, sticky="w", padx=10, pady=(8, 2))
-        ttk.Label(
-            wrap,
-            text="Выберите строку → «Сделать текущим ★» или двойной клик. Новое — только «Создать новое…».",
-            wraplength=900,
-            foreground="#555",
-        ).grid(row=1, column=0, sticky="w", padx=10, pady=(0, 6))
+        cmp_box = ttk.LabelFrame(wrap, text="Сравнения проекта — ★ = активное (разметка и экспорт)")
+        cmp_box.grid(row=2, column=0, sticky="nsew", padx=4, pady=4)
+        cmp_box.columnconfigure(0, weight=1)
+        cmp_box.rowconfigure(0, weight=1)
         self.comparisons_panel = ComparisonsTabFrame(
-            wrap,
+            cmp_box,
             get_store=self.get_store,
             on_open_comparison=self._comparison_opened,
             on_log=self.on_log,
+            on_need_photos=self.on_need_photos,
+            compact=True,
         )
-        self.comparisons_panel.grid(row=2, column=0, sticky="nsew", padx=4, pady=4)
-        nav = ttk.Frame(wrap)
-        nav.grid(row=3, column=0, sticky="ew", padx=8, pady=(0, 8))
-        ttk.Button(nav, text="← Назад к выбору дома", command=lambda: self.show_step(1)).pack(side="left")
-        ttk.Button(nav, text="Далее к фото и работе →", command=self._continue_to_ready).pack(side="right")
+        self.comparisons_panel.grid(row=0, column=0, sticky="nsew")
 
-    def _build_step3(self) -> None:
-        wrap = ttk.LabelFrame(self._step3, text="Шаг 3 — готово к работе")
-        wrap.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
-        wrap.columnconfigure(1, weight=1)
-        rows = [
-            ("Дом:", self._house_label),
-            ("Сравнение ★:", self._cmp_label),
-            ("Папка работы:", self._work_dir),
-            ("Историческое фото:", self._hist_path),
-            ("Современное фото:", self._mod_path),
-        ]
-        for i, (label, var) in enumerate(rows):
-            ttk.Label(wrap, text=label).grid(row=i, column=0, sticky="nw", padx=10, pady=4)
-            ttk.Label(wrap, textvariable=var, wraplength=760, foreground="#222").grid(
-                row=i, column=1, sticky="w", padx=6, pady=4
-            )
-        next_row = len(rows)
+        actions = ttk.LabelFrame(wrap, text="Тип пары и переход к работе")
+        actions.grid(row=3, column=0, sticky="ew", padx=4, pady=(4, 0))
+        actions.columnconfigure(0, weight=1)
+        ttk.Label(actions, textvariable=self._cmp_label, font=("TkDefaultFont", 10, "bold")).grid(
+            row=0, column=0, sticky="w", padx=10, pady=(8, 4)
+        )
         if self.rakurs_var is not None:
-            rakurs_box = ttk.LabelFrame(wrap, text="Тип пары фото — куда перейти дальше")
-            rakurs_box.grid(row=next_row, column=0, columnspan=2, sticky="ew", padx=10, pady=(8, 4))
-            inner = ttk.Frame(rakurs_box)
-            inner.pack(fill="x", padx=8, pady=8)
+            rakurs_inner = ttk.Frame(actions)
+            rakurs_inner.grid(row=1, column=0, sticky="ew", padx=10, pady=4)
 
             def _rakurs_changed() -> None:
                 if self.on_rakurs_changed:
                     self.on_rakurs_changed()
-                self._update_step3_primary_action()
+                self._update_primary_action()
 
             ttk.Radiobutton(
-                inner,
-                text="Похожие ракурсы — выпрямление, 4 угла, наложение",
+                rakurs_inner,
+                text="Похожие ракурсы → выпрямление и 4 угла",
                 variable=self.rakurs_var,
                 value="similar",
                 command=_rakurs_changed,
-            ).pack(anchor="w")
+            ).pack(side="left", padx=(0, 16))
             ttk.Radiobutton(
-                inner,
-                text="Разные ракурсы — два фото рядом (side-by-side), без 4 углов",
+                rakurs_inner,
+                text="Разные ракурсы → side-by-side, без 4 углов",
                 variable=self.rakurs_var,
                 value="different",
                 command=_rakurs_changed,
-            ).pack(anchor="w", pady=(6, 0))
+            ).pack(side="left")
             self._rakurs_route_hint = ttk.Label(
-                inner,
-                wraplength=900,
+                actions,
+                wraplength=980,
                 foreground="#1a5c9e",
                 font=("TkDefaultFont", 10, "bold"),
             )
-            self._rakurs_route_hint.pack(anchor="w", pady=(8, 0))
-            next_row += 1
-        ttk.Label(
-            wrap,
-            text="Сохранение и «Отправить на сайт» идут из папки сравнения со звёздочкой ★.",
-            wraplength=900,
-            foreground="#555",
-        ).grid(row=next_row, column=0, columnspan=2, sticky="w", padx=10, pady=(8, 4))
-        next_row += 1
-        btns = ttk.Frame(wrap)
-        btns.grid(row=next_row, column=0, columnspan=2, sticky="w", padx=10, pady=(4, 8))
+            self._rakurs_route_hint.grid(row=2, column=0, sticky="w", padx=10, pady=(0, 4))
+
+        btns = ttk.Frame(actions)
+        btns.grid(row=3, column=0, sticky="w", padx=10, pady=(4, 10))
         if self.rakurs_var is not None:
             self._step3_primary_btn = tk.Button(
                 btns,
@@ -1117,43 +1082,20 @@ class HouseWorkflowWizardFrame(ttk.Frame):
             )
             self._step3_primary_btn.pack(side="left", padx=(0, 10))
         for text, key in (
+            ("7. Источники", "sources"),
             ("2. Выпрямление", "rectify"),
             ("3. Сравнение", "compare"),
             ("4. Разметка", "markup"),
             ("5. Результат", "result"),
         ):
             ttk.Button(btns, text=text, command=lambda k=key: self._go_tab(k)).pack(side="left", padx=(0, 6))
-        nav = ttk.Frame(wrap)
-        nav.grid(row=next_row + 1, column=0, columnspan=2, sticky="ew", padx=8, pady=(0, 8))
-        ttk.Button(nav, text="← Другое сравнение", command=lambda: self.show_step(2)).pack(side="left")
-        ttk.Button(nav, text="← Другой дом", command=lambda: self.show_step(1)).pack(side="left", padx=8)
+        self._update_primary_action()
 
-    def show_step(self, step: int) -> None:
-        step = max(1, min(3, int(step)))
-        self._current_step = step
-        for i, frame in enumerate((self._step1, self._step2, self._step3), start=1):
-            if i == step:
-                frame.grid(row=0, column=0, sticky="nsew")
-            else:
-                frame.grid_remove()
-        titles = {
-            1: "Шаг 1 из 3 — Дом: папка, код сайта, адрес, координаты",
-            2: "Шаг 2 из 3 — Выберите сравнение",
-            3: "Шаг 3 из 3 — Фото подставлены, можно работать",
-        }
-        hints = {
-            1: "Выберите дом в таблице слева. Справа проверьте MOSCOW_XXX и адрес → «Сохранить данные дома».",
-            2: "★ = активное сравнение. Разметка и экспорт идут из его папки.",
-            3: "Проверьте фото и тип пары. Синяя кнопка ведёт на нужный шаг.",
-        }
-        self.step_title.configure(text=titles[step])
-        self.step_hint.configure(text=hints[step])
-        if step == 2:
-            self.refresh_comparisons()
-        if step == 3:
-            self._update_step3_primary_action()
+    def _persist_house(self) -> None:
+        if self.on_persist_house:
+            self.on_persist_house()
 
-    def _update_step3_primary_action(self) -> None:
+    def _update_primary_action(self) -> None:
         if not hasattr(self, "_step3_primary_btn"):
             return
         if self.rakurs_var is not None and self.rakurs_var.get() == "different":
@@ -1163,7 +1105,7 @@ class HouseWorkflowWizardFrame(ttk.Frame):
             )
             if hasattr(self, "_rakurs_route_hint"):
                 self._rakurs_route_hint.configure(
-                    text="Выпрямление и 4 угла не нужны — на «Сравнение» нажмите «Подготовить», затем разметка."
+                    text="Выпрямление не нужно — «Подготовить» на вкладке «Сравнение», затем разметка."
                 )
         else:
             self._step3_primary_btn.configure(
@@ -1172,7 +1114,7 @@ class HouseWorkflowWizardFrame(ttk.Frame):
             )
             if hasattr(self, "_rakurs_route_hint"):
                 self._rakurs_route_hint.configure(
-                    text="Сначала 4 угла на вкладке «Выпрямление», затем «Подготовить» и разметка."
+                    text="Сначала 4 угла на «Выпрямление», затем «Подготовить» и разметка."
                 )
 
     def refresh_projects(self) -> None:
@@ -1185,37 +1127,14 @@ class HouseWorkflowWizardFrame(ttk.Frame):
 
     def _house_opened(self, path: Path) -> None:
         self.on_house_selected(path)
+        self.refresh_comparisons()
+        if self.on_persist_house:
+            self.on_persist_house()
 
     def _comparison_opened(self, comparison: ComparisonSession) -> None:
         self.on_comparison_opened(comparison)
-        self.refresh_summary()
-        self.show_step(3)
-
-    def _continue_to_comparisons(self) -> None:
-        store = self.get_store()
-        if store is None or not str(getattr(store, "project_dir", "")):
-            messagebox.showinfo("Дом не выбран", "Сначала выберите дом в таблице слева.")
-            return
-        if self.on_persist_house:
-            self.on_persist_house()
-        self.refresh_comparisons()
-        self.show_step(2)
-
-    def _continue_to_ready(self) -> None:
-        store = self.get_store()
-        if store is None or not store.active_comparison_id:
-            messagebox.showinfo(
-                "Сравнение не выбрано",
-                "Выберите сравнение в таблице и нажмите «Сделать текущим ★» или двойной клик.",
-            )
-            return
-        cmp = store.get_active_comparison()
-        if cmp is None:
-            messagebox.showinfo("Сравнение не выбрано", "Выберите сравнение в таблице.")
-            return
-        self.on_comparison_opened(cmp)
-        self.refresh_summary()
-        self.show_step(3)
+        self._cmp_label.set(f"★ {comparison.comparison_id}" + (f" — {comparison.title}" if comparison.title else ""))
+        self._update_primary_action()
 
     def refresh_summary(
         self,
@@ -1230,13 +1149,13 @@ class HouseWorkflowWizardFrame(ttk.Frame):
             self._house_label.set(house_text)
         if comparison_text:
             self._cmp_label.set(comparison_text)
-        if work_dir:
-            self._work_dir.set(work_dir)
-        if historical_path:
-            self._hist_path.set(historical_path)
-        if modern_path:
-            self._mod_path.set(modern_path)
 
     def _go_tab(self, key: str) -> None:
         if self.on_go_tab:
             self.on_go_tab(key)
+
+    def show_step(self, step: int = 1) -> None:
+        """Совместимость: одна страница, только обновить списки."""
+        self.refresh_projects()
+        self.refresh_comparisons()
+        self._update_primary_action()
