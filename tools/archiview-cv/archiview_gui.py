@@ -5057,6 +5057,8 @@ class App(tk.Tk):
     def _refresh_my_projects_panel(self) -> None:
         if hasattr(self, "my_projects_panel"):
             self.my_projects_panel.refresh()
+        if hasattr(self, "workflow_wizard"):
+            self.workflow_wizard.refresh_projects()
 
     def _allocate_new_project_dir(self, slug: str) -> Path:
         clean = safe_filename(slug.strip(), "house_project") if slug.strip() else "house_project"
