@@ -69,6 +69,7 @@ try:
     from archiview_project_model import (
         ComparisonSession,
         ProjectStore,
+        comparison_years_label,
         address_location_key,
         format_nominatim_short_address,
         house_number_from_nominatim,
@@ -94,6 +95,7 @@ try:
 except Exception:
     ComparisonSession = None  # type: ignore[assignment,misc]
     ProjectStore = None  # type: ignore[assignment,misc]
+    comparison_years_label = None  # type: ignore[assignment,misc]
     infer_site_card_id = None  # type: ignore[assignment,misc]
     normalize_site_card_id = None  # type: ignore[assignment,misc]
     website_display_name = None  # type: ignore[assignment,misc]
@@ -5133,9 +5135,9 @@ class App(tk.Tk):
             cmp = self.project_store.get_active_comparison()
             if cmp:
                 legacy = " (legacy result/)" if cmp.is_legacy else ""
-                title = f" — {cmp.title}" if cmp.title else ""
+                years = comparison_years_label(self.project_store, cmp) if comparison_years_label else cmp.comparison_id
                 ann = f", разметок: {cmp.annotation_count}" if cmp.annotation_count else ""
-                return f"★ {cmp.comparison_id}{title}{ann} | папка: {rel}{legacy}"
+                return f"★ {years}{ann} | папка: {rel}{legacy}"
         return f"Папка: {rel}"
 
     def _active_comparison_banner_text(self) -> str:
@@ -5150,13 +5152,13 @@ class App(tk.Tk):
                 return f"★ Сравнение не выбрано | папка: {work} — создайте или выберите ★ в таблице сравнений"
             return "★ Сравнение не выбрано — «Создать новое…» или двойной клик по строке в таблице"
         legacy = " (legacy result/)" if cmp.is_legacy else ""
-        title = cmp.title.strip() if cmp.title else "без названия"
+        years = comparison_years_label(self.project_store, cmp) if comparison_years_label else cmp.comparison_id
         try:
             rel = str(Path(self.outdir.get()).resolve().relative_to(self.project_root().resolve()))
         except Exception:
             rel = Path(self.outdir.get()).name if self.outdir.get() else "—"
         ann = f" | разметок: {cmp.annotation_count}" if cmp.annotation_count else ""
-        return f"★ Активное сравнение: {cmp.comparison_id} — {title} | папка: {rel}{legacy}{ann}"
+        return f"★ Активное сравнение: {years} | папка: {rel}{legacy}{ann}"
 
     def _refresh_active_comparison_banner(self) -> None:
         text = self._active_comparison_banner_text()
@@ -11837,11 +11839,12 @@ class AppV16(AppV15):
     def _wizard_comparison_summary_text(self, comparison) -> str:
         suffix = " (legacy)" if comparison.is_legacy else ""
         ann = f", разметок: {comparison.annotation_count}"
-        title = comparison.title or ""
-        line = f"★ {comparison.comparison_id}{suffix}{ann}"
-        if title:
-            line += f" — {title}"
-        return line
+        years = (
+            comparison_years_label(self.project_store, comparison)
+            if self.project_store and comparison_years_label
+            else comparison.comparison_id
+        )
+        return f"★ {years}{suffix}{ann}"
 
     def _wizard_on_house_selected(self, project_dir: Path) -> None:
         self._load_project_metadata_only(project_dir)

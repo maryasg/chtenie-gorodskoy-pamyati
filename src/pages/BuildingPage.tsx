@@ -309,8 +309,10 @@ export function BuildingPage() {
           ) : null}
           {displayAssets.comparisonId ? (
             <p className="mb-3 text-xs font-medium text-arch-muted">
-              Сравнение: {displayAssets.comparisonId}
-              {displayAssets.comparisonTitle ? ` — ${displayAssets.comparisonTitle}` : ''}
+              Сравнение:{' '}
+              {displayAssets.historicalPhotoYear && displayAssets.modernPhotoYear
+                ? `${displayAssets.historicalPhotoYear} → ${displayAssets.modernPhotoYear}`
+                : displayAssets.comparisonTitle || displayAssets.comparisonId}
             </p>
           ) : null}
           <ArchiviewFacadePanel assets={displayAssets} building={building} />
