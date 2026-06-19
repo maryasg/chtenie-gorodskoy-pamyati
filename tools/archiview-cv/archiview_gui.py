@@ -2155,6 +2155,16 @@ def _canvas_draw_index_label(canvas: tk.Canvas, x: float, y: float, text: str, c
     canvas.create_text(x, y, text=text, fill=color, font=font, tags=tags)
 
 
+def _annotation_display_index(ann: dict, fallback: int) -> int:
+    try:
+        aid = int(ann.get("id", 0))
+        if aid > 0:
+            return aid
+    except (TypeError, ValueError):
+        pass
+    return fallback
+
+
 def draw_polygons_on_image(
     img: np.ndarray,
     annotations: List[dict],
@@ -2198,7 +2208,7 @@ def draw_polygons_on_image(
                 pts = cv.perspectiveTransform(pts.reshape(-1, 1, 2), transform).reshape(-1, 2)
             pts_i = np.round(pts).astype(np.int32)
             x, y = pts_i.mean(axis=0).astype(int)
-            _put_index_on_cv(out, int(x), int(y), idx, color)
+            _put_index_on_cv(out, int(x), int(y), _annotation_display_index(ann, idx), color)
     return out
 
 
@@ -8127,7 +8137,7 @@ class AppV12(AppV11):
             if len(display_poly) < 3:
                 continue
             item = dict(ann)
-            item["_idx"] = idx
+            item["_idx"] = _annotation_display_index(ann, idx)
             item["_source_polygon"] = src_poly
             item["_display_polygon"] = display_poly
             result.append(item)

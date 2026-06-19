@@ -1,4 +1,4 @@
-{
+﻿{
   "version": "v16 polygon edit + stable site links",
   "image": "05_comparison_for_labeling.png",
   "rectified_size": {
@@ -51,7 +51,7 @@
         ]
       ],
       "coordinate_space": "rectified",
-      "traceId": "MOSCOW_003_T001"
+      "traceId": "MOSCOW_003_T005"
     },
     {
       "id": 2,
@@ -706,7 +706,8 @@
           267.43170166015625
         ]
       ],
-      "coordinate_space": "rectified"
+      "coordinate_space": "rectified",
+      "traceId": "MOSCOW_003_T001"
     },
     {
       "id": 13,
