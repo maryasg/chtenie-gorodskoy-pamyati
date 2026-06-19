@@ -75,6 +75,12 @@ function getTraceId(ann: ArchiviewAnnotation): string | undefined {
   return ann.traceId
 }
 
+function annotationDisplayIndex(ann: ArchiviewAnnotation, arrayIndex: number): number {
+  const id = ann.id
+  if (typeof id === 'number' && Number.isFinite(id) && id > 0) return id
+  return arrayIndex + 1
+}
+
 function shortText(text: string, maxLength = 260): string {
   if (text.length <= maxLength) return text
   const shortened = text.slice(0, maxLength)
@@ -133,7 +139,7 @@ export function ArchiviewFacadePanel({
         const raw = ann.polygon as Point[] | undefined
         if (!raw || raw.length < 3) return
         const pct = toPercentPoints(raw, width, height)
-        list.push(makeRegion(ann, i + 1, pct))
+        list.push(makeRegion(ann, annotationDisplayIndex(ann, i), pct))
       })
       setRegions(list)
     },
@@ -148,7 +154,7 @@ export function ArchiviewFacadePanel({
         if (!raw || raw.length < 3) return
         const onPhoto = transformPolygon(H, raw)
         const pct = toPercentPoints(onPhoto, width, height)
-        list.push(makeRegion(ann, i + 1, pct))
+        list.push(makeRegion(ann, annotationDisplayIndex(ann, i), pct))
       })
       setRegions(list)
     },
@@ -178,7 +184,7 @@ export function ArchiviewFacadePanel({
           payload.rectified_size,
         )
         const pct = toPercentPoints(onPanel, width, height)
-        list.push(makeRegion(ann, i + 1, pct))
+        list.push(makeRegion(ann, annotationDisplayIndex(ann, i), pct))
       })
       setRegions(list)
     },
