@@ -43,6 +43,7 @@ function Write-JsonUtf8NoBom([string]$Path, [object]$Data) {
 function Test-HasExportFiles([string]$Dir) {
     if (-not (Test-Path -LiteralPath $Dir)) { return $false }
     $markers = @(
+        '03_historical_rectified.png',
         '04_modern_rectified.png',
         '07_marked_on_original_modern.png',
         'annotations\manual_annotations.json'
@@ -327,13 +328,54 @@ function Export-ComparisonBundle {
     }
 }
 
+function Get-PhotoYearsFromCmpDir {
+    param(
+        [string]$CmpDir,
+        [string]$Title = ''
+    )
+    $histYear = ''
+    $modYear = ''
+    $pj = Join-Path $CmpDir 'project_v8.json'
+    if (Test-Path -LiteralPath $pj) {
+        try {
+            $p = Get-Content -LiteralPath $pj -Raw -Encoding UTF8 | ConvertFrom-Json
+            $pv = $p.pastvu
+            if ($pv) {
+                foreach ($key in @('year', 'years', 'date')) {
+                    $val = $pv.$key
+                    if ($null -ne $val -and [string]$val -match '(\d{4})') {
+                        $histYear = $Matches[1]
+                        break
+                    }
+                }
+            }
+            $ms = $p.modern_source
+            if ($ms) {
+                foreach ($key in @('captured_at', 'date', 'year')) {
+                    $val = $ms.$key
+                    if ($null -ne $val -and [string]$val -match '(\d{4})') {
+                        $modYear = $Matches[1]
+                        break
+                    }
+                }
+            }
+        } catch { }
+    }
+    if (-not $histYear -and $Title -match '\b(1[89]\d{2}|20\d{2})\b') {
+        $histYear = $Matches[1]
+    }
+    return [PSCustomObject]@{ Historical = $histYear; Modern = $modYear }
+}
+
 function New-ManifestEntry {
     param(
         [string]$ComparisonId,
         [string]$Title,
         [bool]$IsLegacy,
         [object]$Bundle,
-        [string]$RelPrefix
+        [string]$RelPrefix,
+        [string]$HistoricalPhotoYear = '',
+        [string]$ModernPhotoYear = ''
     )
     $layout = if ($Bundle.IsSideBySide) { 'side_by_side' } else { 'overlay' }
     $prefix = if ($RelPrefix -and $RelPrefix -ne '.') { "$RelPrefix/" } else { '' }
@@ -354,6 +396,8 @@ function New-ManifestEntry {
         annotationsUrl = "${prefix}annotations.json"
         facadeProjectUrl = "${prefix}facade-project.json"
     }
+    if ($HistoricalPhotoYear) { $entry.historicalPhotoYear = $HistoricalPhotoYear }
+    if ($ModernPhotoYear) { $entry.modernPhotoYear = $ModernPhotoYear }
     if ($Bundle.IsSideBySide) {
         $entry.sideBySideMarkedUrl = "${prefix}side-by-side-marked.png"
     }
@@ -395,7 +439,8 @@ if ($projDir) {
 if ($defaultCmpId) {
     $rootTitle = $cmpTitleById[$defaultCmpId]
     if (-not $rootTitle) { $rootTitle = 'Primary (active)' }
-    $manifestItems += New-ManifestEntry -ComparisonId $defaultCmpId -Title $rootTitle -IsLegacy ($defaultCmpId -eq 'cmp_legacy_001') -Bundle $rootBundle -RelPrefix ''
+    $rootYears = Get-PhotoYearsFromCmpDir -CmpDir $Result -Title $rootTitle
+    $manifestItems += New-ManifestEntry -ComparisonId $defaultCmpId -Title $rootTitle -IsLegacy ($defaultCmpId -eq 'cmp_legacy_001') -Bundle $rootBundle -RelPrefix '' -HistoricalPhotoYear $rootYears.Historical -ModernPhotoYear $rootYears.Modern
 }
 
 if ($projDir) {
@@ -419,10 +464,10 @@ if ($projDir) {
                 $destSub = Join-Path $Web ("comparisons\{0}" -f $cmpId)
                 $subTraceMap = Get-TraceIdMapFromAnnotations (Join-Path $destSub 'annotations.json')
                 $bundle = Export-ComparisonBundle -Result $cmpDir -WebDest $destSub -TraceIdMap $subTraceMap
-                if ([int]$bundle.AnnotationCount -le 0) { continue }
                 $title = [string]$cmpMeta.title
                 if (-not $title) { $title = $cmpId }
-                $manifestItems += New-ManifestEntry -ComparisonId $cmpId -Title $title -IsLegacy $isLegacy -Bundle $bundle -RelPrefix ("comparisons/{0}" -f $cmpId)
+                $years = Get-PhotoYearsFromCmpDir -CmpDir $cmpDir -Title $title
+                $manifestItems += New-ManifestEntry -ComparisonId $cmpId -Title $title -IsLegacy $isLegacy -Bundle $bundle -RelPrefix ("comparisons/{0}" -f $cmpId) -HistoricalPhotoYear $years.Historical -ModernPhotoYear $years.Modern
                 Write-Host "OK: exported comparison $cmpId ($title)"
             }
         } catch {

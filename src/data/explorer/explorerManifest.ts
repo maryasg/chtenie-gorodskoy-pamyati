@@ -6,6 +6,8 @@ export interface ExplorerComparisonEntry {
   labelingLayout?: 'overlay' | 'side_by_side'
   annotationCount?: number
   isLegacy?: boolean
+  historicalPhotoYear?: string
+  modernPhotoYear?: string
   markedFacadeUrl: string
   labeledFacadeUrl: string
   sideBySideMarkedUrl?: string
@@ -46,8 +48,8 @@ export function manifestEntryToAssets(
     labelingLayout: entry.labelingLayout ?? defaults.labelingLayout,
     historicalRectifiedUrl: resolveExplorerAsset(cardId, entry.historicalRectifiedUrl),
     modernRectifiedUrl: resolveExplorerAsset(cardId, entry.modernRectifiedUrl),
-    historicalPhotoYear: defaults.historicalPhotoYear,
-    modernPhotoYear: defaults.modernPhotoYear,
+    historicalPhotoYear: entry.historicalPhotoYear ?? defaults.historicalPhotoYear,
+    modernPhotoYear: entry.modernPhotoYear ?? defaults.modernPhotoYear,
     annotationsUrl: resolveExplorerAsset(cardId, entry.annotationsUrl),
     facadeProjectUrl: resolveExplorerAsset(cardId, entry.facadeProjectUrl),
     comparisonId: entry.comparisonId,

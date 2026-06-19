@@ -4288,12 +4288,148 @@ class App(tk.Tk):
         old_crop = ""
         if item:
             old_crop = item.crop_rect_text or ""
-        elif getattr(self, "old_crop_rect_text", ""):
-            old_crop = self.old_crop_rect_text
+        if not old_crop:
+            old_crop = getattr(self, "old_crop_rect_text", "") or ""
+        project = self._project_json_dict() if hasattr(self, "_project_json_dict") else None
+        if not old_crop and project:
+            old_crop = str(project.get("old_crop_rect_text") or "")
         if hasattr(self, "old_crop_status"):
             self.old_crop_status.set(self._crop_status_label(old_crop))
+        mod_crop = self.modern_crop_rect_text or ""
+        if not mod_crop and project:
+            mod_crop = str(project.get("modern_crop_rect_text") or "")
         if hasattr(self, "modern_crop_status"):
-            self.modern_crop_status.set(self._crop_status_label(self.modern_crop_rect_text))
+            self.modern_crop_status.set(self._crop_status_label(mod_crop))
+
+    def _points_list_to_cli(self, pts: object, offset: Tuple[float, float] = (0.0, 0.0)) -> str:
+        if not isinstance(pts, (list, tuple)) or len(pts) < 4:
+            return ""
+        dx, dy = offset
+        try:
+            return points_to_cli(
+                [(float(p[0]) + dx, float(p[1]) + dy) for p in pts[:4]]
+            )
+        except Exception:
+            return ""
+
+    def _corners_complete_for_active(self) -> bool:
+        item = self._get_active_historical_item() if hasattr(self, "_get_active_historical_item") else None
+        if bool(self.modern_points_text.strip()) and item and bool(item.old_points_text.strip()):
+            return True
+        project = self._project_json_dict() if hasattr(self, "_project_json_dict") else None
+        if project and not project_is_side_by_side(project):
+            old_pts = project.get("old_points_tl_tr_br_bl")
+            mod_pts = project.get("modern_points_tl_tr_br_bl")
+            if (
+                isinstance(old_pts, list)
+                and isinstance(mod_pts, list)
+                and len(old_pts) >= 4
+                and len(mod_pts) >= 4
+            ):
+                return True
+        return False
+
+    def _work_dir_has_rectified_pair(self) -> bool:
+        if not self.outdir.get():
+            return False
+        outdir = Path(self.outdir.get())
+        return (outdir / "03_historical_rectified.png").exists() and (
+            outdir / "04_modern_rectified.png"
+        ).exists()
+
+    def _comparison_photos_locked(self) -> bool:
+        if self._work_dir_has_saved_markup():
+            return True
+        if self.project_store:
+            self.project_store.refresh_comparison_stats()
+            cmp = self.project_store.get_active_comparison()
+            if cmp and cmp.annotation_count > 0:
+                return True
+        if self._work_dir_has_rectified_pair():
+            return True
+        return False
+
+    def _block_photo_change_if_protected(self, action: str) -> bool:
+        if not self._comparison_photos_locked():
+            return False
+        cmp_id = ""
+        ann = 0
+        if self.project_store:
+            cmp = self.project_store.get_active_comparison()
+            if cmp:
+                cmp_id = cmp.comparison_id
+                ann = cmp.annotation_count
+        detail = (
+            f"В сравнении {cmp_id} уже есть разметка ({ann} обл.)."
+            if ann > 0
+            else f"Сравнение {cmp_id or '★'} уже выпрямлено (есть 03/04 в папке работы)."
+        )
+        messagebox.showwarning(
+            "Фото зафиксированы",
+            f"{detail}\n\n"
+            f"Нельзя {action} — углы и разметка сместятся.\n\n"
+            "Для новой пары фото: вкладка «0. Дом и сравнение» → «Создать новое…».",
+            parent=self,
+        )
+        return True
+
+    def _sync_rectify_state_from_workdir(self) -> None:
+        project = self._project_json_dict() if hasattr(self, "_project_json_dict") else None
+        item = self._get_active_historical_item() if hasattr(self, "_get_active_historical_item") else None
+        if project:
+            old_crop = str(project.get("old_crop_rect_text") or "")
+            mod_crop = str(project.get("modern_crop_rect_text") or "")
+            if old_crop and item and not item.crop_rect_text:
+                item.crop_rect_text = old_crop
+            if mod_crop and not self.modern_crop_rect_text:
+                self.modern_crop_rect_text = mod_crop
+            if not project_is_side_by_side(project):
+                if item and not item.old_points_text.strip():
+                    old_off = project.get("old_crop_offset_xy") or [0, 0]
+                    off = (float(old_off[0]), float(old_off[1])) if len(old_off) >= 2 else (0.0, 0.0)
+                    text = self._points_list_to_cli(project.get("old_points_tl_tr_br_bl"), off)
+                    if text:
+                        item.old_points_text = text
+                        self.old_points_text = text
+                if not self.modern_points_text.strip():
+                    mod_off = project.get("modern_crop_offset_xy") or [0, 0]
+                    off = (float(mod_off[0]), float(mod_off[1])) if len(mod_off) >= 2 else (0.0, 0.0)
+                    text = self._points_list_to_cli(project.get("modern_points_tl_tr_br_bl"), off)
+                    if text:
+                        self.modern_points_text = text
+        self._refresh_rectify_status_labels()
+
+    def _refresh_rectify_status_labels(self) -> None:
+        item = self._get_active_historical_item() if hasattr(self, "_get_active_historical_item") else None
+        corners_ok = self._corners_complete_for_active()
+        rect_ok = self._work_dir_has_rectified_pair()
+        cmp_id = ""
+        if self.project_store:
+            cmp = self.project_store.get_active_comparison()
+            if cmp:
+                cmp_id = cmp.comparison_id
+        if corners_ok:
+            label = item.label if item else "историческое фото"
+            self.points_status.set(f"4 угла заданы для: {label}")
+        elif item:
+            self.points_status.set(
+                f"Активно: {item.label}. Углы ещё не выбраны — нажмите «Указать 4 угла…»."
+            )
+        else:
+            self.points_status.set("Углы фасада ещё не выбраны.")
+        if rect_ok:
+            self.rectified_status.set(
+                f"Выпрямление готово ({cmp_id or '★'}). Файлы 03/04 в папке работы — можно размечать."
+            )
+        elif corners_ok:
+            self.rectified_status.set("Углы выбраны. Нажмите «Подготовить → overlay и разметка».")
+        elif self._is_different_rakurs():
+            self.rectified_status.set(
+                "Разные ракурсы: углы не нужны. При необходимости задайте обрезку и нажмите «Подготовить»."
+            )
+        else:
+            self.rectified_status.set("Выпрямленная пара ещё не подготовлена.")
+        self._refresh_crop_status_labels()
 
     def _build_rectify_crop_block(self, parent: ttk.Frame, row: int, *, step_label: str = "") -> int:
         crop_title = step_label or "Шаг 3 — обрезка кадров (необязательно)"
@@ -4718,9 +4854,7 @@ class App(tk.Tk):
             has_hist = Path(self.historical_img.get()).exists()
         has_mod = bool(self.modern_img.get()) and Path(self.modern_img.get()).exists()
         item = self._get_active_historical_item()
-        has_corners = bool(self.modern_points_text.strip()) and bool(
-            item and item.old_points_text.strip()
-        )
+        has_corners = self._corners_complete_for_active()
         outdir = Path(self.outdir.get()) if self.outdir.get() else root / "result"
         has_rect = (outdir / "03_historical_rectified.png").exists() and (
             outdir / "04_modern_rectified.png"
@@ -5684,6 +5818,9 @@ class App(tk.Tk):
             self._refresh_sources_cmp_label()
         if hasattr(self, "_update_sources_primary_action"):
             self._update_sources_primary_action()
+        self._sync_rectify_state_from_workdir()
+        if hasattr(self, "_update_sources_photo_lock_state"):
+            self._update_sources_photo_lock_state()
 
     def _sync_historical_for_active_comparison(self) -> None:
         if not self.project_store:
@@ -5694,22 +5831,46 @@ class App(tk.Tk):
         hist_id = cmp.active_historical_photo_id or (
             cmp.historical_photo_ids[0] if cmp.historical_photo_ids else ""
         )
-        if not hist_id:
-            return
-        photo = self.project_store.photos.get(hist_id)
-        if not photo:
-            return
-        path = self.project_store.resolve_photo_path(photo)
+        path = ""
+        label = ""
+        if hist_id:
+            photo = self.project_store.photos.get(hist_id)
+            if photo:
+                resolved_path = self.project_store.resolve_photo_path(photo)
+                if resolved_path:
+                    path = str(resolved_path)
+                    label = photo.title or Path(path).name
+        if not path and cmp.historical_source_key and Path(cmp.historical_source_key).exists():
+            path = str(Path(cmp.historical_source_key).resolve())
+            label = Path(path).name
         if not path:
+            self._sync_rectify_state_from_workdir()
             return
         resolved = str(Path(path).resolve())
+        matched: Optional[HistoricalSourceItem] = None
         for item in self.historical_sources:
             if str(Path(item.path).resolve()) == resolved:
-                self.active_historical_key = item.key
-                self.historical_img.set(item.path)
-                self.old_points_text = item.old_points_text
-                self._refresh_historical_sources_tree()
-                return
+                matched = item
+                break
+        if matched is None:
+            for item in self.historical_sources:
+                if item.comparison_id == cmp.comparison_id:
+                    matched = item
+                    break
+        if matched is None:
+            matched = HistoricalSourceItem(
+                key=resolved,
+                path=path,
+                label=label or Path(path).name,
+                comparison_id=cmp.comparison_id,
+            )
+            self.historical_sources.append(matched)
+        self.active_historical_key = matched.key
+        self.historical_img.set(matched.path)
+        self.old_points_text = matched.old_points_text
+        matched.comparison_id = cmp.comparison_id
+        self._refresh_historical_sources_tree()
+        self._sync_rectify_state_from_workdir()
 
     def _use_house_from_db(self, record, paths) -> None:
         """Дом из Excel — создаёт папку и открывает на вкладке «Источники»."""
@@ -6287,14 +6448,8 @@ map.on('click',e=>{{
             self._log(f"Не удалось сохранить паспорт источника: {exc}\n")
 
     def _set_modern_image_path(self, path: Path, label: str, metadata: Optional[Dict[str, object]] = None) -> None:
-        if self.project_store:
-            cmp = self.project_store.get_active_comparison()
-            if cmp:
-                self._log(
-                    f"Внимание: меняется современное фото для ★ {cmp.comparison_id}"
-                    f"{(' — ' + cmp.title) if cmp.title else ''}.\n"
-                    "Если нужно новое сравнение — «Создать новое…» на вкладке «0. Дом и сравнение».\n"
-                )
+        if self._block_photo_change_if_protected("сменить современное фото"):
+            return
         self.modern_img.set(str(path))
         self.modern_source_label.set(label)
         self.modern_meta = metadata or {}
@@ -6403,6 +6558,8 @@ map.on('click',e=>{{
     # ----------------------------- File pickers -------------------------
 
     def choose_historical_img(self) -> None:
+        if self._block_photo_change_if_protected("добавить или заменить историческое фото"):
+            return
         path = filedialog.askopenfilename(title="Выберите историческое фото", filetypes=IMAGE_TYPES)
         if path:
             self.selected_pastvu = None
@@ -6472,6 +6629,7 @@ map.on('click',e=>{{
             elif self.historical_sources:
                 self._set_active_historical(self.historical_sources[0], save=False)
             self._refresh_historical_sources_tree()
+            self._sync_rectify_state_from_workdir()
         except Exception:
             pass
 
@@ -6521,13 +6679,9 @@ map.on('click',e=>{{
         self.active_historical_key = item.key
         self.historical_img.set(item.path)
         self.old_points_text = item.old_points_text
-        if item.old_points_text:
-            self.points_status.set(f"4 угла заданы для: {item.label}")
-        else:
-            self.points_status.set(f"Активно: {item.label}. Углы ещё не выбраны.")
         self._refresh_historical_sources_tree()
         self._switch_session_for_historical(item)
-        self._refresh_crop_status_labels()
+        self._sync_rectify_state_from_workdir()
         if save:
             self._save_historical_sources()
 
@@ -6866,12 +7020,22 @@ map.on('click',e=>{{
         self.old_opacity_label.set(f"Видимость старого фото в overlay: {int(self.old_opacity.get())}%")
 
     def start_prepare_project(self) -> None:
+        self._sync_rectify_state_from_workdir()
         if not self.historical_img.get() or not self.modern_img.get():
             messagebox.showinfo("Нужны два фото", "Во вкладке 1 выберите историческое и современное фото.")
             return
-        if not self._is_different_rakurs() and (not self.old_points_text or not self.modern_points_text):
+        if not self._is_different_rakurs() and not self._corners_complete_for_active():
             messagebox.showinfo("Нужны точки", "Во вкладке 2 нажмите “Указать 4 угла на двух фото одновременно”.")
             return
+        if self._work_dir_has_saved_markup():
+            if not messagebox.askyesno(
+                "Есть разметка",
+                "В папке сравнения уже сохранена разметка.\n"
+                "Повторная подготовка может сдвинуть координаты областей.\n\n"
+                "Всё равно переподготовить выпрямление?",
+                parent=self,
+            ):
+                return
         self._ensure_work_session_for_active_pair()
         self._persist_house_metadata()
         outdir = Path(self.outdir.get())
@@ -6898,7 +7062,7 @@ map.on('click',e=>{{
         def done(_result: object) -> None:
             different = self.comparison_rakurs.get() == "different"
             mode = "два фото рядом" if different else "наложение"
-            self.rectified_status.set(f"Готово ({mode}). Результаты: {outdir}")
+            self._refresh_rectify_status_labels()
             self._log(f"Готово. Результаты сохранены в: {outdir}\n")
             if different:
                 messagebox.showinfo(
@@ -7193,8 +7357,8 @@ map.on('click',e=>{{
                     if others:
                         ids = ", ".join(c.comparison_id for c in others[:5])
                         cmp_note = (
-                            f"\n\nТакже на сайт попадут другие сравнения с разметкой: {ids} "
-                            "(папки comparisons/cmp_XXX/ и переключатель на странице дома)."
+                            f"\n\nТакже на сайт попадут другие подготовленные сравнения: {ids} "
+                            "(папки comparisons/cmp_XXX/ и переключатель по годам на странице дома)."
                         )
                 active = self.project_store.get_active_comparison() if self.project_store else None
                 active_line = f"\n★ Экспортировано активное: {active.comparison_id}" if active else ""
@@ -8189,12 +8353,22 @@ class AppV11(App):
             self._refresh_compare_canvas(save=False)
 
     def start_prepare_project(self) -> None:
+        self._sync_rectify_state_from_workdir()
         if not self.historical_img.get() or not self.modern_img.get():
             messagebox.showinfo("Нужны два фото", "Во вкладке 1 выберите историческое и современное фото.")
             return
-        if not self._is_different_rakurs() and (not self.old_points_text or not self.modern_points_text):
+        if not self._is_different_rakurs() and not self._corners_complete_for_active():
             messagebox.showinfo("Нужны точки", "Во вкладке 2 нажмите “Указать 4 угла на двух фото одновременно”.")
             return
+        if self._work_dir_has_saved_markup():
+            if not messagebox.askyesno(
+                "Есть разметка",
+                "В папке сравнения уже сохранена разметка.\n"
+                "Повторная подготовка может сдвинуть координаты областей.\n\n"
+                "Всё равно переподготовить выпрямление?",
+                parent=self,
+            ):
+                return
         self._ensure_work_session_for_active_pair()
         self._persist_house_metadata()
         outdir = Path(self.outdir.get())
@@ -8223,7 +8397,7 @@ class AppV11(App):
             self._rectified_cache_key = None
             different = self.comparison_rakurs.get() == "different"
             mode = "два фото рядом" if different else "наложение"
-            self.rectified_status.set(f"Готово ({mode}). Результаты: {outdir}")
+            self._refresh_rectify_status_labels()
             self._log(f"Готово. Результаты сохранены в: {outdir}\n")
             self._refresh_compare_canvas(save=True)
             self._refresh_markup_canvas()
@@ -11059,8 +11233,15 @@ class AppV16(AppV15):
             font=("TkDefaultFont", 10, "bold"),
         )
         self._sources_rakurs_hint.grid(row=2, column=0, sticky="w", padx=10, pady=(0, 4))
+        self._sources_photo_lock_hint = ttk.Label(
+            parent,
+            wraplength=980,
+            foreground="#8a3a00",
+            font=("TkDefaultFont", 10, "bold"),
+        )
+        self._sources_photo_lock_hint.grid(row=3, column=0, sticky="w", padx=10, pady=(0, 4))
         btns = ttk.Frame(parent)
-        btns.grid(row=3, column=0, sticky="w", padx=10, pady=(4, 10))
+        btns.grid(row=4, column=0, sticky="w", padx=10, pady=(4, 10))
         self._sources_primary_btn = tk.Button(
             btns,
             text="→ Далее",
@@ -11115,6 +11296,24 @@ class AppV16(AppV15):
                 self._sources_cmp_label.set(f"★ {cmp.comparison_id}{title}")
                 return
         self._sources_cmp_label.set("Сравнение не выбрано — выберите ★ на вкладке «0. Дом и сравнение»")
+
+    def _update_sources_photo_lock_state(self) -> None:
+        if not hasattr(self, "_sources_photo_lock_hint"):
+            return
+        if self._comparison_photos_locked():
+            cmp_id = ""
+            if self.project_store:
+                cmp = self.project_store.get_active_comparison()
+                if cmp:
+                    cmp_id = cmp.comparison_id
+            self._sources_photo_lock_hint.configure(
+                text=(
+                    f"Фото сравнения {cmp_id or '★'} зафиксированы (выпрямление или разметка). "
+                    "Менять источники нельзя — создайте новое сравнение для другой пары."
+                )
+            )
+        else:
+            self._sources_photo_lock_hint.configure(text="")
 
     def _apply_v16_chrome(self) -> None:
         self.title(f"Archiview CV {APP_VERSION_V16}")
