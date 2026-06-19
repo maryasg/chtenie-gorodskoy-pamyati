@@ -7,8 +7,14 @@ import { FacadeBeforeAfterSlider } from '../components/FacadeBeforeAfterSlider'
 import { FacadeHotspotViewer } from '../components/FacadeHotspotViewer'
 import { TransformationTimeline } from '../components/TransformationTimeline'
 import { getArchiviewAssets } from '../data/explorer/archiviewAssets'
+import {
+  fetchExplorerManifest,
+  manifestEntryToAssets,
+  type ExplorerManifest,
+} from '../data/explorer/explorerManifest'
+import { ArchiviewComparisonPicker } from '../components/ArchiviewComparisonPicker'
 
-import { useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Building, MemoryTrace } from '../types/building'
 import type { ArchiviewBuildingAssets } from '../data/explorer/archiviewAssets'
 
@@ -217,6 +223,36 @@ export function BuildingPage() {
   const { id } = useParams<{ id: string }>()
   const building = id ? getBuildingById(id) : undefined
   const archiview = building ? getArchiviewAssets(building.id) : undefined
+  const [manifest, setManifest] = useState<ExplorerManifest | null>(null)
+  const [selectedComparisonId, setSelectedComparisonId] = useState('')
+
+  useEffect(() => {
+    if (!archiview?.cardId) {
+      setManifest(null)
+      setSelectedComparisonId('')
+      return
+    }
+    let cancelled = false
+    fetchExplorerManifest(archiview.cardId).then((data) => {
+      if (cancelled) return
+      setManifest(data)
+      if (data?.comparisons?.length) {
+        setSelectedComparisonId(data.defaultComparisonId || data.comparisons[0].comparisonId)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [archiview?.cardId])
+
+  const displayAssets = useMemo(() => {
+    if (!archiview) return undefined
+    if (!manifest || manifest.comparisons.length <= 1) return archiview
+    const entry =
+      manifest.comparisons.find((c) => c.comparisonId === selectedComparisonId) ??
+      manifest.comparisons[0]
+    return manifestEntryToAssets(archiview.cardId, archiview.buildingId, entry, archiview)
+  }, [archiview, manifest, selectedComparisonId])
 
   if (!building) {
     return (
@@ -226,7 +262,7 @@ export function BuildingPage() {
     )
   }
 
-  const isSideBySide = archiview?.labelingLayout === 'side_by_side'
+  const isSideBySide = displayAssets?.labelingLayout === 'side_by_side'
 
   return (
     <div className="space-y-6">
@@ -262,9 +298,22 @@ export function BuildingPage() {
         <p className="text-sm leading-relaxed text-arch-ink/85">{building.summary}</p>
       </Section>
 
-      {archiview ? (
+      {displayAssets ? (
         <Section title="Фасад и подсветка" kicker="Archiview">
-          <ArchiviewFacadePanel assets={archiview} building={building} />
+          {manifest && manifest.comparisons.length > 1 ? (
+            <ArchiviewComparisonPicker
+              manifest={manifest}
+              selectedId={selectedComparisonId}
+              onSelect={setSelectedComparisonId}
+            />
+          ) : null}
+          {displayAssets.comparisonId ? (
+            <p className="mb-3 text-xs font-medium text-arch-muted">
+              Сравнение: {displayAssets.comparisonId}
+              {displayAssets.comparisonTitle ? ` — ${displayAssets.comparisonTitle}` : ''}
+            </p>
+          ) : null}
+          <ArchiviewFacadePanel assets={displayAssets} building={building} />
         </Section>
       ) : (
         <Section title="Фасад и подсветка">
@@ -303,24 +352,24 @@ export function BuildingPage() {
         )}
       </Section>
 
-      {archiview ? (
+      {displayAssets ? (
         <>
           <Section title="Сравнение фотоматериалов" kicker="Archiview">
-            {(archiview.historicalPhotoYear || archiview.modernPhotoYear) && (
+            {(displayAssets.historicalPhotoYear || displayAssets.modernPhotoYear) && (
               <p className="mb-3 text-sm leading-relaxed text-arch-muted">
-                Фотоматериалы: {archiview.historicalPhotoYear ?? 'архив'} →{' '}
-                {archiview.modernPhotoYear ?? 'сегодня'}. Годы обозначают датировку снимков или
+                Фотоматериалы: {displayAssets.historicalPhotoYear ?? 'архив'} →{' '}
+                {displayAssets.modernPhotoYear ?? 'сегодня'}. Годы обозначают датировку снимков или
                 материалов; выводы о событиях опираются на подписи, экспертизы и источники карточки.
               </p>
             )}
             {isSideBySide ? (
-              <SideBySidePhotoComparison assets={archiview} />
+              <SideBySidePhotoComparison assets={displayAssets} />
             ) : (
               <FacadeBeforeAfterSlider
-                historicalUrl={archiview.historicalRectifiedUrl}
-                modernUrl={archiview.modernRectifiedUrl}
-                historicalYear={archiview.historicalPhotoYear}
-                modernYear={archiview.modernPhotoYear}
+                historicalUrl={displayAssets.historicalRectifiedUrl}
+                modernUrl={displayAssets.modernRectifiedUrl}
+                historicalYear={displayAssets.historicalPhotoYear}
+                modernYear={displayAssets.modernPhotoYear}
               />
             )}
           </Section>
