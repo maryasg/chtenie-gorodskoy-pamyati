@@ -8531,44 +8531,7 @@ class AppV13(AppV12):
         mid_row.add(house_col, weight=3)
         self._build_workflow_steps_panel(wf_col)
 
-        top = house_col
-        top.columnconfigure(1, weight=1)
-        ttk.Label(top, text="Папка проекта:").grid(row=0, column=0, sticky="w", padx=8, pady=4)
-        ttk.Entry(top, textvariable=self.project_dir).grid(row=0, column=1, sticky="ew", padx=6, pady=4)
-        ttk.Button(top, text="Папка…", command=self.choose_project_dir).grid(row=0, column=2, padx=8, pady=4)
-        ttk.Label(top, text="Название дома:").grid(row=1, column=0, sticky="w", padx=8, pady=4)
-        ttk.Entry(top, textvariable=self.object_name).grid(row=1, column=1, sticky="ew", padx=6, pady=4)
-        ttk.Label(top, text="Код на сайте:").grid(row=2, column=0, sticky="w", padx=8, pady=4)
-        ttk.Entry(top, textvariable=self.site_card_id, width=14).grid(row=2, column=1, sticky="w", padx=6, pady=4)
-        ttk.Label(
-            top,
-            text="Как в таблице «Код сайта»: MOSCOW_001, MOSCOW_003… (не имя папки и не …_kumaninykh из ссылки)",
-            foreground="#666",
-            wraplength=520,
-        ).grid(row=3, column=0, columnspan=3, sticky="w", padx=8, pady=(0, 4))
-        ttk.Label(top, text="Адрес:").grid(row=4, column=0, sticky="w", padx=8, pady=4)
-        ttk.Entry(top, textvariable=self.address).grid(row=4, column=1, sticky="ew", padx=6, pady=4)
-        ttk.Label(top, text="Координаты:").grid(row=5, column=0, sticky="w", padx=8, pady=4)
-        coord_row = ttk.Frame(top)
-        coord_row.grid(row=5, column=1, sticky="ew", padx=6, pady=4)
-        ttk.Label(coord_row, text="Широта").pack(side="left")
-        ttk.Entry(coord_row, textvariable=self.lat, width=14).pack(side="left", padx=(4, 10))
-        ttk.Label(coord_row, text="Долгота").pack(side="left")
-        ttk.Entry(coord_row, textvariable=self.lon, width=14).pack(side="left", padx=(4, 10))
-        btn_row = ttk.Frame(top)
-        btn_row.grid(row=6, column=0, columnspan=3, sticky="w", padx=8, pady=4)
-        ttk.Button(btn_row, text="Карта / выбрать точку", command=self.open_map_picker).pack(side="left")
-        ttk.Button(btn_row, text="Найти координаты по адресу", command=self.start_geocode).pack(side="left", padx=6)
-        ttk.Button(btn_row, text="Сохранить", command=self._persist_house_metadata).pack(side="left", padx=6)
-        ttk.Label(top, textvariable=self.geocode_result, foreground="#333", wraplength=900).grid(
-            row=7, column=0, columnspan=3, sticky="w", padx=8, pady=(2, 6)
-        )
-        ttk.Label(
-            top,
-            text="Границы ниже: ↔ историческое/современное, ↕ настройки/миниатюры. Правки сохраняются автоматически.",
-            foreground="#555",
-            wraplength=900,
-        ).grid(row=8, column=0, columnspan=3, sticky="w", padx=8, pady=(0, 8))
+        self._build_house_metadata_panel(house_col)
 
         body_split = ttk.Panedwindow(body, orient="vertical")
         body_split.grid(row=0, column=0, sticky="nsew")
@@ -8726,28 +8689,94 @@ class AppV13(AppV12):
         ttk.Label(modern_controls, text=help_text, wraplength=640, foreground="#333").grid(row=6, column=0, columnspan=3, sticky="w", padx=8, pady=6)
         self.after(0, self._refresh_workflow_steps)
 
+    def _build_house_metadata_panel(self, parent: ttk.Widget) -> None:
+        """Папка, название, код сайта, адрес, координаты — общий блок для мастера и старой вкладки."""
+        top = parent
+        top.columnconfigure(1, weight=1)
+        ttk.Label(top, text="Папка проекта:").grid(row=0, column=0, sticky="w", padx=8, pady=4)
+        ttk.Entry(top, textvariable=self.project_dir).grid(row=0, column=1, sticky="ew", padx=6, pady=4)
+        ttk.Button(top, text="Папка…", command=self.choose_project_dir).grid(row=0, column=2, padx=8, pady=4)
+        ttk.Label(top, text="Название дома:").grid(row=1, column=0, sticky="w", padx=8, pady=4)
+        ttk.Entry(top, textvariable=self.object_name).grid(row=1, column=1, sticky="ew", padx=6, pady=4)
+        ttk.Label(top, text="Код на сайте:").grid(row=2, column=0, sticky="w", padx=8, pady=4)
+        ttk.Entry(top, textvariable=self.site_card_id, width=14).grid(row=2, column=1, sticky="w", padx=6, pady=4)
+        ttk.Label(
+            top,
+            text="MOSCOW_001, MOSCOW_003… — как на сайте (не имя папки на диске)",
+            foreground="#666",
+            wraplength=520,
+        ).grid(row=3, column=0, columnspan=3, sticky="w", padx=8, pady=(0, 4))
+        ttk.Label(top, text="Адрес:").grid(row=4, column=0, sticky="w", padx=8, pady=4)
+        ttk.Entry(top, textvariable=self.address).grid(row=4, column=1, sticky="ew", padx=6, pady=4)
+        ttk.Label(top, text="Координаты:").grid(row=5, column=0, sticky="w", padx=8, pady=4)
+        coord_row = ttk.Frame(top)
+        coord_row.grid(row=5, column=1, sticky="ew", padx=6, pady=4)
+        ttk.Label(coord_row, text="Широта").pack(side="left")
+        ttk.Entry(coord_row, textvariable=self.lat, width=14).pack(side="left", padx=(4, 10))
+        ttk.Label(coord_row, text="Долгота").pack(side="left")
+        ttk.Entry(coord_row, textvariable=self.lon, width=14).pack(side="left", padx=(4, 10))
+        btn_row = ttk.Frame(top)
+        btn_row.grid(row=6, column=0, columnspan=3, sticky="w", padx=8, pady=4)
+        ttk.Button(btn_row, text="Карта / выбрать точку", command=self.open_map_picker).pack(side="left")
+        ttk.Button(btn_row, text="Найти координаты по адресу", command=self.start_geocode).pack(side="left", padx=6)
+        ttk.Button(btn_row, text="Сохранить данные дома", command=self._persist_house_metadata).pack(side="left", padx=6)
+        ttk.Label(top, textvariable=self.geocode_result, foreground="#333", wraplength=900).grid(
+            row=7, column=0, columnspan=3, sticky="w", padx=8, pady=(2, 6)
+        )
+
     # ---------------- rectification tab ----------------
 
     def _build_rectify_tab(self, parent: ttk.Frame) -> None:
+        skip_photos = bool(getattr(self, "_rectify_skip_photo_step", False))
         parent.columnconfigure(1, weight=1)
         row = self._build_rakurs_mode_block(parent, 0)
-        box = ttk.LabelFrame(parent, text="Шаг 2 — фото и папка результата")
-        box.grid(row=row, column=0, columnspan=3, sticky="ew", padx=10, pady=6)
-        box.columnconfigure(1, weight=1)
-        self._row_file(box, "Историческое фото:", self.historical_img, self.choose_historical_img, 0)
-        self._row_file(box, "Современное фото:", self.modern_img, self.choose_modern_img, 1)
-        self._row_folder(box, "Папка результата:", self.outdir, self.choose_result_dir, 2)
-        row += 1
+        if not skip_photos:
+            box = ttk.LabelFrame(parent, text="Шаг 2 — фото и папка результата")
+            box.grid(row=row, column=0, columnspan=3, sticky="ew", padx=10, pady=6)
+            box.columnconfigure(1, weight=1)
+            self._row_file(box, "Историческое фото:", self.historical_img, self.choose_historical_img, 0)
+            self._row_file(box, "Современное фото:", self.modern_img, self.choose_modern_img, 1)
+            self._row_folder(box, "Папка результата:", self.outdir, self.choose_result_dir, 2)
+            row += 1
+        else:
+            photo_box = ttk.LabelFrame(parent, text="Фото сравнения (из вкладки «0. Дом и сравнение»)")
+            photo_box.grid(row=row, column=0, columnspan=3, sticky="ew", padx=10, pady=6)
+            photo_box.columnconfigure(1, weight=1)
+            ttk.Label(
+                photo_box,
+                text="Историческое и современное выбираются при создании/открытии сравнения ★. Здесь только выпрямление.",
+                wraplength=980,
+                foreground="#555",
+            ).grid(row=0, column=0, columnspan=3, sticky="w", padx=8, pady=(8, 4))
+            ttk.Label(photo_box, text="Историческое:").grid(row=1, column=0, sticky="w", padx=8, pady=2)
+            ttk.Entry(photo_box, textvariable=self.historical_img, state="readonly").grid(
+                row=1, column=1, sticky="ew", padx=6, pady=2
+            )
+            ttk.Label(photo_box, text="Современное:").grid(row=2, column=0, sticky="w", padx=8, pady=2)
+            ttk.Entry(photo_box, textvariable=self.modern_img, state="readonly").grid(
+                row=2, column=1, sticky="ew", padx=6, pady=2
+            )
+            ttk.Label(photo_box, text="Папка работы ★:").grid(row=3, column=0, sticky="w", padx=8, pady=(2, 8))
+            ttk.Entry(photo_box, textvariable=self.outdir, state="readonly").grid(
+                row=3, column=1, sticky="ew", padx=6, pady=(2, 8)
+            )
+            row += 1
 
         row = self._build_rectify_crop_block(parent, row)
 
-        self._corners_frame = ttk.LabelFrame(parent, text="Шаг 4 — 4 угла фасада (только для похожих ракурсов)")
+        corners_title = "Шаг 2 — 4 угла фасада" if skip_photos else "Шаг 4 — 4 угла фасада (только для похожих ракурсов)"
+        self._corners_frame = ttk.LabelFrame(parent, text=corners_title)
         self._corners_frame_row = row
         self._corners_frame.grid(row=row, column=0, columnspan=3, sticky="ew", padx=10, pady=8)
         row += 1
+        corners_hint = (
+            "Углы для активного сравнения ★. Современные углы общие на дом — включите «замок», если уже заданы."
+            if skip_photos
+            else "Активное историческое фото — из списка на вкладке «Источники». Современные 4 угла задаются один раз и повторно используются."
+        )
         ttk.Label(
             self._corners_frame,
-            text="Активное историческое фото — из списка на вкладке «Источники». Современные 4 угла задаются один раз и повторно используются.",
+            text=corners_hint,
             wraplength=980,
             foreground="#555",
         ).pack(anchor="w", padx=8, pady=(8, 4))
@@ -8756,7 +8785,8 @@ class AppV13(AppV12):
         ttk.Button(pf_btns, text="Указать 4 угла на двух фото одновременно", command=self.pick_both_corners, style="Big.TButton").pack(side="left")
         ttk.Label(pf_btns, textvariable=self.points_status, foreground="#555").pack(side="left", padx=10)
 
-        self._overlay_options_frame = ttk.LabelFrame(parent, text="Шаг 5 — наложение (только для похожих ракурсов)")
+        overlay_title = "Шаг 3 — наложение" if skip_photos else "Шаг 5 — наложение (только для похожих ракурсов)"
+        self._overlay_options_frame = ttk.LabelFrame(parent, text=overlay_title)
         self._overlay_options_frame.grid(row=row, column=0, columnspan=3, sticky="ew", padx=10, pady=8)
         row += 1
         ttk.Label(self._overlay_options_frame, textvariable=self.old_opacity_label).pack(anchor="w", padx=8, pady=(8, 0))
@@ -10447,6 +10477,7 @@ class AppV16(AppV15):
         self._markup_edit_drag_vertex: Optional[int] = None
         self._markup_edit_active_vertex: Optional[int] = None
         self._markup_pending_insert_point: Optional[Point] = None
+        self._rectify_skip_photo_step = True
         super()._build_ui()
         self._insert_workflow_wizard_tab()
         self._apply_v16_chrome()
@@ -10926,6 +10957,8 @@ class AppV16(AppV15):
             on_projects_deleted=self._after_projects_deleted,
             on_go_tab=self._wizard_go_work_tab,
             on_log=self._log,
+            build_house_panel=self._build_house_metadata_panel,
+            on_persist_house=lambda: self._persist_house_metadata(quiet=True),
         )
         self.workflow_wizard.pack(fill="both", expand=True)
         for i in range(self.notebook.index("end")):
@@ -10959,6 +10992,7 @@ class AppV16(AppV15):
         self._load_project_metadata_only(project_dir)
         if hasattr(self, "workflow_wizard"):
             self.workflow_wizard.refresh_summary(house_text=self._wizard_house_summary_text())
+            self.workflow_wizard._house_label.set(self._wizard_house_summary_text())
 
     def _wizard_on_comparison_opened(self, comparison) -> None:
         self._open_comparison_session(comparison)
@@ -11000,7 +11034,8 @@ class AppV16(AppV15):
         if hasattr(self, "workflow_wizard"):
             self._load_project_metadata_only(self.project_dir.get())
             self.workflow_wizard.refresh_summary(house_text=self._wizard_house_summary_text())
-            self.workflow_wizard.show_step(2)
+            self.workflow_wizard._house_label.set(self._wizard_house_summary_text())
+            self.workflow_wizard.show_step(1)
             if hasattr(self, "notebook") and hasattr(self, "tab_workflow"):
                 self.notebook.select(self.tab_workflow)
 

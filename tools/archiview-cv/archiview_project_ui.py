@@ -909,6 +909,8 @@ class HouseWorkflowWizardFrame(ttk.Frame):
         on_projects_deleted: Optional[Callable[[List[Path]], None]] = None,
         on_go_tab: Optional[Callable[[str], None]] = None,
         on_log: Optional[Callable[[str], None]] = None,
+        build_house_panel: Optional[Callable[[ttk.Widget], None]] = None,
+        on_persist_house: Optional[Callable[[], None]] = None,
     ) -> None:
         super().__init__(parent)
         self.project_root = Path(project_root)
@@ -920,6 +922,8 @@ class HouseWorkflowWizardFrame(ttk.Frame):
         self.on_projects_deleted = on_projects_deleted
         self.on_go_tab = on_go_tab
         self.on_log = on_log
+        self.build_house_panel = build_house_panel
+        self.on_persist_house = on_persist_house
         self._current_step = 1
         self._house_label = tk.StringVar(value="Дом не выбран")
         self._cmp_label = tk.StringVar(value="Сравнение не выбрано")
@@ -956,19 +960,30 @@ class HouseWorkflowWizardFrame(ttk.Frame):
         self.show_step(1)
 
     def _build_step1(self) -> None:
-        wrap = ttk.LabelFrame(self._step1, text="Шаг 1 — выберите дом")
+        wrap = ttk.LabelFrame(self._step1, text="Шаг 1 — дом и данные для сайта")
         wrap.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
         wrap.columnconfigure(0, weight=1)
         wrap.rowconfigure(1, weight=1)
         ttk.Label(
             wrap,
-            text="Сначала дом. Список сравнений и пути к фото — на шагах 2 и 3.",
+            text="Выберите дом в таблице — справа подгрузятся папка, название, код MOSCOW_XXX, адрес, координаты. Сохраните, затем «Далее к сравнениям».",
             wraplength=900,
             foreground="#555",
         ).grid(row=0, column=0, sticky="w", padx=10, pady=(8, 4))
+
+        split = ttk.Panedwindow(wrap, orient="horizontal")
+        split.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
+        list_wrap = ttk.Frame(split)
+        meta_wrap = ttk.LabelFrame(split, text="Данные дома")
+        split.add(list_wrap, weight=3)
+        split.add(meta_wrap, weight=2)
+        list_wrap.columnconfigure(0, weight=1)
+        list_wrap.rowconfigure(0, weight=1)
+        meta_wrap.columnconfigure(0, weight=1)
+
         if MyProjectsPanel is not None:
             self.projects_panel = MyProjectsPanel(
-                wrap,
+                list_wrap,
                 project_root=self.project_root,
                 on_open_project=self._house_opened,
                 on_new_project=self.on_new_project,
@@ -976,12 +991,20 @@ class HouseWorkflowWizardFrame(ttk.Frame):
                 on_projects_deleted=self.on_projects_deleted,
                 on_log=self.on_log,
             )
-            self.projects_panel.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
+            self.projects_panel.grid(row=0, column=0, sticky="nsew")
         else:
             self.projects_panel = None
-            ttk.Label(wrap, text="Модуль списка проектов не найден.", foreground="red").grid(
-                row=1, column=0, sticky="w", padx=10, pady=8
+            ttk.Label(list_wrap, text="Модуль списка проектов не найден.", foreground="red").grid(
+                row=0, column=0, sticky="w", padx=10, pady=8
             )
+
+        if self.build_house_panel is not None:
+            self.build_house_panel(meta_wrap)
+        else:
+            ttk.Label(meta_wrap, text="Форма данных дома недоступна.", foreground="#777").pack(
+                anchor="w", padx=8, pady=8
+            )
+
         nav = ttk.Frame(wrap)
         nav.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 8))
         ttk.Button(nav, text="Обновить список домов", command=self.refresh_projects).pack(side="left")
@@ -1060,12 +1083,12 @@ class HouseWorkflowWizardFrame(ttk.Frame):
             else:
                 frame.grid_remove()
         titles = {
-            1: "Шаг 1 из 3 — Выберите дом",
+            1: "Шаг 1 из 3 — Дом: папка, код сайта, адрес, координаты",
             2: "Шаг 2 из 3 — Выберите сравнение",
             3: "Шаг 3 из 3 — Фото подставлены, можно работать",
         }
         hints = {
-            1: "Дважды щёлкните по дому или выберите и нажмите «Открыть».",
+            1: "Выберите дом в таблице слева. Справа проверьте MOSCOW_XXX и адрес → «Сохранить данные дома».",
             2: "★ = активное сравнение. Разметка и экспорт идут из его папки.",
             3: "Проверьте пути к фото ниже, затем перейдите на вкладки 2–5.",
         }
@@ -1084,7 +1107,7 @@ class HouseWorkflowWizardFrame(ttk.Frame):
 
     def _house_opened(self, path: Path) -> None:
         self.on_house_selected(path)
-        self.show_step(2)
+        self._house_label.set("Дом выбран — проверьте данные справа и нажмите «Сохранить данные дома»")
 
     def _comparison_opened(self, comparison: ComparisonSession) -> None:
         self.on_comparison_opened(comparison)
@@ -1094,8 +1117,10 @@ class HouseWorkflowWizardFrame(ttk.Frame):
     def _continue_to_comparisons(self) -> None:
         store = self.get_store()
         if store is None or not str(getattr(store, "project_dir", "")):
-            messagebox.showinfo("Дом не выбран", "Сначала выберите дом в таблице.")
+            messagebox.showinfo("Дом не выбран", "Сначала выберите дом в таблице слева.")
             return
+        if self.on_persist_house:
+            self.on_persist_house()
         self.refresh_comparisons()
         self.show_step(2)
 
