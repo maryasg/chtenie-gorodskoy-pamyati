@@ -612,13 +612,26 @@ def cv_write(path: str | Path, img: np.ndarray) -> None:
 
 def cv_to_photoimage(path: str | Path, max_w: int, max_h: int) -> Tuple[tk.PhotoImage, float, int, int, int, int]:
     """Load local image with OpenCV and return Tk PhotoImage plus scale/display/original sizes."""
-    img = cv_read(path)
+    return cv_array_to_photoimage(cv_read(path), max_w, max_h)
+
+
+def cv_array_to_photoimage(
+    img: np.ndarray,
+    max_w: int,
+    max_h: int,
+    *,
+    zoom: float = 1.0,
+) -> Tuple[tk.PhotoImage, float, int, int, int, int]:
+    """Render BGR/RGB numpy image for Tk canvas; zoom>1 allows magnification past fit-to-box."""
     orig_h, orig_w = img.shape[:2]
-    scale = min(max_w / float(orig_w), max_h / float(orig_h), 1.0)
+    fit_scale = min(max_w / float(orig_w), max_h / float(orig_h), 1.0)
+    scale = fit_scale * max(1.0, float(zoom))
+    scale = min(scale, 4000.0 / max(float(orig_w), float(orig_h), 1.0))
     disp_w = max(1, int(round(orig_w * scale)))
     disp_h = max(1, int(round(orig_h * scale)))
-    if scale < 1.0:
-        img = cv.resize(img, (disp_w, disp_h), interpolation=cv.INTER_AREA)
+    if disp_w != orig_w or disp_h != orig_h:
+        interp = cv.INTER_LINEAR if scale > fit_scale else cv.INTER_AREA
+        img = cv.resize(img, (disp_w, disp_h), interpolation=interp)
     ok, encoded = cv.imencode(".png", img)
     if not ok:
         raise RuntimeError("Не удалось подготовить изображение для показа в окне.")
@@ -2846,6 +2859,10 @@ class DualFacadePointPicker(tk.Toplevel):
         "нижний правый угол фасада",
         "нижний левый угол фасада",
     ]
+    CANVAS_W = 640
+    CANVAS_H = 520
+    MAX_ZOOM = 4.0
+    POINT_HIT_PX = 14.0
 
     def __init__(
         self,
@@ -2870,6 +2887,17 @@ class DualFacadePointPicker(tk.Toplevel):
         self.tool_mode = tk.StringVar(value="crop_old" if self.crop_only else "corners")
         self.modern_crop_rect_text = str(initial_modern_crop_rect_text or "")
         self._crop_drag: Optional[Tuple[str, float, float]] = None
+        self.modern_image_path = str(modern_image_path)
+        self.old_zoom = 1.0
+        self.old_pan_x = 0.0
+        self.old_pan_y = 0.0
+        self.modern_zoom = 1.0
+        self.modern_pan_x = 0.0
+        self.modern_pan_y = 0.0
+        self._display_offset_old = (0.0, 0.0)
+        self._display_offset_modern = (0.0, 0.0)
+        self._drag_point: Optional[Tuple[str, int]] = None
+        self._pan_drag: Optional[Tuple[str, float, float, float, float]] = None
         if not self.hist_sources:
             messagebox.showerror("Нет фото", "Добавьте хотя бы одно историческое фото.", parent=parent)
             self.destroy()
@@ -2881,9 +2909,7 @@ class DualFacadePointPicker(tk.Toplevel):
         self.lock_modern = bool(lock_modern_when_complete)
 
         try:
-            self.modern_photo, self.modern_scale, self.modern_w, self.modern_h, self.modern_orig_w, self.modern_orig_h = cv_to_photoimage(
-                modern_image_path, 560, 540
-            )
+            self._rebuild_modern_display()
         except Exception as exc:
             messagebox.showerror("Не удалось открыть фото", str(exc), parent=parent)
             self.destroy()
@@ -2896,8 +2922,8 @@ class DualFacadePointPicker(tk.Toplevel):
             if self.crop_only
             else (
                 "Слева — исторические фото (ползунок), справа — современное. "
-                "Режим «4 угла»: клики 1–4 на обоих фото для наложения. "
-                "Режим «Рамка»: потяните мышью прямоугольник — что останется из исходника перед выпрямлением."
+                "«4 угла»: если задана зелёная рамка слева — виден уже обрезанный фрагмент. "
+                "Колесо мыши — приблизить/отдалить; средняя кнопка — сдвинуть; точки можно перетащить."
             )
         )
         ttk.Label(self, text=intro, wraplength=1220).pack(anchor="w", padx=12, pady=(10, 4))
@@ -2905,9 +2931,9 @@ class DualFacadePointPicker(tk.Toplevel):
         tools.pack(anchor="w", padx=12, pady=(0, 4))
         ttk.Label(tools, text="Инструмент:").pack(side="left")
         if not self.crop_only:
-            ttk.Radiobutton(tools, text="4 угла фасада", variable=self.tool_mode, value="corners", command=self._redraw).pack(side="left", padx=6)
-        ttk.Radiobutton(tools, text="Рамка обрезки (историческое)", variable=self.tool_mode, value="crop_old", command=self._redraw).pack(side="left", padx=6)
-        ttk.Radiobutton(tools, text="Рамка обрезки (современное)", variable=self.tool_mode, value="crop_modern", command=self._redraw).pack(side="left", padx=6)
+            ttk.Radiobutton(tools, text="4 угла фасада", variable=self.tool_mode, value="corners", command=self._on_tool_mode_changed).pack(side="left", padx=6)
+        ttk.Radiobutton(tools, text="Рамка обрезки (историческое)", variable=self.tool_mode, value="crop_old", command=self._on_tool_mode_changed).pack(side="left", padx=6)
+        ttk.Radiobutton(tools, text="Рамка обрезки (современное)", variable=self.tool_mode, value="crop_modern", command=self._on_tool_mode_changed).pack(side="left", padx=6)
 
         canvases = ttk.Frame(self)
         canvases.pack(fill="both", expand=True, padx=12, pady=6)
@@ -2935,14 +2961,29 @@ class DualFacadePointPicker(tk.Toplevel):
         self.hist_caption = ttk.Label(self.left_box, text="", wraplength=520)
         self.hist_caption.pack(anchor="w", padx=8, pady=(0, 4))
 
-        self.old_canvas = tk.Canvas(self.left_box, width=560, height=540, bg="#eeeeee", highlightthickness=1)
-        self.old_canvas.pack(anchor="center", padx=8, pady=8)
+        self.old_canvas = tk.Canvas(self.left_box, width=self.CANVAS_W, height=self.CANVAS_H, bg="#eeeeee", highlightthickness=1)
+        self.old_canvas.pack(anchor="center", padx=8, pady=(0, 4))
         self._bind_canvas_events(self.old_canvas, "old")
+        self._bind_canvas_zoom(self.old_canvas, "old")
+        old_zoom_row = ttk.Frame(self.left_box)
+        old_zoom_row.pack(anchor="w", padx=8, pady=(0, 8))
+        ttk.Button(old_zoom_row, text=" + ", width=3, command=lambda: self._zoom_step("old", 1)).pack(side="left")
+        ttk.Button(old_zoom_row, text=" − ", width=3, command=lambda: self._zoom_step("old", -1)).pack(side="left", padx=2)
+        ttk.Button(old_zoom_row, text="Сбросить масштаб", command=lambda: self._reset_view("old")).pack(side="left", padx=6)
+        self.old_zoom_label = ttk.Label(old_zoom_row, text="1.0×")
+        self.old_zoom_label.pack(side="left", padx=4)
 
-        self.modern_canvas = tk.Canvas(right_box, width=self.modern_w, height=self.modern_h, bg="#eeeeee", highlightthickness=1)
-        self.modern_canvas.pack(anchor="center", padx=8, pady=8)
-        self.modern_canvas.create_image(0, 0, image=self.modern_photo, anchor="nw")
+        self.modern_canvas = tk.Canvas(right_box, width=self.CANVAS_W, height=self.CANVAS_H, bg="#eeeeee", highlightthickness=1)
+        self.modern_canvas.pack(anchor="center", padx=8, pady=(0, 4))
         self._bind_canvas_events(self.modern_canvas, "modern")
+        self._bind_canvas_zoom(self.modern_canvas, "modern")
+        mod_zoom_row = ttk.Frame(right_box)
+        mod_zoom_row.pack(anchor="w", padx=8, pady=(0, 8))
+        ttk.Button(mod_zoom_row, text=" + ", width=3, command=lambda: self._zoom_step("modern", 1)).pack(side="left")
+        ttk.Button(mod_zoom_row, text=" − ", width=3, command=lambda: self._zoom_step("modern", -1)).pack(side="left", padx=2)
+        ttk.Button(mod_zoom_row, text="Сбросить масштаб", command=lambda: self._reset_view("modern")).pack(side="left", padx=6)
+        self.modern_zoom_label = ttk.Label(mod_zoom_row, text="1.0×")
+        self.modern_zoom_label.pack(side="left", padx=4)
 
         self.status = tk.StringVar()
         ttk.Label(self, textvariable=self.status, font=("TkDefaultFont", 10, "bold")).pack(anchor="w", padx=12, pady=5)
@@ -2986,6 +3027,173 @@ class DualFacadePointPicker(tk.Toplevel):
         canvas.bind("<Button-1>", lambda e, s=side: self._canvas_press(s, e))
         canvas.bind("<B1-Motion>", lambda e, s=side: self._canvas_motion(s, e))
         canvas.bind("<ButtonRelease-1>", lambda e, s=side: self._canvas_release(s, e))
+        canvas.bind("<Button-2>", lambda e, s=side: self._pan_press(s, e))
+        canvas.bind("<B2-Motion>", lambda e, s=side: self._pan_motion(s, e))
+        canvas.bind("<ButtonRelease-2>", lambda e, s=side: self._pan_release(s, e))
+        canvas.bind("<Button-3>", lambda e, s=side: self._pan_press(s, e))
+        canvas.bind("<B3-Motion>", lambda e, s=side: self._pan_motion(s, e))
+        canvas.bind("<ButtonRelease-3>", lambda e, s=side: self._pan_release(s, e))
+
+    def _bind_canvas_zoom(self, canvas: tk.Canvas, side: str) -> None:
+        def _wheel(event: tk.Event, s: str = side) -> str:
+            self._zoom_step(s, 1 if (getattr(event, "delta", 0) > 0 or getattr(event, "num", 0) == 4) else -1, event.x, event.y)
+            return "break"
+
+        for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            canvas.bind(seq, _wheel, add="+")
+        canvas.bind("<Enter>", lambda _e, c=canvas: c.focus_set(), add="+")
+
+    def _side_zoom(self, side: str) -> float:
+        return self.old_zoom if side == "old" else self.modern_zoom
+
+    def _set_side_zoom(self, side: str, value: float) -> None:
+        if side == "old":
+            self.old_zoom = value
+        else:
+            self.modern_zoom = value
+
+    def _side_pan(self, side: str) -> Tuple[float, float]:
+        if side == "old":
+            return self.old_pan_x, self.old_pan_y
+        return self.modern_pan_x, self.modern_pan_y
+
+    def _set_side_pan(self, side: str, px: float, py: float) -> None:
+        if side == "old":
+            self.old_pan_x, self.old_pan_y = px, py
+        else:
+            self.modern_pan_x, self.modern_pan_y = px, py
+
+    def _side_display_offset(self, side: str) -> Tuple[float, float]:
+        return self._display_offset_old if side == "old" else self._display_offset_modern
+
+    def _should_show_cropped(self, side: str) -> bool:
+        if self.tool_mode.get() != "corners":
+            return False
+        crop_text = self._current_old_crop_text() if side == "old" else self.modern_crop_rect_text
+        return parse_crop_rect(crop_text) is not None
+
+    def _on_tool_mode_changed(self) -> None:
+        self._load_historical_index(self.hist_index, initial=True)
+        self._rebuild_modern_display()
+        self._redraw()
+
+    def _side_scale(self, side: str) -> float:
+        return self.old_scale if side == "old" else self.modern_scale
+
+    def _zoom_step(self, side: str, direction: int, focal_x: Optional[float] = None, focal_y: Optional[float] = None) -> None:
+        canvas = self.old_canvas if side == "old" else self.modern_canvas
+        cw = max(10, canvas.winfo_width() or self.CANVAS_W)
+        ch = max(10, canvas.winfo_height() or self.CANVAS_H)
+        px, py = self._side_pan(side)
+        old_zoom = self._side_zoom(side)
+        scale = self._side_scale(side)
+        fx = float(focal_x if focal_x is not None else cw / 2.0)
+        fy = float(focal_y if focal_y is not None else ch / 2.0)
+        img_x = (fx - px) / max(scale, 1e-9)
+        img_y = (fy - py) / max(scale, 1e-9)
+        factor = 1.18 if direction > 0 else 1 / 1.18
+        new_zoom = max(1.0, min(self.MAX_ZOOM, old_zoom * factor))
+        self._set_side_zoom(side, new_zoom)
+        if side == "old":
+            self._rebuild_old_display()
+            new_scale = self.old_scale
+        else:
+            self._rebuild_modern_display()
+            new_scale = self.modern_scale
+        new_px = fx - img_x * new_scale
+        new_py = fy - img_y * new_scale
+        self._set_side_pan(side, new_px, new_py)
+        self._redraw()
+        self._update_zoom_labels()
+
+    def _reset_view(self, side: str) -> None:
+        self._set_side_zoom(side, 1.0)
+        self._set_side_pan(side, 0.0, 0.0)
+        if side == "old":
+            self._rebuild_old_display()
+        else:
+            self._rebuild_modern_display()
+        self._redraw()
+        self._update_zoom_labels()
+
+    def _update_zoom_labels(self) -> None:
+        if hasattr(self, "old_zoom_label"):
+            self.old_zoom_label.configure(text=f"{self.old_zoom:.1f}×")
+        if hasattr(self, "modern_zoom_label"):
+            self.modern_zoom_label.configure(text=f"{self.modern_zoom:.1f}×")
+
+    def _rebuild_old_display(self) -> None:
+        if not (0 <= self.hist_index < len(self.hist_sources)):
+            return
+        path = str(self.hist_sources[self.hist_index].get("path") or "")
+        full = cv_read(path)
+        self.old_full_w = int(full.shape[1])
+        self.old_full_h = int(full.shape[0])
+        img = full
+        offset = (0.0, 0.0)
+        if self._should_show_cropped("old"):
+            img, offset = apply_source_crop(img, self._current_old_crop_text())
+        self._display_offset_old = offset
+        zoom = self.old_zoom
+        self.old_photo, self.old_scale, self.old_w, self.old_h, self.old_orig_w, self.old_orig_h = cv_array_to_photoimage(
+            img, self.CANVAS_W, self.CANVAS_H, zoom=zoom
+        )
+
+    def _rebuild_modern_display(self) -> None:
+        full = cv_read(self.modern_image_path)
+        self.modern_full_w = int(full.shape[1])
+        self.modern_full_h = int(full.shape[0])
+        img = full
+        offset = (0.0, 0.0)
+        if self._should_show_cropped("modern"):
+            img, offset = apply_source_crop(img, self.modern_crop_rect_text)
+        self._display_offset_modern = offset
+        zoom = self.modern_zoom
+        self.modern_photo, self.modern_scale, self.modern_w, self.modern_h, self.modern_orig_w, self.modern_orig_h = cv_array_to_photoimage(
+            img, self.CANVAS_W, self.CANVAS_H, zoom=zoom
+        )
+
+    def _orig_to_canvas(self, side: str, ox: float, oy: float) -> Point:
+        off_x, off_y = self._side_display_offset(side)
+        scale = self._side_scale(side)
+        px, py = self._side_pan(side)
+        x = (ox - off_x) * scale + px
+        y = (oy - off_y) * scale + py
+        return (x, y)
+
+    def _canvas_to_orig(self, side: str, cx: float, cy: float) -> Point:
+        off_x, off_y = self._side_display_offset(side)
+        scale = self._side_scale(side)
+        px, py = self._side_pan(side)
+        ox = (cx - px) / max(scale, 1e-9) + off_x
+        oy = (cy - py) / max(scale, 1e-9) + off_y
+        return (ox, oy)
+
+    def _pan_press(self, side: str, event: tk.Event) -> None:
+        px, py = self._side_pan(side)
+        self._pan_drag = (side, float(event.x), float(event.y), px, py)
+
+    def _pan_motion(self, side: str, event: tk.Event) -> None:
+        if self._pan_drag is None or self._pan_drag[0] != side:
+            return
+        _, x0, y0, px0, py0 = self._pan_drag
+        self._set_side_pan(side, px0 + (event.x - x0), py0 + (event.y - y0))
+        self._redraw()
+
+    def _pan_release(self, side: str, event: tk.Event) -> None:
+        if self._pan_drag is not None and self._pan_drag[0] == side:
+            self._pan_drag = None
+
+    def _hit_point_index(self, side: str, cx: float, cy: float) -> Optional[int]:
+        points = self.old_points if side == "old" else self.modern_points
+        r2 = self.POINT_HIT_PX * self.POINT_HIT_PX
+        for i, pt in enumerate(points):
+            if pt is None:
+                continue
+            dx, dy = self._orig_to_canvas(side, pt[0], pt[1])
+            if (cx - dx) ** 2 + (cy - dy) ** 2 <= r2:
+                return i
+        return None
 
     def _current_old_crop_text(self) -> str:
         if 0 <= self.hist_index < len(self.hist_sources):
@@ -3008,18 +3216,14 @@ class DualFacadePointPicker(tk.Toplevel):
         self.old_points = [None, None, None, None]
         self._fill_points_from_text(str(src.get("points") or ""), self.old_points)
         try:
-            self.old_photo, self.old_scale, self.old_w, self.old_h, self.old_orig_w, self.old_orig_h = cv_to_photoimage(
-                path, 560, 540
-            )
+            self._rebuild_old_display()
         except Exception as exc:
             messagebox.showerror("Фото", str(exc), parent=self)
             return
-        self.old_canvas.configure(width=self.old_w, height=self.old_h)
-        self.old_canvas.delete("all")
-        self.old_canvas.create_image(0, 0, image=self.old_photo, anchor="nw")
         self.hist_slider.set(self.hist_index)
         self.hist_caption.configure(text=f"{self.hist_index + 1} / {len(self.hist_sources)} — {label}")
         self.left_box.configure(text=f"Историческое: {label}")
+        self._update_zoom_labels()
         self._redraw()
 
     def _on_hist_slider(self, value: str) -> None:
@@ -3069,30 +3273,54 @@ class DualFacadePointPicker(tk.Toplevel):
                 return
             self._crop_drag = (side, float(event.x), float(event.y))
             return
+        if mode == "corners":
+            if side == "modern" and self.lock_modern:
+                self.status.set("Современные углы заблокированы. Снимите «замок» для правки.")
+                return
+            hit = self._hit_point_index(side, float(event.x), float(event.y))
+            if hit is not None:
+                self._drag_point = (side, hit)
+                self.status.set(f"Тяните точку {hit + 1} — отпустите, когда поставите точно.")
+                return
         self._click_corner(side, event)
 
     def _canvas_motion(self, side: str, event: tk.Event) -> None:
+        if self._drag_point is not None and self._drag_point[0] == side:
+            _, idx = self._drag_point
+            ox, oy = self._canvas_to_orig(side, float(event.x), float(event.y))
+            fw = self.old_full_w if side == "old" else self.modern_full_w
+            fh = self.old_full_h if side == "old" else self.modern_full_h
+            ox = max(0.0, min(ox, float(fw) - 1))
+            oy = max(0.0, min(oy, float(fh) - 1))
+            if side == "old":
+                self.old_points[idx] = (ox, oy)
+            else:
+                self.modern_points[idx] = (ox, oy)
+            self._redraw()
+            return
         if self._crop_drag is None or self._crop_drag[0] != side:
             return
         self._redraw(crop_preview=(side, self._crop_drag[1], self._crop_drag[2], float(event.x), float(event.y)))
 
     def _canvas_release(self, side: str, event: tk.Event) -> None:
+        if self._drag_point is not None and self._drag_point[0] == side:
+            self._drag_point = None
+            self._save_current_historical_points()
+            self._redraw()
+            return
         if self._crop_drag is None or self._crop_drag[0] != side:
             return
         x1, y1 = self._crop_drag[1], self._crop_drag[2]
         x2, y2 = float(event.x), float(event.y)
         self._crop_drag = None
-        scale = self.old_scale if side == "old" else self.modern_scale
-        ox0 = min(x1, x2) / scale
-        oy0 = min(y1, y2) / scale
-        ox1 = max(x1, x2) / scale
-        oy1 = max(y1, y2) / scale
-        ow = self.old_orig_w if side == "old" else self.modern_orig_w
-        oh = self.old_orig_h if side == "old" else self.modern_orig_h
-        ox0 = max(0.0, min(ox0, float(ow)))
-        oy0 = max(0.0, min(oy0, float(oh)))
-        ox1 = max(0.0, min(ox1, float(ow)))
-        oy1 = max(0.0, min(oy1, float(oh)))
+        ox0, oy0 = self._canvas_to_orig(side, min(x1, x2), min(y1, y2))
+        ox1, oy1 = self._canvas_to_orig(side, max(x1, x2), max(y1, y2))
+        fw = self.old_full_w if side == "old" else self.modern_full_w
+        fh = self.old_full_h if side == "old" else self.modern_full_h
+        ox0 = max(0.0, min(ox0, float(fw)))
+        oy0 = max(0.0, min(oy0, float(fh)))
+        ox1 = max(0.0, min(ox1, float(fw)))
+        oy1 = max(0.0, min(oy1, float(fh)))
         if ox1 - ox0 < 12 or oy1 - oy0 < 12:
             self.status.set("Рамка слишком мала — потяните побольше.")
             self._redraw()
@@ -3100,8 +3328,10 @@ class DualFacadePointPicker(tk.Toplevel):
         text = crop_rect_to_text(ox0, oy0, ox1, oy1)
         if side == "old":
             self._set_old_crop_text(text)
+            self._load_historical_index(self.hist_index, initial=True)
         else:
             self.modern_crop_rect_text = text
+            self._rebuild_modern_display()
         self.status.set("Рамка обрезки сохранена. При необходимости укажите 4 угла внутри неё.")
         self._redraw()
 
@@ -3113,21 +3343,17 @@ class DualFacadePointPicker(tk.Toplevel):
             return
         idx = self._current_index()
         if idx >= 4:
-            self.status.set("Все 4 пары точек уже выбраны. Нажмите “Готово” или очистите точки.")
+            self.status.set("Все 4 пары точек выбраны. Перетащите точку мышью или нажмите «Готово».")
             return
+        ox, oy = self._canvas_to_orig(side, float(event.x), float(event.y))
         if side == "old":
-            if not (0 <= event.x <= self.old_w and 0 <= event.y <= self.old_h):
-                return
-            self.old_points[idx] = (event.x / self.old_scale, event.y / self.old_scale)
+            self.old_points[idx] = (ox, oy)
         else:
-            if not (0 <= event.x <= self.modern_w and 0 <= event.y <= self.modern_h):
-                return
-            self.modern_points[idx] = (event.x / self.modern_scale, event.y / self.modern_scale)
+            self.modern_points[idx] = (ox, oy)
         self._redraw()
 
     def _to_disp(self, pt: Point, side: str) -> Point:
-        scale = self.old_scale if side == "old" else self.modern_scale
-        return (pt[0] * scale, pt[1] * scale)
+        return self._orig_to_canvas(side, pt[0], pt[1])
 
     def _draw_side(self, canvas: tk.Canvas, points: List[Optional[Point]], side: str) -> None:
         canvas.delete("corner_marker")
@@ -3155,32 +3381,36 @@ class DualFacadePointPicker(tk.Toplevel):
             canvas.create_line(flat, fill="#d92323", width=2, tags="corner_marker")
 
     def _draw_crop_rect(self, canvas: tk.Canvas, crop_text: str, side: str, *, preview: Optional[Tuple[float, float, float, float]] = None) -> None:
-        scale = self.old_scale if side == "old" else self.modern_scale
         if preview is not None:
             x0, y0, x1, y1 = preview
-        else:
-            box = parse_crop_rect(crop_text)
-            if box is None:
-                return
-            x0, y0, x1, y1 = box
-        dx0, dy0 = x0 * scale, y0 * scale
-        dx1, dy1 = x1 * scale, y1 * scale
-        canvas.create_rectangle(dx0, dy0, dx1, dy1, outline="#1a8a3a", width=2, dash=(6, 4), tags="crop_marker")
-        canvas.create_text(dx0 + 6, dy0 + 6, text="обрезка", fill="#1a8a3a", anchor="nw", tags="crop_marker")
+            canvas.create_rectangle(x0, y0, x1, y1, outline="#1a8a3a", width=2, dash=(6, 4), tags="crop_marker")
+            canvas.create_text(x0 + 6, y0 + 6, text="обрезка", fill="#1a8a3a", anchor="nw", tags="crop_marker")
+            return
+        box = parse_crop_rect(crop_text)
+        if box is None:
+            return
+        x0, y0 = self._orig_to_canvas(side, box[0], box[1])
+        x1, y1 = self._orig_to_canvas(side, box[2], box[3])
+        canvas.create_rectangle(min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1), outline="#1a8a3a", width=2, dash=(6, 4), tags="crop_marker")
+        canvas.create_text(min(x0, x1) + 6, min(y0, y1) + 6, text="обрезка", fill="#1a8a3a", anchor="nw", tags="crop_marker")
+
+    def _place_side_image(self, canvas: tk.Canvas, photo: tk.PhotoImage, pan_x: float, pan_y: float, disp_w: int, disp_h: int) -> None:
+        canvas.delete("all")
+        canvas.create_image(pan_x, pan_y, image=photo, anchor="nw")
 
     def _redraw(self, crop_preview: Optional[Tuple[str, float, float, float, float]] = None) -> None:
-        self.old_canvas.delete("crop_marker")
-        self.modern_canvas.delete("crop_marker")
+        self._place_side_image(self.old_canvas, self.old_photo, self.old_pan_x, self.old_pan_y, self.old_w, self.old_h)
+        self._place_side_image(self.modern_canvas, self.modern_photo, self.modern_pan_x, self.modern_pan_y, self.modern_w, self.modern_h)
         self._draw_side(self.old_canvas, self.old_points, "old")
         self._draw_side(self.modern_canvas, self.modern_points, "modern")
-        self._draw_crop_rect(self.old_canvas, self._current_old_crop_text(), "old")
-        self._draw_crop_rect(self.modern_canvas, self.modern_crop_rect_text, "modern")
+        if self.tool_mode.get() != "corners" or not self._should_show_cropped("old"):
+            self._draw_crop_rect(self.old_canvas, self._current_old_crop_text(), "old")
+        if self.tool_mode.get() != "corners" or not self._should_show_cropped("modern"):
+            self._draw_crop_rect(self.modern_canvas, self.modern_crop_rect_text, "modern")
         if crop_preview is not None:
             side, x1, y1, x2, y2 = crop_preview
-            scale = self.old_scale if side == "old" else self.modern_scale
-            prev = (min(x1, x2) / scale, min(y1, y2) / scale, max(x1, x2) / scale, max(y1, y2) / scale)
             canvas = self.old_canvas if side == "old" else self.modern_canvas
-            self._draw_crop_rect(canvas, "", side, preview=prev)
+            self._draw_crop_rect(canvas, "", side, preview=(min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2)))
         mode = self.tool_mode.get()
         if mode == "crop_old":
             self.status.set("Потяните мышью рамку на историческом фото слева — останется выбранный фрагмент.")
@@ -3190,7 +3420,7 @@ class DualFacadePointPicker(tk.Toplevel):
             return
         idx = self._current_index()
         if idx >= 4:
-            self.status.set("Все 4 пары выбраны. Нажмите “Готово”.")
+            self.status.set("Все 4 пары выбраны. Перетащите точку для подстройки или нажмите «Готово».")
             return
         left_ok = self.old_points[idx] is not None
         right_ok = self.modern_points[idx] is not None or self.lock_modern
@@ -3233,10 +3463,12 @@ class DualFacadePointPicker(tk.Toplevel):
 
     def clear_crop_old(self) -> None:
         self._set_old_crop_text("")
+        self._rebuild_old_display()
         self._redraw()
 
     def clear_crop_modern(self) -> None:
         self.modern_crop_rect_text = ""
+        self._rebuild_modern_display()
         self._redraw()
 
     @staticmethod
