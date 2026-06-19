@@ -19,6 +19,18 @@ export function polygonCentroid(points: Point[]): Point {
   return [xs.reduce((a, b) => a + b, 0) / xs.length, ys.reduce((a, b) => a + b, 0) / ys.length]
 }
 
+/** Absolute polygon area (shoelace). Used to stack small regions above large overlaps for clicks. */
+export function polygonAreaAbs(points: Point[]): number {
+  if (points.length < 3) return 0
+  let area = 0
+  for (let i = 0; i < points.length; i++) {
+    const [x1, y1] = points[i]
+    const [x2, y2] = points[(i + 1) % points.length]
+    area += x1 * y2 - x2 * y1
+  }
+  return Math.abs(area) / 2
+}
+
 export function toPercentPoints(points: Point[], width: number, height: number): Point[] {
   return points.map(([x, y]) => [(x / width) * 100, (y / height) * 100])
 }
