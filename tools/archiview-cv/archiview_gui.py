@@ -8476,6 +8476,7 @@ class AppV12(AppV11):
         self._compare_refresh_job = None
         self._markup_refresh_job = None
         self._result_refresh_job = None
+        self._labeling_sync_job = None
         self._preview_base_cache: Dict[Tuple[object, int, int], Tuple[object, object]] = {}
         super()._build_ui()
         # The v11 canvas bindings refreshed immediately on every resize event. On Windows
@@ -8486,7 +8487,70 @@ class AppV12(AppV11):
             self.markup_canvas.bind("<Configure>", lambda _e: self._schedule_markup_refresh(delay=120))
         if hasattr(self, "result_canvas"):
             self.result_canvas.bind("<Configure>", lambda _e: self._schedule_result_refresh(delay=120))
-        self._log("v12: ускоренный встроенный просмотр включён. Полноразмерное сохранение выполняется только при сохранении разметки.\n")
+        self._log(
+            "v12: быстрый просмотр сравнения. Вид overlay автоматически передаётся в разметку "
+            "(файл 05) с небольшой задержкой после ползунков.\n"
+        )
+
+    def _markup_tab_active(self) -> bool:
+        try:
+            return hasattr(self, "tab_markup") and str(self.notebook.select()) == str(self.tab_markup)
+        except Exception:
+            return False
+
+    def _apply_compare_view_to_markup(self, mode: Optional[str] = None, refresh_markup: bool = True) -> bool:
+        if self._is_side_by_side_project():
+            return False
+        view_mode = mode or self.compare_mode.get()
+        if hasattr(self, "markup_background_mode"):
+            self.markup_background_mode.set(view_mode)
+        try:
+            self._save_current_labeling_image(mode=view_mode)
+        except Exception:
+            return False
+        if refresh_markup and self._markup_tab_active():
+            self._schedule_markup_refresh(delay=30)
+        return True
+
+    def _schedule_apply_compare_to_markup(self, delay: int = 320) -> None:
+        if self._labeling_sync_job is not None:
+            try:
+                self.after_cancel(self._labeling_sync_job)
+            except Exception:
+                pass
+        self._labeling_sync_job = self.after(delay, self._run_scheduled_apply_compare_to_markup)
+
+    def _run_scheduled_apply_compare_to_markup(self) -> None:
+        self._labeling_sync_job = None
+        if self._apply_compare_view_to_markup(refresh_markup=True):
+            if hasattr(self, "compare_status") and self._markup_tab_active():
+                self.compare_status.set("Вид сравнения передан в разметку.")
+
+    def _on_compare_mode_changed(self) -> None:
+        self._schedule_compare_refresh(save=False, delay=40)
+        self._schedule_apply_compare_to_markup(delay=80)
+
+    def push_compare_view_to_markup(self) -> None:
+        if self._is_side_by_side_project():
+            messagebox.showinfo(
+                "Разные ракурсы",
+                "Для side-by-side фон разметки задаётся кнопкой «Подготовить» на вкладке выпрямления.",
+            )
+            return
+        if not self._apply_compare_view_to_markup(refresh_markup=True):
+            messagebox.showwarning("Нет данных", "Сначала подготовьте выпрямленную пару на вкладке 2.")
+            return
+        target = Path(self.outdir.get()) / "05_comparison_for_labeling.png"
+        self._log(f"Картинка для разметки обновлена: {target}\n")
+        if hasattr(self, "compare_status"):
+            self.compare_status.set("Текущий вид сравнения передан в разметку.")
+        if self._markup_tab_active():
+            messagebox.showinfo("Готово", f"Фон разметки обновлён:\n{target}")
+        else:
+            messagebox.showinfo(
+                "Готово",
+                f"Фон разметки сохранён:\n{target}\n\nОткройте вкладку «4. Разметка» — там будет тот же вид.",
+            )
 
     # ---------------- throttling helpers ----------------
 
@@ -8533,8 +8597,9 @@ class AppV12(AppV11):
 
     def _compare_slider_changed(self, _value: object = None) -> None:
         self._update_opacity_label(None)
-        self.compare_status.set("Настройки изменены. Обновляю встроенный просмотр…")
+        self.compare_status.set("Настройки изменены. Обновляю просмотр…")
         self._schedule_compare_refresh(save=False, delay=90)
+        self._schedule_apply_compare_to_markup(delay=320)
 
     def _compare_canvas_drag_split(self, event: tk.Event) -> None:
         if self.compare_mode.get() != "before_after":
@@ -8640,9 +8705,10 @@ class AppV12(AppV11):
                 x = ox + int(dw * self.compare_split.get() / 100.0)
                 self.compare_canvas.create_line(x, oy, x, oy + dh, fill="#ffffff", width=2)
             if save:
-                # Full-resolution save is intentionally rare in v12.
                 self._save_current_labeling_image(mode=self.compare_mode.get())
-            self.compare_status.set("Вид сравнения готов. При переходе в разметку используется такой же фон, но без тяжёлого пересохранения на каждом движении ползунка.")
+            self.compare_status.set(
+                "Вид сравнения готов. При смене режима или ползунков фон разметки обновляется автоматически."
+            )
         except Exception as exc:
             self.compare_status.set(str(exc))
             self._draw_canvas_message(self.compare_canvas, str(exc))
@@ -9058,6 +9124,7 @@ class AppV12(AppV11):
                 self._schedule_compare_refresh(save=False, delay=60)
             elif current == str(self.tab_markup):
                 self.markup_background_mode.set(self.compare_mode.get())
+                self._apply_compare_view_to_markup(refresh_markup=False)
                 self._reload_markup_from_disk()
                 self._schedule_markup_refresh(delay=60)
             elif current == str(self.tab_result):
@@ -9577,11 +9644,11 @@ class AppV13(AppV12):
         controls_scroll.grid(row=0, column=0, sticky="nsew")
         controls = controls_scroll.inner
         controls.columnconfigure(0, weight=1)
-        ttk.Label(controls, text="Если настройки не помещаются, прокрутите этот блок. Настроенный вид автоматически становится фоном разметки.", wraplength=280, foreground="#555").grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 8))
+        ttk.Label(controls, text="Настроенный вид автоматически передаётся в разметку (с небольшой задержкой после ползунков).", wraplength=280, foreground="#555").grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 8))
         mode_box = ttk.LabelFrame(controls, text="Режим просмотра")
         mode_box.grid(row=1, column=0, sticky="ew", padx=10, pady=6)
         for value, label in (("overlay", "Overlay"), ("before_after", "До / после"), ("modern", "Только современное"), ("historical", "Только историческое")):
-            ttk.Radiobutton(mode_box, text=label, value=value, variable=self.compare_mode, command=self._refresh_compare_canvas).pack(anchor="w", padx=8, pady=2)
+            ttk.Radiobutton(mode_box, text=label, value=value, variable=self.compare_mode, command=self._on_compare_mode_changed).pack(anchor="w", padx=8, pady=2)
         sliders = ttk.LabelFrame(controls, text="Видимость и читаемость")
         sliders.grid(row=2, column=0, sticky="ew", padx=10, pady=6)
         self._v11_scale(sliders, "Видимость исторического фото", self.old_opacity, 0, 100, self._compare_slider_changed)
@@ -9599,7 +9666,8 @@ class AppV13(AppV12):
         ttk.Button(quick, text="Мягкое наложение", command=self._preset_soft).pack(fill="x", padx=8, pady=3)
         actions = ttk.LabelFrame(controls, text="Действия")
         actions.grid(row=4, column=0, sticky="ew", padx=10, pady=6)
-        ttk.Button(actions, text="Обновить просмотр", command=self._refresh_compare_canvas).pack(fill="x", padx=8, pady=3)
+        ttk.Button(actions, text="Обновить просмотр", command=lambda: self._refresh_compare_canvas(save=True)).pack(fill="x", padx=8, pady=3)
+        ttk.Button(actions, text="Применить к разметке", command=self.push_compare_view_to_markup).pack(fill="x", padx=8, pady=3)
         ttk.Button(actions, text="Открыть HTML overlay", command=self.open_overlay).pack(fill="x", padx=8, pady=3)
         ttk.Button(actions, text="Открыть HTML до/после", command=self.open_before_after).pack(fill="x", padx=8, pady=3)
         ttk.Button(actions, text="Открыть папку результата", command=lambda: open_path(Path(self.outdir.get()))).pack(fill="x", padx=8, pady=3)
@@ -9783,6 +9851,8 @@ class AppV13(AppV12):
         self.markup_zoom = 1.0
         self.markup_pan_x = 0.0
         self.markup_pan_y = 0.0
+        if not self._is_side_by_side_project():
+            self._save_current_labeling_image(mode=self.markup_background_mode.get())
         self._schedule_markup_refresh(delay=30)
 
     def _markup_current_full_size(self) -> Tuple[int, int]:
