@@ -11164,6 +11164,7 @@ class AppV16(AppV15):
             on_persist_house=lambda: self._persist_house_metadata(quiet=True),
             rakurs_var=self.comparison_rakurs,
             on_rakurs_changed=self._on_comparison_rakurs_changed,
+            on_need_photos=lambda: self._wizard_go_work_tab("sources"),
         )
         self.workflow_wizard.pack(fill="both", expand=True)
         for i in range(self.notebook.index("end")):
@@ -11221,12 +11222,13 @@ class AppV16(AppV15):
             self.comparison_rakurs.set("similar")
         self._on_comparison_rakurs_changed()
         if hasattr(self, "workflow_wizard"):
-            self.workflow_wizard._update_step3_primary_action()
+            self.workflow_wizard._update_primary_action()
 
     def _wizard_go_work_tab(self, key: str) -> None:
         if not hasattr(self, "notebook"):
             return
         tab_map = {
+            "sources": getattr(self, "tab_select", None),
             "rectify": getattr(self, "tab_rectify", None),
             "compare": getattr(self, "tab_compare", None),
             "markup": getattr(self, "tab_markup", None),
@@ -11248,7 +11250,7 @@ class AppV16(AppV15):
     def _new_house_project_hint(self) -> str:
         return (
             "На вкладке «0. Дом и сравнение» справа подставятся папка, название, код на сайте (MOSCOW_XXX), "
-            "адрес и координаты.\n\nПроверьте поля → «Сохранить данные дома» → «Далее к сравнениям»."
+            "адрес и координаты.\n\nПроверьте поля → «Сохранить данные дома» → создайте или выберите сравнение."
         )
 
     def new_house_project(self) -> None:
