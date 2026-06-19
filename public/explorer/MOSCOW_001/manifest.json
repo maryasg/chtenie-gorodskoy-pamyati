@@ -1,0 +1,46 @@
+{
+    "cardId":  "MOSCOW_001",
+    "defaultComparisonId":  "cmp_008",
+    "comparisons":  [
+                        {
+                            "comparisonId":  "cmp_008",
+                            "title":  "manual_old_plan_1840_usadba_2.jpg + modern_20260520_151333.jpg",
+                            "labelingLayout":  "overlay",
+                            "annotationCount":  2,
+                            "isLegacy":  false,
+                            "markedFacadeUrl":  "marked-facade.png",
+                            "labeledFacadeUrl":  "marked-facade-labeled.png",
+                            "historicalRectifiedUrl":  "historical-rectified.png",
+                            "modernRectifiedUrl":  "modern-rectified.png",
+                            "annotationsUrl":  "annotations.json",
+                            "facadeProjectUrl":  "facade-project.json"
+                        },
+                        {
+                            "comparisonId":  "cmp_legacy_001",
+                            "title":  "Legacy: существующая разметка (result/)",
+                            "labelingLayout":  "overlay",
+                            "annotationCount":  3,
+                            "isLegacy":  true,
+                            "markedFacadeUrl":  "comparisons/cmp_legacy_001/marked-facade.png",
+                            "labeledFacadeUrl":  "comparisons/cmp_legacy_001/marked-facade-labeled.png",
+                            "historicalRectifiedUrl":  "comparisons/cmp_legacy_001/historical-rectified.png",
+                            "modernRectifiedUrl":  "comparisons/cmp_legacy_001/modern-rectified.png",
+                            "annotationsUrl":  "comparisons/cmp_legacy_001/annotations.json",
+                            "facadeProjectUrl":  "comparisons/cmp_legacy_001/facade-project.json"
+                        },
+                        {
+                            "comparisonId":  "cmp_005",
+                            "title":  "PastVu #68053 + modern_20260520_143508.jpg",
+                            "labelingLayout":  "overlay",
+                            "annotationCount":  10,
+                            "isLegacy":  false,
+                            "markedFacadeUrl":  "comparisons/cmp_005/marked-facade.png",
+                            "labeledFacadeUrl":  "comparisons/cmp_005/marked-facade-labeled.png",
+                            "historicalRectifiedUrl":  "comparisons/cmp_005/historical-rectified.png",
+                            "modernRectifiedUrl":  "comparisons/cmp_005/modern-rectified.png",
+                            "annotationsUrl":  "comparisons/cmp_005/annotations.json",
+                            "facadeProjectUrl":  "comparisons/cmp_005/facade-project.json"
+                        }
+                    ],
+    "updatedAt":  "2026-06-19T22:03:45.5772529Z"
+}
