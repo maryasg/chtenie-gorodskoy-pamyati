@@ -92,17 +92,17 @@ def years_from_workdir(work_dir: Path) -> tuple[str, str]:
 
 
 def comparison_years_label(store: "ProjectStore", cmp: "ComparisonSession") -> str:
-    hist_year = ""
-    mod_year = ""
-    if cmp.active_historical_photo_id and cmp.active_historical_photo_id in store.photos:
+    hist_year = (cmp.historical_year or "").strip()
+    mod_year = (cmp.modern_year or "").strip()
+    if not hist_year and cmp.active_historical_photo_id and cmp.active_historical_photo_id in store.photos:
         hist_year = photo_year_label(store.photos[cmp.active_historical_photo_id])
-    else:
+    elif not hist_year:
         for hid in cmp.historical_photo_ids:
             if hid in store.photos:
                 hist_year = photo_year_label(store.photos[hid])
                 if hist_year:
                     break
-    if cmp.modern_photo_id and cmp.modern_photo_id in store.photos:
+    if not mod_year and cmp.modern_photo_id and cmp.modern_photo_id in store.photos:
         mod_year = photo_year_label(store.photos[cmp.modern_photo_id])
     work_hist, work_mod = years_from_workdir(cmp.work_path(store.project_dir))
     if not hist_year:
@@ -236,6 +236,9 @@ class ComparisonSession:
     modern_source_path: str = ""
     overlay_settings: Dict[str, Any] = field(default_factory=dict)
     annotation_count: int = 0
+    has_markup: bool = False
+    historical_year: str = ""
+    modern_year: str = ""
     status: str = "draft"
     is_legacy: bool = False
     work_dir: str = "result"
@@ -521,6 +524,7 @@ class ProjectStore:
             self.active_comparison_id = None
 
     def refresh_comparison_stats(self) -> None:
+        years_dirty = False
         for cmp in self.comparisons.values():
             work = cmp.work_path(self.project_dir)
             ann = work / "annotations" / "manual_annotations.json"
@@ -534,6 +538,55 @@ class ProjectStore:
                 except Exception:
                     pass
             cmp.annotation_count = count
+            cmp.has_markup = _work_dir_has_markup(work)
+            if self._sync_comparison_years(cmp):
+                years_dirty = True
+        if years_dirty:
+            self.save()
+
+    def _sync_comparison_years(self, cmp: ComparisonSession) -> bool:
+        changed = False
+        if not (cmp.historical_year or "").strip():
+            hist = ""
+            if cmp.active_historical_photo_id and cmp.active_historical_photo_id in self.photos:
+                hist = photo_year_label(self.photos[cmp.active_historical_photo_id])
+            else:
+                for hid in cmp.historical_photo_ids:
+                    if hid in self.photos:
+                        hist = photo_year_label(self.photos[hid])
+                        if hist:
+                            break
+            work_hist, _ = years_from_workdir(cmp.work_path(self.project_dir))
+            if not hist:
+                hist = work_hist
+            if not hist and cmp.title:
+                m = _YEAR_RE.search(cmp.title)
+                if m:
+                    hist = m.group(1)
+            if hist:
+                cmp.historical_year = hist
+                changed = True
+        if not (cmp.modern_year or "").strip():
+            mod = ""
+            if cmp.modern_photo_id and cmp.modern_photo_id in self.photos:
+                mod = photo_year_label(self.photos[cmp.modern_photo_id])
+            _, work_mod = years_from_workdir(cmp.work_path(self.project_dir))
+            if not mod:
+                mod = work_mod
+            if mod:
+                cmp.modern_year = mod
+                changed = True
+        return changed
+
+    def set_comparison_years(self, comparison_id: str, historical_year: str, modern_year: str) -> ComparisonSession:
+        cmp = self.comparisons.get(comparison_id)
+        if not cmp:
+            raise KeyError(comparison_id)
+        cmp.historical_year = (historical_year or "").strip()
+        cmp.modern_year = (modern_year or "").strip()
+        cmp.touch()
+        self.save()
+        return cmp
 
     def _migrate_legacy_comparison(self) -> None:
         result = self.project_dir / "result"

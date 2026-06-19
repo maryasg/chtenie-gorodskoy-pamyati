@@ -538,6 +538,7 @@ class ComparisonsTabFrame(ttk.Frame):
             ttk.Button(btm, text="Добавить фото…", command=self.on_need_photos).pack(side="left", padx=6)
         ttk.Button(btm, text="Дублировать", command=self.duplicate_selected).pack(side="left", padx=6)
         ttk.Button(btm, text="Сделать текущим ★", command=self.make_active).pack(side="left", padx=6)
+        ttk.Button(btm, text="Указать годы…", command=self.edit_years).pack(side="left", padx=6)
         ttk.Button(btm, text="Скрыть с сайта / к удалению", command=self.mark_discarded).pack(side="left", padx=6)
         ttk.Button(btm, text="Снять пометку", command=self.unmark_discarded).pack(side="left", padx=6)
         ttk.Button(btm, text="Удалить помеченные…", command=self.delete_discarded).pack(side="left", padx=6)
@@ -563,6 +564,8 @@ class ComparisonsTabFrame(ttk.Frame):
             suffix = " (legacy)" if c.is_legacy else ""
             years = comparison_years_label(store, c)
             title_col = c.comparison_id + suffix
+            if c.has_markup:
+                title_col += f" | разметка: {c.annotation_count}"
             if c.title and c.title.strip() and c.title.strip() not in years:
                 title_col += f" — {c.title.strip()}"
             self.tree.insert(
@@ -671,31 +674,65 @@ class ComparisonsTabFrame(ttk.Frame):
         self.refresh()
         self.on_open_comparison(cmp)
 
+    def edit_years(self) -> None:
+        store = self._require_store()
+        cmp = self._selected()
+        if not store or not cmp:
+            messagebox.showwarning("Не выбрано", "Выберите сравнение.")
+            return
+        hist = simpledialog.askstring(
+            "Год исторического фото",
+            f"Исторический год для {comparison_years_label(store, cmp)}:",
+            initialvalue=cmp.historical_year or "",
+            parent=self,
+        )
+        if hist is None:
+            return
+        mod = simpledialog.askstring(
+            "Год современного фото",
+            "Современный год (например 2026):",
+            initialvalue=cmp.modern_year or "2026",
+            parent=self,
+        )
+        if mod is None:
+            return
+        store.set_comparison_years(cmp.comparison_id, hist, mod)
+        self._log(f"Годы {cmp.comparison_id}: {hist.strip()} → {mod.strip()}\n")
+        self.refresh()
+
     def mark_discarded(self) -> None:
         store = self._require_store()
         cmp = self._selected()
         if not store or not cmp:
             messagebox.showwarning("Не выбрано", "Выберите сравнение.")
             return
+        years = comparison_years_label(store, cmp)
+        preserve_note = (
+            "\n\nФайлы разметки на диске не удаляются — только скрытие с сайта и пометка в списке."
+        )
         if cmp.is_legacy:
             if not messagebox.askyesno(
                 "Скрыть legacy с сайта",
                 "Legacy (cmp_legacy_001) — зеркало папки result/.\n"
-                "Папку на диске не трогаем, но сравнение исчезнет с сайта и из экспорта.\n"
-                "Продолжить?",
+                "Папку result/ и разметку на диске не трогаем.\n"
+                "Сравнение исчезнет с сайта и из экспорта."
+                + preserve_note
+                + "\n\nПродолжить?",
                 parent=self,
             ):
                 return
-        elif cmp.annotation_count > 0:
+        elif cmp.has_markup or cmp.annotation_count > 0:
             if not messagebox.askyesno(
-                "Есть разметка",
-                f"В {cmp.comparison_id} уже {cmp.annotation_count} зон разметки.\n"
-                "Всё равно пометить «К удалению»?",
+                "Есть готовая разметка",
+                f"«{years}» — {cmp.annotation_count} зон разметки.\n"
+                "Пометить «К удалению» / скрыть с сайта?"
+                + preserve_note
+                + "\n\nЧтобы удалить папку — отдельно «Удалить помеченные…».",
                 parent=self,
             ):
                 return
         store.set_comparison_status(cmp.comparison_id, "discarded")
-        self._log(f"Помечено к удалению: {cmp.comparison_id}\n")
+        self._log(f"Скрыто с сайта (файлы сохранены): {years} [{cmp.comparison_id}]\n")
         self.refresh()
 
     def unmark_discarded(self) -> None:
@@ -719,10 +756,23 @@ class ComparisonsTabFrame(ttk.Frame):
         if not doomed:
             messagebox.showinfo("Нет помеченных", "Сначала пометьте лишние сравнения «К удалению».")
             return
-        names = ", ".join(c.comparison_id for c in doomed)
-        if not messagebox.askyesno(
-            "Удалить папки",
-            f"Безвозвратно удалить {len(doomed)} сравнение(й) и их папки?\n{names}",
+        with_markup = [c for c in doomed if c.has_markup or c.annotation_count > 0]
+        lines = []
+        for c in doomed:
+            years = comparison_years_label(store, c)
+            mark = f" — разметка {c.annotation_count} зон" if c.has_markup or c.annotation_count > 0 else ""
+            lines.append(f"• {years} ({c.comparison_id}){mark}")
+        text = "Безвозвратно удалить папки этих сравнений?\n\n" + "\n".join(lines)
+        if with_markup:
+            text += (
+                f"\n\nВнимание: у {len(with_markup)} сравнения(й) есть готовая разметка — "
+                "файлы будут удалены с диска."
+            )
+        if not messagebox.askyesno("Удалить папки", text, parent=self):
+            return
+        if with_markup and not messagebox.askyesno(
+            "Подтвердите удаление разметки",
+            "Точно удалить сравнения с готовой разметкой?\nЭто действие нельзя отменить.",
             parent=self,
         ):
             return

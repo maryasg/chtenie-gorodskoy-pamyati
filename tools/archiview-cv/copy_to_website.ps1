@@ -418,6 +418,8 @@ $manifestItems = @()
 $cmpTitleById = @{}
 $cmpStatusById = @{}
 $cmpLegacyById = @{}
+$cmpHistYearById = @{}
+$cmpModYearById = @{}
 
 $projDir = Get-ProjectDirFromResult $Result
 if ($projDir) {
@@ -434,6 +436,8 @@ if ($projDir) {
                     $cmpTitleById[$cid] = [string]$cmpMeta.title
                     $cmpStatusById[$cid] = [string]$cmpMeta.status
                     $cmpLegacyById[$cid] = [bool]$cmpMeta.is_legacy
+                    $cmpHistYearById[$cid] = [string]$cmpMeta.historical_year
+                    $cmpModYearById[$cid] = [string]$cmpMeta.modern_year
                 }
             }
         } catch { }
@@ -454,6 +458,12 @@ if ($defaultCmpId) {
         $rootTitle = $cmpTitleById[$defaultCmpId]
         if (-not $rootTitle) { $rootTitle = 'Primary (active)' }
         $rootYears = Get-PhotoYearsFromCmpDir -CmpDir $Result -Title $rootTitle
+        if ($cmpHistYearById.ContainsKey($defaultCmpId) -and $cmpHistYearById[$defaultCmpId]) {
+            $rootYears.Historical = $cmpHistYearById[$defaultCmpId]
+        }
+        if ($cmpModYearById.ContainsKey($defaultCmpId) -and $cmpModYearById[$defaultCmpId]) {
+            $rootYears.Modern = $cmpModYearById[$defaultCmpId]
+        }
         if ($rootYears.Historical -and $rootYears.Modern) {
             $rootTitle = "$($rootYears.Historical) -> $($rootYears.Modern)"
         } elseif ($rootYears.Historical) {
@@ -487,6 +497,8 @@ if ($projDir) {
                 $title = [string]$cmpMeta.title
                 if (-not $title) { $title = $cmpId }
                 $years = Get-PhotoYearsFromCmpDir -CmpDir $cmpDir -Title $title
+                if ($cmpMeta.historical_year) { $years.Historical = [string]$cmpMeta.historical_year }
+                if ($cmpMeta.modern_year) { $years.Modern = [string]$cmpMeta.modern_year }
                 if ($years.Historical -and $years.Modern) {
                     $title = "$($years.Historical) -> $($years.Modern)"
                 } elseif ($years.Historical) {
