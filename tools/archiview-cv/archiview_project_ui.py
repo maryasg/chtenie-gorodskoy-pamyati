@@ -693,3 +693,249 @@ class MyProjectsPanel(ttk.LabelFrame):
         ):
             return
         self._delete_summaries(empty, prompt="Удалить все проекты без разметки?")
+
+
+class HouseWorkflowWizardFrame(ttk.Frame):
+    """Пошаговый мастер: дом → сравнение ★ → фото и переход к работе."""
+
+    def __init__(
+        self,
+        parent: tk.Widget,
+        project_root: Path,
+        get_store: Callable[[], Optional[ProjectStore]],
+        on_house_selected: Callable[[Path], None],
+        on_comparison_opened: Callable[[ComparisonSession], None],
+        on_new_project: Callable[[], None],
+        on_import_excel: Callable[[], None],
+        on_projects_deleted: Optional[Callable[[List[Path]], None]] = None,
+        on_go_tab: Optional[Callable[[str], None]] = None,
+        on_log: Optional[Callable[[str], None]] = None,
+    ) -> None:
+        super().__init__(parent)
+        self.project_root = Path(project_root)
+        self.get_store = get_store
+        self.on_house_selected = on_house_selected
+        self.on_comparison_opened = on_comparison_opened
+        self.on_new_project = on_new_project
+        self.on_import_excel = on_import_excel
+        self.on_projects_deleted = on_projects_deleted
+        self.on_go_tab = on_go_tab
+        self.on_log = on_log
+        self._current_step = 1
+        self._house_label = tk.StringVar(value="Дом не выбран")
+        self._cmp_label = tk.StringVar(value="Сравнение не выбрано")
+        self._hist_path = tk.StringVar(value="—")
+        self._mod_path = tk.StringVar(value="—")
+        self._work_dir = tk.StringVar(value="—")
+
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(1, weight=1)
+
+        header = ttk.Frame(self)
+        header.grid(row=0, column=0, sticky="ew", padx=12, pady=(10, 6))
+        header.columnconfigure(0, weight=1)
+        self.step_title = ttk.Label(header, text="", font=("TkDefaultFont", 12, "bold"))
+        self.step_title.grid(row=0, column=0, sticky="w")
+        self.step_hint = ttk.Label(header, text="", wraplength=920, foreground="#555")
+        self.step_hint.grid(row=1, column=0, sticky="w", pady=(4, 0))
+
+        self.steps_host = ttk.Frame(self)
+        self.steps_host.grid(row=1, column=0, sticky="nsew", padx=8, pady=6)
+        self.steps_host.columnconfigure(0, weight=1)
+        self.steps_host.rowconfigure(0, weight=1)
+
+        self._step1 = ttk.Frame(self.steps_host)
+        self._step2 = ttk.Frame(self.steps_host)
+        self._step3 = ttk.Frame(self.steps_host)
+        for frame in (self._step1, self._step2, self._step3):
+            frame.columnconfigure(0, weight=1)
+            frame.rowconfigure(0, weight=1)
+
+        self._build_step1()
+        self._build_step2()
+        self._build_step3()
+        self.show_step(1)
+
+    def _build_step1(self) -> None:
+        wrap = ttk.LabelFrame(self._step1, text="Шаг 1 — выберите дом")
+        wrap.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
+        wrap.columnconfigure(0, weight=1)
+        wrap.rowconfigure(1, weight=1)
+        ttk.Label(
+            wrap,
+            text="Сначала дом. Список сравнений и пути к фото — на шагах 2 и 3.",
+            wraplength=900,
+            foreground="#555",
+        ).grid(row=0, column=0, sticky="w", padx=10, pady=(8, 4))
+        if MyProjectsPanel is not None:
+            self.projects_panel = MyProjectsPanel(
+                wrap,
+                project_root=self.project_root,
+                on_open_project=self._house_opened,
+                on_new_project=self.on_new_project,
+                on_import_excel=self.on_import_excel,
+                on_projects_deleted=self.on_projects_deleted,
+                on_log=self.on_log,
+            )
+            self.projects_panel.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
+        else:
+            self.projects_panel = None
+            ttk.Label(wrap, text="Модуль списка проектов не найден.", foreground="red").grid(
+                row=1, column=0, sticky="w", padx=10, pady=8
+            )
+        nav = ttk.Frame(wrap)
+        nav.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 8))
+        ttk.Button(nav, text="Обновить список домов", command=self.refresh_projects).pack(side="left")
+        ttk.Button(nav, text="Далее к сравнениям →", command=self._continue_to_comparisons).pack(side="right")
+
+    def _build_step2(self) -> None:
+        wrap = ttk.LabelFrame(self._step2, text="Шаг 2 — выберите сравнение")
+        wrap.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
+        wrap.columnconfigure(0, weight=1)
+        wrap.rowconfigure(2, weight=1)
+        ttk.Label(
+            wrap,
+            textvariable=self._house_label,
+            font=("TkDefaultFont", 10, "bold"),
+        ).grid(row=0, column=0, sticky="w", padx=10, pady=(8, 2))
+        ttk.Label(
+            wrap,
+            text="Выберите строку → «Сделать текущим ★» или двойной клик. Новое — только «Создать новое…».",
+            wraplength=900,
+            foreground="#555",
+        ).grid(row=1, column=0, sticky="w", padx=10, pady=(0, 6))
+        self.comparisons_panel = ComparisonsTabFrame(
+            wrap,
+            get_store=self.get_store,
+            on_open_comparison=self._comparison_opened,
+            on_log=self.on_log,
+        )
+        self.comparisons_panel.grid(row=2, column=0, sticky="nsew", padx=4, pady=4)
+        nav = ttk.Frame(wrap)
+        nav.grid(row=3, column=0, sticky="ew", padx=8, pady=(0, 8))
+        ttk.Button(nav, text="← Назад к выбору дома", command=lambda: self.show_step(1)).pack(side="left")
+        ttk.Button(nav, text="Далее к фото и работе →", command=self._continue_to_ready).pack(side="right")
+
+    def _build_step3(self) -> None:
+        wrap = ttk.LabelFrame(self._step3, text="Шаг 3 — готово к работе")
+        wrap.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
+        wrap.columnconfigure(1, weight=1)
+        rows = [
+            ("Дом:", self._house_label),
+            ("Сравнение ★:", self._cmp_label),
+            ("Папка работы:", self._work_dir),
+            ("Историческое фото:", self._hist_path),
+            ("Современное фото:", self._mod_path),
+        ]
+        for i, (label, var) in enumerate(rows):
+            ttk.Label(wrap, text=label).grid(row=i, column=0, sticky="nw", padx=10, pady=4)
+            ttk.Label(wrap, textvariable=var, wraplength=760, foreground="#222").grid(
+                row=i, column=1, sticky="w", padx=6, pady=4
+            )
+        ttk.Label(
+            wrap,
+            text="Сохранение и «Отправить на сайт» идут из папки сравнения со звёздочкой ★.",
+            wraplength=900,
+            foreground="#555",
+        ).grid(row=len(rows), column=0, columnspan=2, sticky="w", padx=10, pady=(8, 4))
+        btns = ttk.Frame(wrap)
+        btns.grid(row=len(rows) + 1, column=0, columnspan=2, sticky="w", padx=10, pady=(4, 8))
+        for text, key in (
+            ("2. Выпрямление", "rectify"),
+            ("3. Сравнение", "compare"),
+            ("4. Разметка", "markup"),
+            ("5. Результат", "result"),
+        ):
+            ttk.Button(btns, text=text, command=lambda k=key: self._go_tab(k)).pack(side="left", padx=(0, 6))
+        nav = ttk.Frame(wrap)
+        nav.grid(row=len(rows) + 2, column=0, columnspan=2, sticky="ew", padx=8, pady=(0, 8))
+        ttk.Button(nav, text="← Другое сравнение", command=lambda: self.show_step(2)).pack(side="left")
+        ttk.Button(nav, text="← Другой дом", command=lambda: self.show_step(1)).pack(side="left", padx=8)
+
+    def show_step(self, step: int) -> None:
+        step = max(1, min(3, int(step)))
+        self._current_step = step
+        for i, frame in enumerate((self._step1, self._step2, self._step3), start=1):
+            if i == step:
+                frame.grid(row=0, column=0, sticky="nsew")
+            else:
+                frame.grid_remove()
+        titles = {
+            1: "Шаг 1 из 3 — Выберите дом",
+            2: "Шаг 2 из 3 — Выберите сравнение",
+            3: "Шаг 3 из 3 — Фото подставлены, можно работать",
+        }
+        hints = {
+            1: "Дважды щёлкните по дому или выберите и нажмите «Открыть».",
+            2: "★ = активное сравнение. Разметка и экспорт идут из его папки.",
+            3: "Проверьте пути к фото ниже, затем перейдите на вкладки 2–5.",
+        }
+        self.step_title.configure(text=titles[step])
+        self.step_hint.configure(text=hints[step])
+        if step == 2:
+            self.refresh_comparisons()
+
+    def refresh_projects(self) -> None:
+        if self.projects_panel is not None:
+            self.projects_panel.refresh()
+
+    def refresh_comparisons(self) -> None:
+        if hasattr(self, "comparisons_panel"):
+            self.comparisons_panel.refresh()
+
+    def _house_opened(self, path: Path) -> None:
+        self.on_house_selected(path)
+        self.show_step(2)
+
+    def _comparison_opened(self, comparison: ComparisonSession) -> None:
+        self.on_comparison_opened(comparison)
+        self.refresh_summary()
+        self.show_step(3)
+
+    def _continue_to_comparisons(self) -> None:
+        store = self.get_store()
+        if store is None or not str(getattr(store, "project_dir", "")):
+            messagebox.showinfo("Дом не выбран", "Сначала выберите дом в таблице.")
+            return
+        self.refresh_comparisons()
+        self.show_step(2)
+
+    def _continue_to_ready(self) -> None:
+        store = self.get_store()
+        if store is None or not store.active_comparison_id:
+            messagebox.showinfo(
+                "Сравнение не выбрано",
+                "Выберите сравнение в таблице и нажмите «Сделать текущим ★» или двойной клик.",
+            )
+            return
+        cmp = store.get_active_comparison()
+        if cmp is None:
+            messagebox.showinfo("Сравнение не выбрано", "Выберите сравнение в таблице.")
+            return
+        self.on_comparison_opened(cmp)
+        self.refresh_summary()
+        self.show_step(3)
+
+    def refresh_summary(
+        self,
+        *,
+        house_text: str = "",
+        comparison_text: str = "",
+        work_dir: str = "",
+        historical_path: str = "",
+        modern_path: str = "",
+    ) -> None:
+        if house_text:
+            self._house_label.set(house_text)
+        if comparison_text:
+            self._cmp_label.set(comparison_text)
+        if work_dir:
+            self._work_dir.set(work_dir)
+        if historical_path:
+            self._hist_path.set(historical_path)
+        if modern_path:
+            self._mod_path.set(modern_path)
+
+    def _go_tab(self, key: str) -> None:
+        if self.on_go_tab:
+            self.on_go_tab(key)

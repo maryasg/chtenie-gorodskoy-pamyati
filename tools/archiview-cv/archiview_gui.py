@@ -82,7 +82,13 @@ try:
         website_display_name,
         export_matches_site_card,
     )
-    from archiview_project_ui import CombinedHousesTab, ComparisonsTabFrame, MyProjectsPanel, PhotosTabFrame
+    from archiview_project_ui import (
+        CombinedHousesTab,
+        ComparisonsTabFrame,
+        HouseWorkflowWizardFrame,
+        MyProjectsPanel,
+        PhotosTabFrame,
+    )
 except Exception:
     ComparisonSession = None  # type: ignore[assignment,misc]
     ProjectStore = None  # type: ignore[assignment,misc]
@@ -102,6 +108,7 @@ except Exception:
     CombinedHousesTab = None  # type: ignore[assignment,misc]
     PhotosTabFrame = None  # type: ignore[assignment,misc]
     ComparisonsTabFrame = None  # type: ignore[assignment,misc]
+    HouseWorkflowWizardFrame = None  # type: ignore[assignment,misc]
     MyProjectsPanel = None  # type: ignore[assignment,misc]
 
 APP_VERSION_V15 = "v15 projects + hand cursor + delete any region"
@@ -4974,6 +4981,74 @@ class App(tk.Tk):
         finally:
             self._suppress_house_autosave = False
 
+    def _load_project_metadata_only(self, project_dir: str | Path) -> None:
+        """Открыть дом без подстановки фото — для пошагового мастера."""
+        path = Path(project_dir)
+        self._suppress_house_autosave = True
+        try:
+            self.project_dir.set(str(path))
+            self._ensure_project_dirs()
+            self.project_store = None
+            self.site_card_id.set("")
+            self.object_name.set("")
+            self.address.set("")
+            self.lat.set("")
+            self.lon.set("")
+            if ProjectStore is not None:
+                try:
+                    self.project_store = ProjectStore.load(path)
+                    house = self.project_store.house
+                    if house.address:
+                        self.address.set(house.address)
+                    if house.site_card_id:
+                        card = (
+                            normalize_site_card_id(house.site_card_id)  # type: ignore[misc]
+                            if normalize_site_card_id is not None
+                            else house.site_card_id.strip().upper()
+                        )
+                        self.site_card_id.set(card or house.site_card_id)
+                    if house.object_name:
+                        self.object_name.set(house.object_name)
+                    if house.lat is not None:
+                        self.lat.set(str(house.lat))
+                    if house.lon is not None:
+                        self.lon.set(str(house.lon))
+                    work = self.project_store.work_dir_for_active()
+                    self.outdir.set(str(work))
+                    self._apply_site_card_autofill()
+                except Exception as exc:
+                    self._log(f"Метаданные проекта: {exc}\n")
+                    self.outdir.set(str(path / "result"))
+            else:
+                self.outdir.set(str(path / "result"))
+            self._load_legacy_metadata_coords(path)
+            self._sync_house_identity_from_catalog()
+            self.historical_sources = []
+            self.active_historical_key = ""
+            self.old_points_text = ""
+            self.modern_crop_rect_text = ""
+            self.historical_img.set("")
+            self.modern_img.set("")
+            self._clear_markup_cache()
+            self._load_historical_sources()
+            self._sync_historical_list_from_folder()
+            self._dedupe_historical_sources()
+            self.historical_img.set("")
+            self.modern_img.set("")
+            self._persist_house_metadata(quiet=True)
+            self._refresh_my_projects_panel()
+            label = self.site_card_id.get() or self.object_name.get() or path.name
+            self._log(f"Дом открыт (без фото): {label}\n")
+            self._update_house_status_label()
+            if hasattr(self, "workflow_wizard"):
+                self.workflow_wizard.refresh_summary(house_text=self._wizard_house_summary_text())
+            if hasattr(self, "comparisons_tab_frame"):
+                self.after(100, lambda: self.comparisons_tab_frame.refresh())
+            if hasattr(self, "workflow_wizard"):
+                self.after(100, lambda: self.workflow_wizard.refresh_comparisons())
+        finally:
+            self._suppress_house_autosave = False
+
     def _refresh_my_projects_panel(self) -> None:
         if hasattr(self, "my_projects_panel"):
             self.my_projects_panel.refresh()
@@ -5300,16 +5375,52 @@ class App(tk.Tk):
             work = self.project_store.work_dir_for_active()
             self.outdir.set(str(work))
             self._apply_active_comparison_photos()
+            self._sync_historical_for_active_comparison()
             self._clear_markup_cache()
             self._ensure_project_dirs()
             self._log(f"Активно сравнение: {comparison.comparison_id} → {work}\n")
             if comparison.is_legacy:
                 self._log("Legacy-сравнение использует папку result/ — существующая разметка сохранена.\n")
+            if hasattr(self, "workflow_wizard"):
+                self.workflow_wizard.refresh_summary(
+                    house_text=self._wizard_house_summary_text(),
+                    comparison_text=self._wizard_comparison_summary_text(comparison),
+                    work_dir=str(work),
+                    historical_path=self.historical_img.get() or "—",
+                    modern_path=self.modern_img.get() or "—",
+                )
             if hasattr(self, "notebook") and hasattr(self, "tab_select"):
-                self.notebook.select(self.tab_select)
+                if not hasattr(self, "tab_workflow") or str(self.notebook.select()) != str(self.tab_workflow):
+                    self.notebook.select(self.tab_select)
             self._refresh_project_tabs()
         except Exception as exc:
             messagebox.showerror("Ошибка открытия сравнения", str(exc))
+
+    def _sync_historical_for_active_comparison(self) -> None:
+        if not self.project_store:
+            return
+        cmp = self.project_store.get_active_comparison()
+        if not cmp:
+            return
+        hist_id = cmp.active_historical_photo_id or (
+            cmp.historical_photo_ids[0] if cmp.historical_photo_ids else ""
+        )
+        if not hist_id:
+            return
+        photo = self.project_store.photos.get(hist_id)
+        if not photo:
+            return
+        path = self.project_store.resolve_photo_path(photo)
+        if not path:
+            return
+        resolved = str(Path(path).resolve())
+        for item in self.historical_sources:
+            if str(Path(item.path).resolve()) == resolved:
+                self.active_historical_key = item.key
+                self.historical_img.set(item.path)
+                self.old_points_text = item.old_points_text
+                self._refresh_historical_sources_tree()
+                return
 
     def _use_house_from_db(self, record, paths) -> None:
         """Дом из Excel — создаёт папку и открывает на вкладке «Источники»."""
@@ -10312,9 +10423,11 @@ class AppV16(AppV15):
         self._markup_edit_active_vertex: Optional[int] = None
         self._markup_pending_insert_point: Optional[Point] = None
         super()._build_ui()
+        self._insert_workflow_wizard_tab()
         self._apply_v16_chrome()
         self._install_v16_delete_bindings()
         self._log(
+            "v16: вкладка «0. Дом и сравнение» — по шагам: дом → сравнение ★ → фото.\n"
             "v16: «Редактировать точки» — тянуть вершины; клик по линии — новая точка; "
             "Delete / Backspace или кнопка — убрать выбранную вершину (минимум 3 точки).\n"
             "v16: «Ниже / Выше» в списке областей — порядок слоёв (большую область можно увести под мелкие).\n"
@@ -10771,6 +10884,100 @@ class AppV16(AppV15):
             f"Точек: {len(self.current_markup_points)}. "
             f"Масштаб: {self.markup_zoom:.1f}×"
         )
+
+    def _insert_workflow_wizard_tab(self) -> None:
+        if HouseWorkflowWizardFrame is None or not hasattr(self, "notebook"):
+            return
+        self.tab_workflow = ttk.Frame(self.notebook)
+        self.notebook.insert(0, self.tab_workflow, text="0. Дом и сравнение")
+        self.workflow_wizard = HouseWorkflowWizardFrame(
+            self.tab_workflow,
+            project_root=APP_DIR / "archiview_projects",
+            get_store=self._get_project_store,
+            on_house_selected=self._wizard_on_house_selected,
+            on_comparison_opened=self._wizard_on_comparison_opened,
+            on_new_project=self.new_house_project,
+            on_import_excel=self.open_excel_import_dialog,
+            on_projects_deleted=self._after_projects_deleted,
+            on_go_tab=self._wizard_go_work_tab,
+            on_log=self._log,
+        )
+        self.workflow_wizard.pack(fill="both", expand=True)
+        for i in range(self.notebook.index("end")):
+            if self.notebook.tab(i, "text") == "1. Источники":
+                self.notebook.tab(i, text="7. Источники (старая)")
+                break
+        self.notebook.select(self.tab_workflow)
+
+    def _wizard_house_summary_text(self) -> str:
+        parts = []
+        if self.site_card_id.get().strip():
+            parts.append(self.site_card_id.get().strip())
+        if self.object_name.get().strip():
+            parts.append(self.object_name.get().strip())
+        if self.address.get().strip():
+            parts.append(self.address.get().strip())
+        if not parts and self.project_dir.get():
+            parts.append(Path(self.project_dir.get()).name)
+        return " — ".join(parts) if parts else "Дом не выбран"
+
+    def _wizard_comparison_summary_text(self, comparison) -> str:
+        suffix = " (legacy)" if comparison.is_legacy else ""
+        ann = f", разметок: {comparison.annotation_count}"
+        title = comparison.title or ""
+        line = f"★ {comparison.comparison_id}{suffix}{ann}"
+        if title:
+            line += f" — {title}"
+        return line
+
+    def _wizard_on_house_selected(self, project_dir: Path) -> None:
+        self._load_project_metadata_only(project_dir)
+        if hasattr(self, "workflow_wizard"):
+            self.workflow_wizard.refresh_summary(house_text=self._wizard_house_summary_text())
+
+    def _wizard_on_comparison_opened(self, comparison) -> None:
+        self._open_comparison_session(comparison)
+        if hasattr(self, "workflow_wizard"):
+            self.workflow_wizard.refresh_summary(
+                house_text=self._wizard_house_summary_text(),
+                comparison_text=self._wizard_comparison_summary_text(comparison),
+                work_dir=self.outdir.get() or "—",
+                historical_path=self.historical_img.get() or "—",
+                modern_path=self.modern_img.get() or "—",
+            )
+
+    def _wizard_go_work_tab(self, key: str) -> None:
+        if not hasattr(self, "notebook"):
+            return
+        tab_map = {
+            "rectify": getattr(self, "tab_rectify", None),
+            "compare": getattr(self, "tab_compare", None),
+            "markup": getattr(self, "tab_markup", None),
+            "result": getattr(self, "tab_result", None),
+        }
+        target = tab_map.get(key)
+        if target is not None:
+            self.notebook.select(target)
+        if key == "result" and hasattr(self, "_refresh_result_canvas"):
+            self._refresh_result_canvas()
+        elif key == "compare" and hasattr(self, "_refresh_compare_canvas"):
+            self._refresh_compare_canvas(save=False)
+
+    def _refresh_project_tabs(self) -> None:
+        super()._refresh_project_tabs()
+        if hasattr(self, "workflow_wizard"):
+            self.workflow_wizard.refresh_comparisons()
+
+    def new_house_project(self) -> None:
+        super().new_house_project()
+        if not self.project_dir.get():
+            return
+        if hasattr(self, "workflow_wizard"):
+            self._load_project_metadata_only(self.project_dir.get())
+            self.workflow_wizard.refresh_summary(house_text=self._wizard_house_summary_text())
+            self.workflow_wizard.show_step(2)
+            if hasattr(self, "notebook") and hasattr(self, "tab_workflow"):
+                self.notebook.select(self.tab_workflow)
 
 
 def _main() -> None:
