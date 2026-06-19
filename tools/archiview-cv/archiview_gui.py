@@ -4057,8 +4057,9 @@ class App(tk.Tk):
         if hasattr(self, "modern_crop_status"):
             self.modern_crop_status.set(self._crop_status_label(self.modern_crop_rect_text))
 
-    def _build_rectify_crop_block(self, parent: ttk.Frame, row: int) -> int:
-        self._crop_frame = ttk.LabelFrame(parent, text="Шаг 3 — обрезка кадров (необязательно)")
+    def _build_rectify_crop_block(self, parent: ttk.Frame, row: int, *, step_label: str = "") -> int:
+        crop_title = step_label or "Шаг 3 — обрезка кадров (необязательно)"
+        self._crop_frame = ttk.LabelFrame(parent, text=crop_title)
         self._crop_frame_row = row
         self._crop_frame.grid(row=row, column=0, columnspan=3, sticky="ew", padx=10, pady=8)
         inner = ttk.Frame(self._crop_frame)
@@ -5088,6 +5089,9 @@ class App(tk.Tk):
         (root / "house.json").write_text(text, encoding="utf-8")
         (root / "metadata" / "house.json").write_text(text, encoding="utf-8")
 
+    def _new_house_project_hint(self) -> str:
+        return "Дальше выберите фото PastVu и современное снимок на вкладке «Источники»."
+
     def new_house_project(self) -> None:
         text = simpledialog.askstring(
             "Новый дом",
@@ -5124,7 +5128,7 @@ class App(tk.Tk):
                 self.my_projects_panel.select_by_folder(root.name)
             messagebox.showinfo(
                 "Новый дом создан",
-                f"Папка проекта:\n{root}\n\nДальше выберите фото PastVu и современное снимок на вкладке «Источники».",
+                f"Папка проекта:\n{root}\n\n{self._new_house_project_hint()}",
                 parent=self,
             )
         except Exception as exc:
@@ -8762,8 +8766,6 @@ class AppV13(AppV12):
             )
             row += 1
 
-        row = self._build_rectify_crop_block(parent, row)
-
         corners_title = "Шаг 2 — 4 угла фасада" if skip_photos else "Шаг 4 — 4 угла фасада (только для похожих ракурсов)"
         self._corners_frame = ttk.LabelFrame(parent, text=corners_title)
         self._corners_frame_row = row
@@ -8805,6 +8807,9 @@ class AppV13(AppV12):
             text="Показывать весь исходный снимок (рекомендуется)",
             variable=self.keep_context,
         ).pack(anchor="w", padx=8, pady=(0, 8))
+
+        crop_label = "Обрезка кадров (необязательно)" if skip_photos else ""
+        row = self._build_rectify_crop_block(parent, row, step_label=crop_label)
 
         btns = ttk.Frame(parent)
         btns.grid(row=row, column=0, columnspan=3, sticky="ew", padx=10, pady=10)
@@ -11027,17 +11032,27 @@ class AppV16(AppV15):
         if hasattr(self, "workflow_wizard"):
             self.workflow_wizard.refresh_comparisons()
 
+    def _new_house_project_hint(self) -> str:
+        return (
+            "На вкладке «0. Дом и сравнение» справа подставятся папка, название, код на сайте (MOSCOW_XXX), "
+            "адрес и координаты.\n\nПроверьте поля → «Сохранить данные дома» → «Далее к сравнениям»."
+        )
+
     def new_house_project(self) -> None:
         super().new_house_project()
         if not self.project_dir.get():
             return
+        self._load_project_metadata_only(self.project_dir.get())
         if hasattr(self, "workflow_wizard"):
-            self._load_project_metadata_only(self.project_dir.get())
-            self.workflow_wizard.refresh_summary(house_text=self._wizard_house_summary_text())
-            self.workflow_wizard._house_label.set(self._wizard_house_summary_text())
+            summary = self._wizard_house_summary_text()
+            self.workflow_wizard.refresh_summary(house_text=summary)
+            self.workflow_wizard._house_label.set(summary)
             self.workflow_wizard.show_step(1)
-            if hasattr(self, "notebook") and hasattr(self, "tab_workflow"):
-                self.notebook.select(self.tab_workflow)
+            if hasattr(self, "workflow_wizard") and self.workflow_wizard.projects_panel is not None:
+                self.workflow_wizard.projects_panel.select_by_folder(Path(self.project_dir.get()).name)
+                self.workflow_wizard.projects_panel.refresh()
+        if hasattr(self, "notebook") and hasattr(self, "tab_workflow"):
+            self.notebook.select(self.tab_workflow)
 
 
 def _main() -> None:
