@@ -416,6 +416,10 @@ if ($traceIdMap.Count -gt 0) {
 $rootBundle = Export-ComparisonBundle -Result $Result -WebDest $Web -TraceIdMap $traceIdMap
 $manifestItems = @()
 $cmpTitleById = @{}
+$cmpStatusById = @{}
+$cmpLegacyById = @{}
+$cmpHistYearById = @{}
+$cmpModYearById = @{}
 
 $projDir = Get-ProjectDirFromResult $Result
 if ($projDir) {
@@ -430,6 +434,10 @@ if ($projDir) {
                 $cid = [string]$cmpMeta.comparison_id
                 if ($cid) {
                     $cmpTitleById[$cid] = [string]$cmpMeta.title
+                    $cmpStatusById[$cid] = [string]$cmpMeta.status
+                    $cmpLegacyById[$cid] = [bool]$cmpMeta.is_legacy
+                    $cmpHistYearById[$cid] = [string]$cmpMeta.historical_year
+                    $cmpModYearById[$cid] = [string]$cmpMeta.modern_year
                 }
             }
         } catch { }
@@ -437,10 +445,32 @@ if ($projDir) {
 }
 
 if ($defaultCmpId) {
-    $rootTitle = $cmpTitleById[$defaultCmpId]
-    if (-not $rootTitle) { $rootTitle = 'Primary (active)' }
-    $rootYears = Get-PhotoYearsFromCmpDir -CmpDir $Result -Title $rootTitle
-    $manifestItems += New-ManifestEntry -ComparisonId $defaultCmpId -Title $rootTitle -IsLegacy ($defaultCmpId -eq 'cmp_legacy_001') -Bundle $rootBundle -RelPrefix '' -HistoricalPhotoYear $rootYears.Historical -ModernPhotoYear $rootYears.Modern
+    $skipRoot = $false
+    if ($cmpLegacyById.ContainsKey($defaultCmpId) -and $cmpLegacyById[$defaultCmpId]) {
+        $skipRoot = $true
+        Write-Host "SKIP: root export is legacy ($defaultCmpId) — not published to website"
+    }
+    if ($cmpStatusById.ContainsKey($defaultCmpId) -and $cmpStatusById[$defaultCmpId] -eq 'discarded') {
+        $skipRoot = $true
+        Write-Host "SKIP: root comparison $defaultCmpId is discarded"
+    }
+    if (-not $skipRoot) {
+        $rootTitle = $cmpTitleById[$defaultCmpId]
+        if (-not $rootTitle) { $rootTitle = 'Primary (active)' }
+        $rootYears = Get-PhotoYearsFromCmpDir -CmpDir $Result -Title $rootTitle
+        if ($cmpHistYearById.ContainsKey($defaultCmpId) -and $cmpHistYearById[$defaultCmpId]) {
+            $rootYears.Historical = $cmpHistYearById[$defaultCmpId]
+        }
+        if ($cmpModYearById.ContainsKey($defaultCmpId) -and $cmpModYearById[$defaultCmpId]) {
+            $rootYears.Modern = $cmpModYearById[$defaultCmpId]
+        }
+        if ($rootYears.Historical -and $rootYears.Modern) {
+            $rootTitle = "$($rootYears.Historical) -> $($rootYears.Modern)"
+        } elseif ($rootYears.Historical) {
+            $rootTitle = "$($rootYears.Historical) -> сегодня"
+        }
+        $manifestItems += New-ManifestEntry -ComparisonId $defaultCmpId -Title $rootTitle -IsLegacy ($defaultCmpId -eq 'cmp_legacy_001') -Bundle $rootBundle -RelPrefix '' -HistoricalPhotoYear $rootYears.Historical -ModernPhotoYear $rootYears.Modern
+    }
 }
 
 if ($projDir) {
@@ -455,10 +485,10 @@ if ($projDir) {
                 if ($status -eq 'discarded') { continue }
                 $isLegacy = [bool]$cmpMeta.is_legacy
                 if ($isLegacy) {
-                    $cmpDir = Join-Path $projDir 'result'
-                } else {
-                    $cmpDir = Join-Path $projDir ("comparisons\{0}" -f $cmpId)
+                    Write-Host "SKIP: legacy comparison $cmpId (not exported to website)"
+                    continue
                 }
+                $cmpDir = Join-Path $projDir ("comparisons\{0}" -f $cmpId)
                 if (-not (Test-HasExportFiles $cmpDir)) { continue }
                 if ($cmpId -eq $defaultCmpId) { continue }
                 $destSub = Join-Path $Web ("comparisons\{0}" -f $cmpId)
@@ -467,6 +497,13 @@ if ($projDir) {
                 $title = [string]$cmpMeta.title
                 if (-not $title) { $title = $cmpId }
                 $years = Get-PhotoYearsFromCmpDir -CmpDir $cmpDir -Title $title
+                if ($cmpMeta.historical_year) { $years.Historical = [string]$cmpMeta.historical_year }
+                if ($cmpMeta.modern_year) { $years.Modern = [string]$cmpMeta.modern_year }
+                if ($years.Historical -and $years.Modern) {
+                    $title = "$($years.Historical) -> $($years.Modern)"
+                } elseif ($years.Historical) {
+                    $title = "$($years.Historical) -> сегодня"
+                }
                 $manifestItems += New-ManifestEntry -ComparisonId $cmpId -Title $title -IsLegacy $isLegacy -Bundle $bundle -RelPrefix ("comparisons/{0}" -f $cmpId) -HistoricalPhotoYear $years.Historical -ModernPhotoYear $years.Modern
                 Write-Host "OK: exported comparison $cmpId ($title)"
             }
