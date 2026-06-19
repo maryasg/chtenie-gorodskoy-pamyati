@@ -28,6 +28,8 @@ from archiview_project_model import (
     ProjectStore,
     ProjectSummary,
     comparison_status_label,
+    comparison_years_label,
+    photo_year_label,
 )
 
 
@@ -389,7 +391,8 @@ class ComparisonPairPickerDialog(tk.Toplevel):
             if not rect.exists():
                 continue
             suffix = " (legacy)" if cmp.is_legacy else ""
-            label = f"Выпрямленное modern — {cmp.comparison_id}{suffix}"
+            years = comparison_years_label(self.store, cmp)
+            label = f"Выпрямленное modern — {years}{suffix}"
             mod_id = cmp.modern_photo_id or (self.store.list_photos("modern")[0].photo_id if self.store.list_photos("modern") else "")
             self._mod_options.append(
                 {
@@ -499,15 +502,15 @@ class ComparisonsTabFrame(ttk.Frame):
             cmp_height = 6 if self._compact else 12
         self.tree = ttk.Treeview(self, columns=cols, show="headings", height=cmp_height, selectmode="browse")
         headers = {
-            "id": "ID",
+            "id": "Годы",
             "modern": "Совр. фото",
             "historical": "Ист. фото",
             "ann": "Разметок",
             "status": "Статус",
             "updated": "Обновлено",
-            "title": "Название",
+            "title": "ID / название",
         }
-        widths = {"id": 110, "modern": 90, "historical": 140, "ann": 70, "status": 110, "updated": 130, "title": 260}
+        widths = {"id": 130, "modern": 90, "historical": 140, "ann": 70, "status": 110, "updated": 130, "title": 240}
         for c in cols:
             self.tree.heading(c, text=headers[c])
             self.tree.column(c, width=widths[c], anchor="w")
@@ -535,7 +538,7 @@ class ComparisonsTabFrame(ttk.Frame):
             ttk.Button(btm, text="Добавить фото…", command=self.on_need_photos).pack(side="left", padx=6)
         ttk.Button(btm, text="Дублировать", command=self.duplicate_selected).pack(side="left", padx=6)
         ttk.Button(btm, text="Сделать текущим ★", command=self.make_active).pack(side="left", padx=6)
-        ttk.Button(btm, text="Пометить «к удалению»", command=self.mark_discarded).pack(side="left", padx=6)
+        ttk.Button(btm, text="Скрыть с сайта / к удалению", command=self.mark_discarded).pack(side="left", padx=6)
         ttk.Button(btm, text="Снять пометку", command=self.unmark_discarded).pack(side="left", padx=6)
         ttk.Button(btm, text="Удалить помеченные…", command=self.delete_discarded).pack(side="left", padx=6)
 
@@ -558,18 +561,22 @@ class ComparisonsTabFrame(ttk.Frame):
         for i, c in enumerate(self._items):
             prefix = "★ " if c.comparison_id == active else ""
             suffix = " (legacy)" if c.is_legacy else ""
+            years = comparison_years_label(store, c)
+            title_col = c.comparison_id + suffix
+            if c.title and c.title.strip() and c.title.strip() not in years:
+                title_col += f" — {c.title.strip()}"
             self.tree.insert(
                 "",
                 "end",
                 iid=str(i),
                 values=(
-                    prefix + c.comparison_id + suffix,
+                    prefix + years,
                     c.modern_photo_id or "—",
                     ", ".join(c.historical_photo_ids) or "—",
                     c.annotation_count,
                     comparison_status_label(c.status),
                     (c.updated_at or "")[:19].replace("T", " "),
-                    c.title,
+                    title_col,
                 ),
             )
 
@@ -616,14 +623,23 @@ class ComparisonsTabFrame(ttk.Frame):
             mod_photo = store.ensure_photo_from_path(mod_path, "modern", title=f"rectified_{Path(mod_path).parent.name}")
         else:
             mod_photo = store.ensure_photo_from_path(mod_path, "modern")
+        if not (title or "").strip():
+            hy = photo_year_label(hist_photo)
+            my = photo_year_label(mod_photo)
+            if hy and my:
+                title = f"{hy} → {my}"
+            elif hy:
+                title = f"{hy} → сегодня"
+            else:
+                title = "Новое сравнение"
         cmp = store.create_comparison(
-            title=title.strip() or "Новое сравнение",
+            title=title.strip(),
             modern_photo_id=mod_photo.photo_id,
             historical_photo_ids=[hist_photo.photo_id],
             historical_source_key=str(Path(hist_path).resolve()),
             modern_source_path=str(Path(mod_path).resolve()),
         )
-        self._log(f"Создано сравнение {cmp.comparison_id} (отдельная папка, result/ не тронут).\n")
+        self._log(f"Создано сравнение {comparison_years_label(store, cmp)} ({cmp.comparison_id}).\n")
         self.refresh()
         self.on_open_comparison(cmp)
 
@@ -662,9 +678,15 @@ class ComparisonsTabFrame(ttk.Frame):
             messagebox.showwarning("Не выбрано", "Выберите сравнение.")
             return
         if cmp.is_legacy:
-            messagebox.showwarning("Защищено", "Старую разметку в result/ (legacy) удалять нельзя.")
-            return
-        if cmp.annotation_count > 0:
+            if not messagebox.askyesno(
+                "Скрыть legacy с сайта",
+                "Legacy (cmp_legacy_001) — зеркало папки result/.\n"
+                "Папку на диске не трогаем, но сравнение исчезнет с сайта и из экспорта.\n"
+                "Продолжить?",
+                parent=self,
+            ):
+                return
+        elif cmp.annotation_count > 0:
             if not messagebox.askyesno(
                 "Есть разметка",
                 f"В {cmp.comparison_id} уже {cmp.annotation_count} зон разметки.\n"

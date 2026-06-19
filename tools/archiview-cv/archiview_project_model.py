@@ -41,6 +41,88 @@ COMPARISON_STATUS_LABELS: Dict[str, str] = {
 def comparison_status_label(status: str) -> str:
     return COMPARISON_STATUS_LABELS.get(status, status or "Черновик")
 
+
+_YEAR_RE = re.compile(r"\b(1[89]\d{2}|20\d{2})\b")
+
+
+def photo_year_label(photo: Optional["PhotoSource"]) -> str:
+    if not photo:
+        return ""
+    if photo.date_from:
+        year = str(photo.date_from)
+        if photo.date_to and photo.date_to != photo.date_from:
+            year += f"–{photo.date_to}"
+        return year
+    if photo.title:
+        m = _YEAR_RE.search(photo.title)
+        if m:
+            return m.group(1)
+    return ""
+
+
+def years_from_workdir(work_dir: Path) -> tuple[str, str]:
+    hist_year = ""
+    mod_year = ""
+    project_json = work_dir / "project_v8.json"
+    if not project_json.exists():
+        return hist_year, mod_year
+    try:
+        data = json.loads(project_json.read_text(encoding="utf-8"))
+    except Exception:
+        return hist_year, mod_year
+    pastvu = data.get("pastvu") or {}
+    for key in ("year", "years", "date"):
+        val = pastvu.get(key)
+        if val is None:
+            continue
+        m = _YEAR_RE.search(str(val))
+        if m:
+            hist_year = m.group(1)
+            break
+    modern = data.get("modern_source") or {}
+    for key in ("captured_at", "date", "year"):
+        val = modern.get(key)
+        if val is None:
+            continue
+        m = _YEAR_RE.search(str(val))
+        if m:
+            mod_year = m.group(1)
+            break
+    return hist_year, mod_year
+
+
+def comparison_years_label(store: "ProjectStore", cmp: "ComparisonSession") -> str:
+    hist_year = ""
+    mod_year = ""
+    if cmp.active_historical_photo_id and cmp.active_historical_photo_id in store.photos:
+        hist_year = photo_year_label(store.photos[cmp.active_historical_photo_id])
+    else:
+        for hid in cmp.historical_photo_ids:
+            if hid in store.photos:
+                hist_year = photo_year_label(store.photos[hid])
+                if hist_year:
+                    break
+    if cmp.modern_photo_id and cmp.modern_photo_id in store.photos:
+        mod_year = photo_year_label(store.photos[cmp.modern_photo_id])
+    work_hist, work_mod = years_from_workdir(cmp.work_path(store.project_dir))
+    if not hist_year:
+        hist_year = work_hist
+    if not mod_year:
+        mod_year = work_mod
+    if not hist_year and cmp.title:
+        m = _YEAR_RE.search(cmp.title)
+        if m:
+            hist_year = m.group(1)
+    if hist_year and mod_year:
+        return f"{hist_year} → {mod_year}"
+    if hist_year:
+        return f"{hist_year} → сегодня"
+    if mod_year:
+        return f"архив → {mod_year}"
+    title = (cmp.title or "").strip()
+    return title or cmp.comparison_id
+
+
 PHOTO_KINDS = ("historical", "modern")
 
 
@@ -691,8 +773,6 @@ class ProjectStore:
         if status not in COMPARISON_STATUSES:
             status = "draft"
         cmp = self.comparisons[comparison_id]
-        if cmp.is_legacy and status == "discarded":
-            raise ValueError("legacy_protected")
         cmp.status = status
         cmp.touch()
         if status == "discarded" and self.active_comparison_id == comparison_id:
