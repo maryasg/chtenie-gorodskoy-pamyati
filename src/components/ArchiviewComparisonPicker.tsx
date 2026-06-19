@@ -14,12 +14,16 @@ export function ArchiviewComparisonPicker({
   return (
     <div className="mb-4 space-y-2">
       <p className="text-sm leading-relaxed text-arch-muted">
-        На этом доме несколько сравнений Archiview — разные пары фото и разметки. Выберите вариант:
+        На этом доме несколько сравнений Archiview — разные пары «история → современность». Выберите по годам:
       </p>
       <div className="flex flex-wrap gap-2">
         {manifest.comparisons.map((c) => {
           const active = c.comparisonId === selectedId
           const isDefault = c.comparisonId === manifest.defaultComparisonId
+          const yearLabel =
+            c.historicalPhotoYear && c.modernPhotoYear
+              ? `${c.historicalPhotoYear} → ${c.modernPhotoYear}`
+              : c.historicalPhotoYear || c.title || c.comparisonId
           return (
             <button
               key={c.comparisonId}
@@ -32,9 +36,9 @@ export function ArchiviewComparisonPicker({
               }`}
             >
               {isDefault ? '★ ' : ''}
-              {c.comparisonId}
-              {c.title ? ` — ${c.title}` : ''}
-              {c.annotationCount != null ? ` (${c.annotationCount} обл.)` : ''}
+              {yearLabel}
+              {c.title && c.historicalPhotoYear ? ` (${c.title})` : ''}
+              {c.annotationCount != null && c.annotationCount > 0 ? ` · ${c.annotationCount} обл.` : ''}
               {c.isLegacy ? ' (legacy)' : ''}
             </button>
           )
