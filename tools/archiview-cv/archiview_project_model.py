@@ -818,6 +818,19 @@ def website_display_name(site_card_id: str, app_dir: Optional[Path] = None) -> s
     return ""
 
 
+def website_building_route_id(site_card_id: str, app_dir: Optional[Path] = None) -> str:
+    """Сегмент URL для страницы /building/<id> на сайте."""
+    card = normalize_site_card_id(site_card_id)
+    if not card:
+        return ""
+    entry = load_website_buildings_catalog(app_dir).get(card, {})
+    if isinstance(entry, dict):
+        bid = str(entry.get("buildingId") or "").strip()
+        if bid:
+            return bid
+    return ""
+
+
 _SITE_CARD_RE = re.compile(r"MOSCOW_(\d{3})", re.IGNORECASE)
 
 
