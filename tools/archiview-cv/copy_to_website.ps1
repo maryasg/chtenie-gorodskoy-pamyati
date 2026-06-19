@@ -394,7 +394,7 @@ if ($projDir) {
 
 if ($defaultCmpId) {
     $rootTitle = $cmpTitleById[$defaultCmpId]
-    if (-not $rootTitle) { $rootTitle = 'Основное (★ на сайте)' }
+    if (-not $rootTitle) { $rootTitle = 'Primary (active)' }
     $manifestItems += New-ManifestEntry -ComparisonId $defaultCmpId -Title $rootTitle -IsLegacy ($defaultCmpId -eq 'cmp_legacy_001') -Bundle $rootBundle -RelPrefix ''
 }
 
