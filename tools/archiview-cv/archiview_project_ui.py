@@ -7,7 +7,13 @@ import shutil
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
+
+try:
+    from PIL import Image, ImageTk
+except Exception:
+    Image = None  # type: ignore[assignment,misc]
+    ImageTk = None  # type: ignore[assignment,misc]
 
 try:
     from archiview_house_db import HouseDatabaseFrame, HouseRecord, open_system_path
@@ -282,6 +288,173 @@ class PhotosTabFrame(ttk.Frame):
             self.on_log(text)
 
 
+class ComparisonPairPickerDialog(tk.Toplevel):
+    """Выбор исторического и современного фото для нового сравнения (с превью)."""
+
+    def __init__(self, parent: tk.Widget, store: ProjectStore) -> None:
+        super().__init__(parent)
+        self.store = store
+        self.result: Optional[Tuple[str, str, str, str]] = None
+        self.title("Новое сравнение — выбор фото")
+        self.geometry("920x620")
+        self.minsize(780, 520)
+        self._photo_ref: Optional[object] = None
+        self._hist_options: List[Dict[str, str]] = []
+        self._mod_options: List[Dict[str, str]] = []
+
+        ttk.Label(
+            self,
+            text="Слева — историческое, справа — современное. Можно выбрать выпрямленное modern из другого сравнения.",
+            wraplength=880,
+        ).pack(anchor="w", padx=12, pady=(10, 6))
+
+        lists = ttk.Frame(self)
+        lists.pack(fill="both", expand=True, padx=12, pady=6)
+        lists.columnconfigure(0, weight=1)
+        lists.columnconfigure(1, weight=1)
+        lists.rowconfigure(0, weight=1)
+
+        hist_box = ttk.LabelFrame(lists, text="Историческое")
+        mod_box = ttk.LabelFrame(lists, text="Современное")
+        hist_box.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
+        mod_box.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
+        hist_box.rowconfigure(0, weight=1)
+        mod_box.rowconfigure(0, weight=1)
+        hist_box.columnconfigure(0, weight=1)
+        mod_box.columnconfigure(0, weight=1)
+
+        self.hist_list = tk.Listbox(hist_box, height=12, exportselection=False)
+        self.mod_list = tk.Listbox(mod_box, height=12, exportselection=False)
+        self.hist_list.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+        self.mod_list.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+        self.hist_list.bind("<<ListboxSelect>>", lambda _e: self._update_preview())
+        self.mod_list.bind("<<ListboxSelect>>", lambda _e: self._update_preview())
+
+        preview_box = ttk.LabelFrame(self, text="Превью выбранной пары")
+        preview_box.pack(fill="x", padx=12, pady=6)
+        self.preview_label = ttk.Label(preview_box, text="Выберите фото в списках", anchor="center")
+        self.preview_label.pack(fill="x", padx=8, pady=8)
+
+        btns = ttk.Frame(self)
+        btns.pack(anchor="e", padx=12, pady=(0, 12))
+        ttk.Button(btns, text="Отмена", command=self._cancel).pack(side="right")
+        ttk.Button(btns, text="Создать сравнение", command=self._ok).pack(side="right", padx=8)
+
+        self._fill_options()
+        if self._hist_options:
+            self.hist_list.selection_set(0)
+        if self._mod_options:
+            self.mod_list.selection_set(0)
+        self._update_preview()
+        self.transient(parent)
+        self.grab_set()
+        self.protocol("WM_DELETE_WINDOW", self._cancel)
+
+    def _fill_options(self) -> None:
+        self.hist_list.delete(0, "end")
+        self.mod_list.delete(0, "end")
+        self._hist_options = []
+        self._mod_options = []
+        for photo in self.store.list_photos("historical"):
+            path = self.store.resolve_photo_path(photo)
+            if not path:
+                continue
+            label = photo.title or photo.photo_id
+            self._hist_options.append(
+                {
+                    "photo_id": photo.photo_id,
+                    "path": str(path),
+                    "label": label,
+                    "kind": "original",
+                }
+            )
+            self.hist_list.insert("end", label)
+        for photo in self.store.list_photos("modern"):
+            path = self.store.resolve_photo_path(photo)
+            if not path:
+                continue
+            label = f"Оригинал: {photo.title or photo.photo_id}"
+            self._mod_options.append(
+                {
+                    "photo_id": photo.photo_id,
+                    "path": str(path),
+                    "label": label,
+                    "kind": "original",
+                }
+            )
+            self.mod_list.insert("end", label)
+        for cmp in self.store.list_comparisons():
+            work = cmp.work_path(self.store.project_dir)
+            rect = work / "04_modern_rectified.png"
+            if not rect.exists():
+                continue
+            suffix = " (legacy)" if cmp.is_legacy else ""
+            label = f"Выпрямленное modern — {cmp.comparison_id}{suffix}"
+            mod_id = cmp.modern_photo_id or (self.store.list_photos("modern")[0].photo_id if self.store.list_photos("modern") else "")
+            self._mod_options.append(
+                {
+                    "photo_id": mod_id,
+                    "path": str(rect),
+                    "label": label,
+                    "kind": "rectified",
+                }
+            )
+            self.mod_list.insert("end", label)
+
+    def _selected_option(self, listbox: tk.Listbox, options: List[Dict[str, str]]) -> Optional[Dict[str, str]]:
+        sel = listbox.curselection()
+        if not sel:
+            return None
+        idx = int(sel[0])
+        if 0 <= idx < len(options):
+            return options[idx]
+        return None
+
+    def _preview_image(self, hist: Dict[str, str], mod: Dict[str, str]) -> None:
+        if Image is None or ImageTk is None:
+            self.preview_label.configure(
+                image="",
+                text=f"Историческое:\n{hist['label']}\n\nСовременное:\n{mod['label']}",
+            )
+            return
+        try:
+            hi = Image.open(hist["path"]).convert("RGB")
+            mo = Image.open(mod["path"]).convert("RGB")
+            hi.thumbnail((360, 220))
+            mo.thumbnail((360, 220))
+            gap = 12
+            canvas = Image.new("RGB", (hi.width + mo.width + gap, max(hi.height, mo.height)), (240, 240, 240))
+            canvas.paste(hi, (0, 0))
+            canvas.paste(mo, (hi.width + gap, 0))
+            self._photo_ref = ImageTk.PhotoImage(canvas)
+            self.preview_label.configure(image=self._photo_ref, text="")
+        except Exception as exc:
+            self.preview_label.configure(image="", text=f"Не удалось показать превью: {exc}")
+
+    def _update_preview(self) -> None:
+        hist = self._selected_option(self.hist_list, self._hist_options)
+        mod = self._selected_option(self.mod_list, self._mod_options)
+        if not hist or not mod:
+            self.preview_label.configure(image="", text="Выберите оба фото")
+            return
+        self._preview_image(hist, mod)
+
+    def _ok(self) -> None:
+        hist = self._selected_option(self.hist_list, self._hist_options)
+        mod = self._selected_option(self.mod_list, self._mod_options)
+        if not hist or not mod:
+            messagebox.showinfo("Нужны два фото", "Выберите историческое и современное фото.", parent=self)
+            return
+        self.result = (hist["photo_id"], hist["path"], mod["photo_id"], mod["path"])
+        self.grab_release()
+        self.destroy()
+
+    def _cancel(self) -> None:
+        self.result = None
+        self.grab_release()
+        self.destroy()
+
+
 class ComparisonsTabFrame(ttk.Frame):
     """2. Сравнения — отдельные сессии, legacy result/ не перезаписывается."""
 
@@ -296,6 +469,8 @@ class ComparisonsTabFrame(ttk.Frame):
         self.get_store = get_store
         self.on_open_comparison = on_open_comparison
         self.on_log = on_log
+        self._items: List[ComparisonSession] = []
+        self.hide_legacy = tk.BooleanVar(value=True)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
 
@@ -304,7 +479,7 @@ class ComparisonsTabFrame(ttk.Frame):
             text=(
                 "У дома одно активное сравнение (★) — с него идут углы, выпрямление и разметка. "
                 "Новые сравнения только вручную: «Создать новое…». "
-                "Старую папку result/ не трогаем (cmp_legacy_001). Лишние cmp_XXX — «К удалению»."
+                "cmp_legacy_001 — зеркало старой папки result/; можно скрыть галочкой ниже."
             ),
             wraplength=920,
             foreground="#555",
@@ -331,8 +506,17 @@ class ComparisonsTabFrame(ttk.Frame):
         self.tree.configure(yscrollcommand=y.set)
         self.tree.bind("<Double-1>", lambda _e: self.open_selected())
 
+        filter_row = ttk.Frame(self)
+        filter_row.grid(row=2, column=0, columnspan=2, sticky="w", padx=10, pady=(0, 4))
+        ttk.Checkbutton(
+            filter_row,
+            text="Скрыть cmp_legacy_001 и другие legacy (старая папка result/)",
+            variable=self.hide_legacy,
+            command=self.refresh,
+        ).pack(side="left")
+
         btm = ttk.Frame(self)
-        btm.grid(row=2, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 10))
+        btm.grid(row=3, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 10))
         ttk.Button(btm, text="Обновить", command=self.refresh).pack(side="left")
         ttk.Button(btm, text="Открыть сравнение", command=self.open_selected).pack(side="left", padx=6)
         ttk.Button(btm, text="Создать новое…", command=self.create_new).pack(side="left", padx=6)
@@ -341,8 +525,6 @@ class ComparisonsTabFrame(ttk.Frame):
         ttk.Button(btm, text="Пометить «к удалению»", command=self.mark_discarded).pack(side="left", padx=6)
         ttk.Button(btm, text="Снять пометку", command=self.unmark_discarded).pack(side="left", padx=6)
         ttk.Button(btm, text="Удалить помеченные…", command=self.delete_discarded).pack(side="left", padx=6)
-
-        self._items: List[ComparisonSession] = []
 
     def _require_store(self) -> Optional[ProjectStore]:
         store = self.get_store()
@@ -357,7 +539,8 @@ class ComparisonsTabFrame(ttk.Frame):
         if not store:
             return
         store.refresh_comparison_stats()
-        self._items = store.list_comparisons()
+        all_items = store.list_comparisons()
+        self._items = [c for c in all_items if not (self.hide_legacy.get() and c.is_legacy)]
         active = store.active_comparison_id
         for i, c in enumerate(self._items):
             prefix = "★ " if c.comparison_id == active else ""
@@ -394,21 +577,37 @@ class ComparisonsTabFrame(ttk.Frame):
         store = self._require_store()
         if not store:
             return
-        mods = store.list_photos("modern")
-        hists = store.list_photos("historical")
-        if not mods:
-            messagebox.showwarning("Нет фото", "Сначала добавьте современное фото во вкладке «1. Фото».")
+        if not store.list_photos("historical"):
+            messagebox.showwarning("Нет фото", "Сначала добавьте историческое фото в проект.")
             return
-        if not hists:
-            messagebox.showwarning("Нет фото", "Сначала добавьте историческое фото во вкладке «1. Фото».")
+        if not store.list_photos("modern") and not any(
+            (c.work_path(store.project_dir) / "04_modern_rectified.png").exists()
+            for c in store.list_comparisons()
+        ):
+            messagebox.showwarning(
+                "Нет фото",
+                "Добавьте современное фото или сделайте выпрямление в другом сравнении.",
+            )
             return
         title = simpledialog.askstring("Новое сравнение", "Название сравнения:", parent=self)
         if title is None:
             return
+        dialog = ComparisonPairPickerDialog(self, store)
+        self.wait_window(dialog)
+        if not dialog.result:
+            return
+        hist_id, hist_path, mod_id, mod_path = dialog.result
+        hist_photo = store.ensure_photo_from_path(hist_path, "historical")
+        if Path(mod_path).name == "04_modern_rectified.png":
+            mod_photo = store.ensure_photo_from_path(mod_path, "modern", title=f"rectified_{Path(mod_path).parent.name}")
+        else:
+            mod_photo = store.ensure_photo_from_path(mod_path, "modern")
         cmp = store.create_comparison(
             title=title.strip() or "Новое сравнение",
-            modern_photo_id=mods[0].photo_id,
-            historical_photo_ids=[hists[0].photo_id],
+            modern_photo_id=mod_photo.photo_id,
+            historical_photo_ids=[hist_photo.photo_id],
+            historical_source_key=str(Path(hist_path).resolve()),
+            modern_source_path=str(Path(mod_path).resolve()),
         )
         self._log(f"Создано сравнение {cmp.comparison_id} (отдельная папка, result/ не тронут).\n")
         self.refresh()

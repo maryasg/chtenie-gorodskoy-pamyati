@@ -5314,21 +5314,28 @@ class App(tk.Tk):
         cmp = self.project_store.get_active_comparison()
         if not cmp:
             return
-        if cmp.modern_photo_id:
+        mod_path = str(cmp.modern_source_path or "").strip()
+        if mod_path and Path(mod_path).exists():
+            self.modern_img.set(mod_path)
+        elif cmp.modern_photo_id:
             photo = self.project_store.photos.get(cmp.modern_photo_id)
             if photo:
                 path = self.project_store.resolve_photo_path(photo)
                 if path:
                     self.modern_img.set(str(path))
-        active_hist = cmp.active_historical_photo_id or (
-            cmp.historical_photo_ids[0] if cmp.historical_photo_ids else ""
-        )
-        if active_hist:
-            photo = self.project_store.photos.get(active_hist)
-            if photo:
-                path = self.project_store.resolve_photo_path(photo)
-                if path:
-                    self.historical_img.set(str(path))
+        hist_key = str(cmp.historical_source_key or "").strip()
+        if hist_key and Path(hist_key).exists():
+            self.historical_img.set(hist_key)
+        else:
+            active_hist = cmp.active_historical_photo_id or (
+                cmp.historical_photo_ids[0] if cmp.historical_photo_ids else ""
+            )
+            if active_hist:
+                photo = self.project_store.photos.get(active_hist)
+                if photo:
+                    path = self.project_store.resolve_photo_path(photo)
+                    if path:
+                        self.historical_img.set(str(path))
 
     def _clear_markup_cache(self) -> None:
         self.embedded_annotations = []
@@ -9555,6 +9562,24 @@ class AppV14(AppV13):
         ttk.Button(side, text="Открыть HTML overlay", command=self.open_overlay).pack(fill="x", padx=10, pady=3)
         ttk.Button(side, text="Открыть HTML до/после", command=self.open_before_after).pack(fill="x", padx=10, pady=3)
         ttk.Button(side, text="Открыть Roboflow export", command=self.open_roboflow_export).pack(fill="x", padx=10, pady=3)
+        tk.Button(
+            side,
+            text="Отправить на сайт (GitHub)",
+            command=self.export_to_website,
+            bg="#0b6bcb",
+            fg="white",
+            activebackground="#084f96",
+            activeforeground="white",
+            font=("TkDefaultFont", 10, "bold"),
+            padx=8,
+            pady=8,
+        ).pack(fill="x", padx=10, pady=(10, 3))
+        ttk.Label(
+            side,
+            text="Дальше: GitHub Desktop → Commit → Push. На сайте Ctrl+F5.",
+            wraplength=280,
+            foreground="#555",
+        ).pack(anchor="w", padx=10, pady=(0, 6))
 
     def _reset_result_zoom_and_refresh(self) -> None:
         self.result_zoom = 1.0
