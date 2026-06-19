@@ -10391,6 +10391,7 @@ class AppV16(AppV15):
         self._log(
             "v16: «Редактировать точки» — тянуть вершины; клик по линии — новая точка; "
             "Delete / Backspace или кнопка — убрать выбранную вершину (минимум 3 точки).\n"
+            "v16: «Ниже / Выше» в списке областей — порядок слоёв (большую область можно увести под мелкие).\n"
             "v16: на вкладке «Разметка» — кнопки +/− для масштаба (или колесо над фото).\n"
         )
 
@@ -10443,6 +10444,26 @@ class AppV16(AppV15):
         self.markup_regions_list.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
         self.markup_regions_list.bind("<<ListboxSelect>>", self._on_markup_region_select)
+        layer_row = ttk.Frame(box)
+        layer_row.pack(fill="x", padx=8, pady=(0, 4))
+        ttk.Label(
+            layer_row,
+            text="Порядок слоёв: «ниже» — под другие (для большой области над мелкими). Номер id не меняется.",
+            wraplength=520,
+            foreground="#555",
+        ).pack(anchor="w")
+        layer_btns = ttk.Frame(layer_row)
+        layer_btns.pack(anchor="w", pady=(4, 0))
+        ttk.Button(
+            layer_btns,
+            text="Ниже (под другие)",
+            command=lambda: self._move_selected_markup_region(-1),
+        ).pack(side="left", padx=(0, 6))
+        ttk.Button(
+            layer_btns,
+            text="Выше (над другие)",
+            command=lambda: self._move_selected_markup_region(1),
+        ).pack(side="left")
         ttk.Button(
             box,
             text="Редактировать точки выбранной области",
@@ -10464,6 +10485,43 @@ class AppV16(AppV15):
             command=self._delete_selected_markup_region,
         ).pack(fill="x", padx=8, pady=(0, 8))
         self._refresh_markup_regions_list()
+
+    def _refresh_markup_regions_list(self) -> None:
+        if not hasattr(self, "markup_regions_list"):
+            return
+        self.markup_regions_list.delete(0, "end")
+        for list_i, ann in enumerate(self.embedded_annotations):
+            rid = _annotation_display_index(ann, list_i + 1)
+            label = ann.get("label_ru") or CLASS_LABELS.get(ann.get("class", ""), "")
+            comment = (ann.get("comment") or "").strip()
+            line = f"{rid}. {label}"
+            if comment:
+                line += f" — {comment}"
+            self.markup_regions_list.insert("end", line)
+
+    def _move_selected_markup_region(self, delta: int) -> None:
+        """delta -1: draw under others; +1: draw on top. Stable ann id is unchanged."""
+        sel = self.markup_regions_list.curselection()
+        if not sel:
+            messagebox.showinfo("Область не выбрана", "Выберите строку в списке «Области».")
+            return
+        if self._markup_edit_list_index is not None:
+            self._end_markup_edit()
+        idx = int(sel[0])
+        new_idx = idx + int(delta)
+        if new_idx < 0 or new_idx >= len(self.embedded_annotations):
+            return
+        anns = self.embedded_annotations
+        anns[idx], anns[new_idx] = anns[new_idx], anns[idx]
+        self._mark_dirty()
+        self.markup_canvas.delete("markup_highlight")
+        self._draw_markup_vectors()
+        self._refresh_markup_regions_list()
+        self.markup_regions_list.selection_clear(0, "end")
+        self.markup_regions_list.selection_set(new_idx)
+        self.markup_regions_list.see(new_idx)
+        self._highlight_markup_region_index(new_idx)
+        self._update_markup_status_text()
 
     def _markup_event_to_image_point(self, event: tk.Event) -> Optional[Point]:
         if self._markup_uses_dual_panels():
