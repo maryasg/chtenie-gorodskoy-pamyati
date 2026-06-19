@@ -1107,7 +1107,6 @@ class HouseWorkflowWizardFrame(ttk.Frame):
 
     def _house_opened(self, path: Path) -> None:
         self.on_house_selected(path)
-        self._house_label.set("Дом выбран — проверьте данные справа и нажмите «Сохранить данные дома»")
 
     def _comparison_opened(self, comparison: ComparisonSession) -> None:
         self.on_comparison_opened(comparison)
