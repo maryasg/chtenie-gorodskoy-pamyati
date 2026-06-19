@@ -4788,6 +4788,7 @@ class App(tk.Tk):
         return cmp
 
     def _offer_new_comparison_for_historical(self, item: HistoricalSourceItem) -> None:
+        """При добавлении фото — только перейти к уже существующему сравнению, не создавать новое."""
         if not self._ensure_project_store_attached():
             return
         existing = self.project_store.find_comparison_for_sources(item.key, self.modern_img.get())
@@ -4801,24 +4802,10 @@ class App(tk.Tk):
             if cmp:
                 self._activate_comparison_workdir(cmp)
                 return
-        current_has_work = self._work_dir_has_saved_markup() or (
-            Path(self.outdir.get()) / "03_historical_rectified.png"
-        ).exists()
-        if current_has_work:
-            create_new = messagebox.askyesno(
-                "Новое фото — новое сравнение?",
-                f"Добавлено историческое фото «{item.label}».\n\n"
-                "В текущей папке уже есть выпрямление или разметка от другого фото.\n\n"
-                "Создать отдельное сравнение с чистой папкой?\n"
-                "(Старая работа сохранится в своём сравнении.)",
-            )
-            if not create_new:
-                self._log(f"Фото «{item.label}» добавлено в список; активная папка не менялась.\n")
-                return
-        if not self.modern_img.get() or not Path(self.modern_img.get()).exists():
-            self._log(f"Фото «{item.label}» добавлено. Выберите современное фото — затем выпрямление.\n")
-            return
-        self._create_comparison_for_historical_item(item)
+        self._log(
+            f"Фото «{item.label}» добавлено в список. "
+            f"Новое сравнение — только вручную: таблица внизу → «Создать новое…» → «Сделать текущим ★».\n"
+        )
 
     def _work_dir_matches_historical(self, work_dir: Path, item: HistoricalSourceItem) -> bool:
         if self.project_store:
@@ -4857,27 +4844,30 @@ class App(tk.Tk):
         current = Path(self.outdir.get())
         has_work = (current / "03_historical_rectified.png").exists() or self._work_dir_has_saved_markup()
         if has_work and not self._work_dir_matches_historical(current, item):
-            if self.modern_img.get() and Path(self.modern_img.get()).exists():
-                self._create_comparison_for_historical_item(item)
-                return
+            self._log(
+                f"Фото «{item.label}» — отдельного сравнения нет. "
+                f"Активно ★ «{self.project_store.active_comparison_id or '—'}». "
+                f"Для новой пары создайте сравнение вручную («Создать новое…»).\n"
+            )
         self._clear_markup_cache()
 
     def _ensure_work_session_for_active_pair(self) -> Optional[Path]:
         item = self._get_active_historical_item()
-        if not item or not self.modern_img.get() or not Path(self.modern_img.get()).exists():
-            return Path(self.outdir.get()) if self.outdir.get() else None
         if not self._ensure_project_store_attached():
-            return Path(self.outdir.get())
-        self._switch_session_for_historical(item)
-        if item.comparison_id:
-            cmp = self.project_store.get_comparison(item.comparison_id)
-            if cmp:
-                return cmp.work_path(self.project_store.project_dir)
-        if not self._work_dir_has_saved_markup() and not (Path(self.outdir.get()) / "03_historical_rectified.png").exists():
-            cmp = self._create_comparison_for_historical_item(item)
-            if cmp:
-                return cmp.work_path(self.project_store.project_dir)
-        return Path(self.outdir.get())
+            return Path(self.outdir.get()) if self.outdir.get() else None
+        if item:
+            self._switch_session_for_historical(item)
+            if item.comparison_id:
+                cmp = self.project_store.get_comparison(item.comparison_id)
+                if cmp:
+                    work = cmp.work_path(self.project_store.project_dir)
+                    self.outdir.set(str(work))
+                    return work
+        work = self.project_store.work_dir_for_active()
+        if work:
+            self.outdir.set(str(work))
+            return work
+        return Path(self.outdir.get()) if self.outdir.get() else None
 
     def _sync_historical_list_from_folder(self) -> None:
         hist_dir = self.project_root() / "historical_sources"
@@ -5287,78 +5277,14 @@ class App(tk.Tk):
         return legacy_marked.exists()
 
     def _after_project_photo_added(self, photo) -> None:
-        """После добавления фото — предложить новое сравнение, чтобы не смешивать со старой разметкой."""
+        """После добавления фото в библиотеку — без автосоздания сравнений."""
         if not self.project_store:
             return
-
-        cmp = self.project_store.get_active_comparison()
-        cmp_label = cmp.comparison_id if cmp else "result/"
-        has_old = self._work_dir_has_saved_markup() or (cmp is not None and cmp.is_legacy)
-
-        if photo.kind == "historical":
-            pair_list = self.project_store.list_photos("modern")
-            question = (
-                f"Добавлено историческое фото {photo.photo_id}.\n\n"
-                f"Сейчас активно сравнение «{cmp_label}»"
-                + (" — там уже есть разметка." if has_old else ".")
-                + "\n\nСоздать новое сравнение для этой пары?\n"
-                "Старая разметка в result/ и cmp_legacy_001 не изменится."
-            )
-        else:
-            pair_list = self.project_store.list_photos("historical")
-            question = (
-                f"Добавлено современное фото {photo.photo_id}.\n\n"
-                f"Создать новое сравнение с этим фото?\n"
-                "Старая разметка останется в прежнем сравнении."
-            )
-
-        if not pair_list:
-            messagebox.showinfo(
-                "Фото добавлено",
-                f"{photo.photo_id} сохранено в проект.\n\n"
-                f"Добавьте также {'современное' if photo.kind == 'historical' else 'историческое'} фото, "
-                "затем создайте сравнение во вкладке «2. Сравнения».",
-            )
-            return
-
-        if has_old or cmp is not None:
-            create_new = messagebox.askyesno("Новое фото — новое сравнение?", question)
-        else:
-            create_new = messagebox.askyesno(
-                "Создать сравнение?",
-                f"Фото {photo.photo_id} добавлено.\n\nСразу создать для него новое сравнение?",
-            )
-
-        if not create_new:
-            self._log(
-                f"Фото {photo.photo_id} только добавлено в библиотеку. "
-                f"Активная разметка по-прежнему в «{cmp_label}».\n"
-            )
-            return
-
-        if photo.kind == "historical":
-            modern_id = pair_list[0].photo_id
-            hist_ids = [photo.photo_id]
-        else:
-            modern_id = photo.photo_id
-            hist_ids = [pair_list[0].photo_id]
-
-        title = f"{photo.photo_id} + {modern_id if photo.kind == 'historical' else hist_ids[0]}"
-        new_cmp = self.project_store.create_comparison(
-            title=title,
-            modern_photo_id=modern_id,
-            historical_photo_ids=hist_ids,
-        )
-        self.outdir.set(str(new_cmp.work_path(self.project_store.project_dir)))
-        self._apply_active_comparison_photos()
-        self._clear_markup_cache()
-        self._ensure_project_dirs()
         self._log(
-            f"Создано новое сравнение {new_cmp.comparison_id} — чистая папка, старая разметка не затронута.\n"
+            f"Фото {photo.photo_id} добавлено в библиотеку. "
+            f"Новое сравнение — вручную: таблица «Сравнения» → «Создать новое…» → «Сделать текущим ★».\n"
         )
         self._refresh_project_tabs()
-        if hasattr(self, "notebook") and hasattr(self, "tab_select"):
-            self.notebook.select(self.tab_select)
 
     def _open_comparison_session(self, comparison) -> None:
         if not self.project_store:
@@ -9949,7 +9875,7 @@ class AppV15(AppV14):
             "v15: курсор-рука при пробеле и перетаскивании; в списке «Области» можно удалить любую.\n"
             "v15: разные ракурсы — две отдельные области разметки (история / современность).\n"
             "v15: редактирование точек полигона — в отдельной папке v16 (см. README_v16_ru.md).\n"
-            "v15/v16: ★ сравнения — таблица внизу вкладки «1. Источники»; «Отправить на сайт» — вкладки 2 и 5.\n"
+            "v15/v16: ★ сравнения — таблица внизу вкладки «1. Источники»; создавать только «Создать новое…»; «Отправить на сайт» — вкладки 2 и 5.\n"
         )
 
     def _on_tab_changed(self, _event: tk.Event) -> None:
