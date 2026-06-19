@@ -43,6 +43,10 @@ if errorlevel 1 (
 )
 
 echo.
-echo [3/3] Готово. Запустите ZAPUSK_V16.bat
+echo [3/3] Готово.
+echo.
+echo В папке v16 на рабочем столе:
+echo   PROVERIT_OBNOVLENIE.bat  - проверить версию
+echo   ZAPUSK_V16.bat           - запуск программы
 echo.
 pause
