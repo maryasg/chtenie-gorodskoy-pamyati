@@ -531,9 +531,16 @@ def annotation_polygon_rectified(ann: dict, project: dict) -> List[List[float]]:
 
 
 def overlay_labeling_image_path(outdir: Path, project: dict) -> Path:
+    """Картинка для разметки: overlay (05) — только вкладка «Разметка»."""
     p05 = outdir / "05_comparison_for_labeling.png"
     if p05.exists():
         return p05
+    outputs = project.get("outputs") or {}
+    return Path(outputs.get("modern_rectified", outdir / "04_modern_rectified.png"))
+
+
+def modern_rectified_image_path(outdir: Path, project: dict) -> Path:
+    """Современное выпрямленное фото — для результата, сайта и превью с подсветкой."""
     outputs = project.get("outputs") or {}
     return Path(outputs.get("modern_rectified", outdir / "04_modern_rectified.png"))
 
@@ -2312,8 +2319,7 @@ def save_annotations_and_exports(outdir: Path, annotations: List[dict]) -> Dict[
         )
         marked_src = draw_polygons_on_image(modern_src, hist_anns_modern, transform=None, draw_indices=False)
     else:
-        labeling_path = overlay_labeling_image_path(outdir, project)
-        rect_base = cv_read(labeling_path if labeling_path.exists() else modern_rect_path)
+        rect_base = cv_read(modern_rect_path)
         marked_rect = draw_polygons_on_image(rect_base, annotations, transform=None, draw_indices=True)
         marked_src = draw_polygons_on_image(
             modern_src,
@@ -4140,6 +4146,13 @@ class App(tk.Tk):
             p06 = outdir / "06_marked_rectified.png"
             if p06.exists():
                 return p06
+            return None
+        p06 = outdir / "06_marked_rectified.png"
+        if p06.exists():
+            return p06
+        p04 = outdir / "04_modern_rectified.png"
+        if p04.exists():
+            return p04
         p07 = outdir / "07_marked_on_original_modern.png"
         if p07.exists():
             return p07
@@ -8143,7 +8156,10 @@ class AppV11(App):
                 )
             elif self._labeling_image_ready():
                 self._markup_side_hint.configure(
-                    text="Разметка всегда по картинке подготовки (вкладка 2). Координаты не смещаются при смене фона."
+                    text=(
+                        "Разметка по overlay (05) — так удобнее видеть совпадение фасадов. "
+                        "На вкладке «Результат» и на сайте — современное выпрямленное фото."
+                    )
                 )
             else:
                 self._markup_side_hint.configure(text="")
@@ -8658,7 +8674,10 @@ class AppV12(AppV11):
                 )
             elif self._labeling_image_ready():
                 self._markup_side_hint.configure(
-                    text="Разметка всегда по картинке подготовки (вкладка 2). Координаты не смещаются при смене фона."
+                    text=(
+                        "Разметка по overlay (05) — так удобнее видеть совпадение фасадов. "
+                        "На вкладке «Результат» и на сайте — современное выпрямленное фото."
+                    )
                 )
             else:
                 self._markup_side_hint.configure(text="")
@@ -8977,10 +8996,15 @@ class AppV12(AppV11):
         try:
             from PIL import Image as PILImage, ImageDraw
             outdir = Path(self.outdir.get())
-            src = outdir / "07_marked_on_original_modern.png"
-            if not src.exists():
-                return
-            base = PILImage.open(src).convert("RGBA")
+            if hasattr(self, "_compose_result_pil_from_source"):
+                base = self._compose_result_pil_from_source().convert("RGBA")
+            else:
+                src = outdir / "06_marked_rectified.png"
+                if not src.exists():
+                    src = outdir / "07_marked_on_original_modern.png"
+                if not src.exists():
+                    return
+                base = PILImage.open(src).convert("RGBA")
             overlay = PILImage.new("RGBA", base.size, (0, 0, 0, 0))
             draw = ImageDraw.Draw(overlay)
             font = self._load_label_font(max(18, int(min(base.size) / 55)))
@@ -9883,7 +9907,10 @@ class AppV13(AppV12):
                 )
             elif self._labeling_image_ready():
                 self._markup_side_hint.configure(
-                    text="Разметка всегда по картинке подготовки (вкладка 2). Координаты не смещаются при смене фона."
+                    text=(
+                        "Разметка по overlay (05) — так удобнее видеть совпадение фасадов. "
+                        "На вкладке «Результат» и на сайте — современное выпрямленное фото."
+                    )
                 )
             else:
                 self._markup_side_hint.configure(text="")
@@ -10051,10 +10078,15 @@ class AppV13(AppV12):
         try:
             from PIL import Image as PILImage, ImageDraw
             outdir = Path(self.outdir.get())
-            src = outdir / "07_marked_on_original_modern.png"
-            if not src.exists():
-                return
-            base = PILImage.open(src).convert("RGB")
+            if hasattr(self, "_compose_result_pil_from_source"):
+                base = self._compose_result_pil_from_source().convert("RGB")
+            else:
+                src = outdir / "06_marked_rectified.png"
+                if not src.exists():
+                    src = outdir / "07_marked_on_original_modern.png"
+                if not src.exists():
+                    return
+                base = PILImage.open(src).convert("RGB")
             anns = list(self.embedded_annotations)
             font_title = self._load_label_font(max(18, int(min(base.size) / 55)))
             font_body = self._load_label_font(max(16, int(min(base.size) / 70)))
@@ -10593,13 +10625,15 @@ class AppV14(AppV13):
         self._ensure_annotations_loaded()
         anns = normalize_annotation_list(list(self.embedded_annotations))
         if not project_is_side_by_side(project):
-            labeling_path = overlay_labeling_image_path(outdir, project)
-            if not labeling_path.exists():
+            modern_rect_path = Path(
+                (project.get("outputs") or {}).get("modern_rectified", outdir / "04_modern_rectified.png")
+            )
+            if not modern_rect_path.exists():
                 raise RuntimeError(
-                    "Не найдена картинка для разметки (05_comparison_for_labeling.png). "
-                    "Сначала подготовьте overlay на вкладке 2."
+                    "Не найдено современное выпрямленное фото (04_modern_rectified.png). "
+                    "Сначала подготовьте пару на вкладке 2."
                 )
-            base_bgr = cv_read(labeling_path)
+            base_bgr = cv_read(modern_rect_path)
             if anns:
                 base_bgr = draw_polygons_on_image(base_bgr, anns, transform=None, draw_indices=False)
             return Image.fromarray(cv.cvtColor(base_bgr, cv.COLOR_BGR2RGB))  # type: ignore[union-attr]
@@ -10667,8 +10701,8 @@ class AppV14(AppV13):
                 self.result_status.set(f"Итог: два фото рядом с номерами.{extra}")
             elif not project_is_side_by_side(self._project_json_dict() or {}):
                 self.result_status.set(
-                    f"Итог на картинке подготовки (как во вкладке разметки). "
-                    f"07_marked_on_original_modern.png — для сайта на полном фасаде.{extra}"
+                    f"Итог на современном выпрямленном фото (04). "
+                    f"Overlay (05) — только для разметки на вкладке 4.{extra}"
                 )
             else:
                 self.result_status.set(f"Итог на полном исходном современном фото.{extra}")

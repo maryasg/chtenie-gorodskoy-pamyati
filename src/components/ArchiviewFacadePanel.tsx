@@ -111,7 +111,7 @@ export function ArchiviewFacadePanel({
     if (assets.labelingLayout === 'side_by_side' && assets.sideBySideMarkedUrl) {
       return assets.sideBySideMarkedUrl
     }
-    return assets.markedFacadeUrl
+    return assets.modernRectifiedUrl
   }, [assets])
 
   const makeRegion = useCallback(
@@ -219,11 +219,15 @@ export function ArchiviewFacadePanel({
         }
         if (isSb && annData?.side_by_side) {
           buildRegionsSideBySide(annotations, annData, img.naturalWidth, img.naturalHeight)
-        } else if (!isSb && imageMatchesRectifiedSize(img.naturalWidth, img.naturalHeight, annData?.rectified_size)) {
+        } else if (
+          !isSb &&
+          (explicitLayout === 'overlay' ||
+            imageMatchesRectifiedSize(img.naturalWidth, img.naturalHeight, annData?.rectified_size))
+        ) {
           buildRegionsRectified(annotations, img.naturalWidth, img.naturalHeight)
         } else if (H) {
           buildRegionsOverlay(annotations, H, img.naturalWidth, img.naturalHeight)
-        } else if (!isSb && explicitLayout === 'overlay' && !annData?.rectified_size) {
+        } else if (!isSb && !annData?.rectified_size) {
           buildRegionsRectified(annotations, img.naturalWidth, img.naturalHeight)
         } else {
           setRegions([])
@@ -265,8 +269,8 @@ export function ArchiviewFacadePanel({
           </>
         ) : (
           <>
-            Наведите или нажмите на <strong>номер или область</strong> на фото — сверху появится
-            кураторская плашка. Список справа синхронизирован с подсветкой.
+            Современное выпрямленное фото. Наведите или нажмите на <strong>номер или область</strong> —
+            сверху появится кураторская плашка. Список справа синхронизирован с подсветкой.
           </>
         )}
       </p>
@@ -287,7 +291,11 @@ export function ArchiviewFacadePanel({
             >
               <img
                 src={displayImageUrl}
-                alt="Фасад с разметкой Archiview"
+                alt={
+                  sideBySide
+                    ? 'Историческое и современное фото с разметкой Archiview'
+                    : 'Современное выпрямленное фото с подсветкой Archiview'
+                }
                 width={imgSize.w}
                 height={imgSize.h}
                 className="block max-h-[min(78vh,820px)] w-full rounded-xl border border-arch-line object-contain shadow-sm"
