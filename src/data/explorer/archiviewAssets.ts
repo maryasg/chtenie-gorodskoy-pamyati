@@ -28,6 +28,9 @@ export interface ArchiviewBuildingAssets {
   modernPhotoYear?: string
   annotationsUrl: string
   facadeProjectUrl: string
+  /** Из manifest.json — какое сравнение показано */
+  comparisonId?: string
+  comparisonTitle?: string
 }
 
 export const ARCHIVIEW_ASSETS: Record<string, ArchiviewBuildingAssets> = {

@@ -4750,9 +4750,37 @@ class App(tk.Tk):
             rel = Path(self.outdir.get()).name
         if self.project_store:
             cmp = self.project_store.get_active_comparison()
-            if cmp and cmp.is_legacy:
-                return f"Папка: {rel} (старая разметка result/)"
+            if cmp:
+                legacy = " (legacy result/)" if cmp.is_legacy else ""
+                title = f" — {cmp.title}" if cmp.title else ""
+                ann = f", разметок: {cmp.annotation_count}" if cmp.annotation_count else ""
+                return f"★ {cmp.comparison_id}{title}{ann} | папка: {rel}{legacy}"
         return f"Папка: {rel}"
+
+    def _active_comparison_banner_text(self) -> str:
+        if not self.project_dir.get().strip():
+            return "Дом не открыт — выберите дом на вкладке «0. Дом и сравнение»"
+        if not self.project_store:
+            return "Проект не загружен"
+        cmp = self.project_store.get_active_comparison()
+        if not cmp:
+            work = self.outdir.get()
+            if work:
+                return f"★ Сравнение не выбрано | папка: {work} — создайте или выберите ★ в таблице сравнений"
+            return "★ Сравнение не выбрано — «Создать новое…» или двойной клик по строке в таблице"
+        legacy = " (legacy result/)" if cmp.is_legacy else ""
+        title = cmp.title.strip() if cmp.title else "без названия"
+        try:
+            rel = str(Path(self.outdir.get()).resolve().relative_to(self.project_root().resolve()))
+        except Exception:
+            rel = Path(self.outdir.get()).name if self.outdir.get() else "—"
+        ann = f" | разметок: {cmp.annotation_count}" if cmp.annotation_count else ""
+        return f"★ Активное сравнение: {cmp.comparison_id} — {title} | папка: {rel}{legacy}{ann}"
+
+    def _refresh_active_comparison_banner(self) -> None:
+        text = self._active_comparison_banner_text()
+        if hasattr(self, "active_cmp_banner"):
+            self.active_cmp_banner.set(text)
 
     def _activate_comparison_workdir(self, comparison: "ComparisonSession") -> None:
         if not self.project_store:
@@ -4774,6 +4802,7 @@ class App(tk.Tk):
                 self._refresh_markup_canvas()
             if hasattr(self, "_refresh_result_canvas"):
                 self._refresh_result_canvas()
+        self._refresh_active_comparison_banner()
 
     def _create_comparison_for_historical_item(self, item: HistoricalSourceItem) -> Optional["ComparisonSession"]:
         if not self._ensure_project_store_attached():
@@ -4983,6 +5012,7 @@ class App(tk.Tk):
                 self.after(100, lambda: self.comparisons_tab_frame.refresh())
             if hasattr(self, "_refresh_result_canvas"):
                 self.after(50, self._refresh_result_canvas)
+            self._refresh_active_comparison_banner()
         finally:
             self._suppress_house_autosave = False
 
@@ -5051,6 +5081,7 @@ class App(tk.Tk):
                 self.after(100, lambda: self.comparisons_tab_frame.refresh())
             if hasattr(self, "workflow_wizard"):
                 self.after(100, lambda: self.workflow_wizard.refresh_comparisons())
+            self._refresh_active_comparison_banner()
         finally:
             self._suppress_house_autosave = False
 
@@ -5412,6 +5443,7 @@ class App(tk.Tk):
             self._refresh_project_tabs()
         except Exception as exc:
             messagebox.showerror("Ошибка открытия сравнения", str(exc))
+        self._refresh_active_comparison_banner()
 
     def _sync_historical_for_active_comparison(self) -> None:
         if not self.project_store:
@@ -6015,6 +6047,14 @@ map.on('click',e=>{{
             self._log(f"Не удалось сохранить паспорт источника: {exc}\n")
 
     def _set_modern_image_path(self, path: Path, label: str, metadata: Optional[Dict[str, object]] = None) -> None:
+        if self.project_store:
+            cmp = self.project_store.get_active_comparison()
+            if cmp:
+                self._log(
+                    f"Внимание: меняется современное фото для ★ {cmp.comparison_id}"
+                    f"{(' — ' + cmp.title) if cmp.title else ''}.\n"
+                    "Если нужно новое сравнение — «Создать новое…» на вкладке «0. Дом и сравнение».\n"
+                )
         self.modern_img.set(str(path))
         self.modern_source_label.set(label)
         self.modern_meta = metadata or {}
@@ -6024,6 +6064,7 @@ map.on('click',e=>{{
         self.modern_points_text = ""
         self.modern_crop_rect_text = ""
         self.points_status.set("Углы сброшены: выбрано новое современное фото.")
+        self._refresh_active_comparison_banner()
 
     def select_open_modern_photo(self, photo: OpenStreetPhoto) -> None:
         self._suggest_project_dir()
@@ -6900,14 +6941,31 @@ map.on('click',e=>{{
                 text = text[-800:]
             self._log(f"\nНа сайт скопировано ({card_id}): {repo / 'public' / 'explorer' / card_id}\n")
             if show_dialog:
+                cmp_note = ""
+                if self.project_store:
+                    others = [
+                        c
+                        for c in self.project_store.list_comparisons()
+                        if c.comparison_id != self.project_store.active_comparison_id
+                        and c.status != "discarded"
+                        and c.annotation_count > 0
+                    ]
+                    if others:
+                        ids = ", ".join(c.comparison_id for c in others[:5])
+                        cmp_note = (
+                            f"\n\nТакже на сайт попадут другие сравнения с разметкой: {ids} "
+                            "(папки comparisons/cmp_XXX/ и переключатель на странице дома)."
+                        )
+                active = self.project_store.get_active_comparison() if self.project_store else None
+                active_line = f"\n★ Экспортировано активное: {active.comparison_id}" if active else ""
                 messagebox.showinfo(
                     "Скопировано на сайт",
                     f"Папка сайта обновлена: public/explorer/{card_id}/\n"
-                    f"Код взят из поля «Код на сайте»: {card_id}\n\n"
+                    f"Код взят из поля «Код на сайте»: {card_id}{active_line}\n\n"
                     "Связи traceId для существующих областей (по номеру id) сохранены с сайта.\n"
                     "Новые области появятся на сайте без кураторского текста — "
                     "привяжите их на кураторской странице.\n\n"
-                    "Дальше в GitHub Desktop: Commit → Push.\n\n" + text,
+                    "Дальше в GitHub Desktop: Commit → Push.\n\n" + text + cmp_note,
                 )
 
         self._run_bg(f"Копирование на сайт ({card_id})", work, done_export)
@@ -8657,6 +8715,18 @@ class AppV13(AppV12):
         self._build_result_tab(self.tab_result)
         self._build_straight_tab(self.tab_straight)
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
+
+        self.active_cmp_banner = tk.StringVar(value="")
+        cmp_bar = ttk.Frame(self)
+        cmp_bar.pack(fill="x", padx=12, pady=(0, 4))
+        ttk.Label(
+            cmp_bar,
+            textvariable=self.active_cmp_banner,
+            font=("TkDefaultFont", 10, "bold"),
+            foreground="#0b6bcb",
+            wraplength=1100,
+        ).pack(anchor="w", padx=4, pady=4)
+        self._refresh_active_comparison_banner()
 
         log_frame = ttk.LabelFrame(self, text="Сообщения программы")
         log_frame.pack(fill="x", padx=12, pady=(0, 10))
