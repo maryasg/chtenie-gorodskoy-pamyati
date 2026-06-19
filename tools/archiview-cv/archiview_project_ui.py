@@ -758,6 +758,7 @@ class MyProjectsPanel(ttk.LabelFrame):
         self.tree.bind("<Double-1>", lambda _e: self.open_selected())
 
         self._summaries: List[ProjectSummary] = []
+        self.after(0, self.refresh)
 
     def refresh(self) -> None:
         self.tree.delete(*self.tree.get_children())

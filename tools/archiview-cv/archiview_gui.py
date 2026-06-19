@@ -24,6 +24,7 @@ import os
 import re
 import platform
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -80,6 +81,7 @@ try:
         propose_site_card_id,
         next_site_card_id,
         website_display_name,
+        website_building_route_id,
         export_matches_site_card,
     )
     from archiview_project_ui import (
@@ -95,6 +97,7 @@ except Exception:
     infer_site_card_id = None  # type: ignore[assignment,misc]
     normalize_site_card_id = None  # type: ignore[assignment,misc]
     website_display_name = None  # type: ignore[assignment,misc]
+    website_building_route_id = None  # type: ignore[assignment,misc]
     normalize_address_dedupe = None  # type: ignore[assignment,misc]
     merge_map_address = None  # type: ignore[assignment,misc]
     format_nominatim_short_address = None  # type: ignore[assignment,misc]
@@ -3534,6 +3537,7 @@ class App(tk.Tk):
 
         self._map_server = None
         self._map_server_thread = None
+        self._vite_dev_proc: Optional[subprocess.Popen] = None
         self._suppress_house_autosave = False
         self._house_save_after_id: Optional[str] = None
         self._bind_house_field_autosave()
@@ -5053,6 +5057,8 @@ class App(tk.Tk):
     def _refresh_my_projects_panel(self) -> None:
         if hasattr(self, "my_projects_panel"):
             self.my_projects_panel.refresh()
+        if hasattr(self, "workflow_wizard"):
+            self.workflow_wizard.refresh_projects()
 
     def _allocate_new_project_dir(self, slug: str) -> Path:
         clean = safe_filename(slug.strip(), "house_project") if slug.strip() else "house_project"
@@ -6644,7 +6650,181 @@ map.on('click',e=>{{
             messagebox.showinfo("Файл ещё не создан", missing)
 
     def _website_repo_root(self) -> Path:
+        candidates = [
+            Path(r"C:\Users\Marusia\Projects\chtenie-gorodskoy-pamyati"),
+            APP_DIR.parent.parent,
+            APP_DIR.parent.parent.parent,
+        ]
+        seen: set[str] = set()
+        for candidate in candidates:
+            try:
+                root = candidate.resolve()
+            except Exception:
+                continue
+            key = str(root).lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            if (root / "package.json").exists() and (root / "vite.config.ts").exists():
+                return root
+        cur = APP_DIR.resolve()
+        for _ in range(8):
+            if (cur / "package.json").exists() and (cur / "public" / "explorer").is_dir():
+                return cur
+            if cur.parent == cur:
+                break
+            cur = cur.parent
         return Path(r"C:\Users\Marusia\Projects\chtenie-gorodskoy-pamyati")
+
+    def _website_vite_base_path(self, repo: Path) -> str:
+        cfg = repo / "vite.config.ts"
+        if cfg.exists():
+            try:
+                match = re.search(r'base:\s*["\']([^"\']+)["\']', cfg.read_text(encoding="utf-8"))
+                if match:
+                    base = match.group(1).strip()
+                    if base and base != "/":
+                        return base if base.endswith("/") else f"{base}/"
+            except Exception:
+                pass
+        return "/chtenie-gorodskoy-pamyati/"
+
+    def _website_dev_port(self) -> int:
+        return 5173
+
+    def _website_dev_server_running(self, host: str = "127.0.0.1", port: Optional[int] = None) -> bool:
+        port = port if port is not None else self._website_dev_port()
+        try:
+            with socket.create_connection((host, port), timeout=0.35):
+                return True
+        except OSError:
+            return False
+
+    def _ensure_website_dev_server(self, repo: Path) -> Tuple[bool, str]:
+        if self._website_dev_server_running():
+            return True, ""
+        if not (repo / "package.json").exists():
+            return False, f"Не найден проект сайта:\n{repo}"
+        if not (repo / "node_modules").is_dir():
+            return (
+                False,
+                f"В папке сайта нет node_modules (нужен npm install).\n\n"
+                f"Откройте cmd:\n  cd {repo}\n  npm install\n  npm run dev",
+            )
+        npm = "npm.cmd" if sys.platform == "win32" else "npm"
+        port = self._website_dev_port()
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        try:
+            self._vite_dev_proc = subprocess.Popen(
+                [npm, "run", "dev", "--", "--host", "127.0.0.1", "--port", str(port)],
+                cwd=str(repo),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=flags,
+            )
+        except FileNotFoundError:
+            return False, "npm не найден. Установите Node.js: https://nodejs.org/"
+        except Exception as exc:
+            return False, f"Не удалось запустить npm run dev:\n{exc}"
+        for _ in range(40):
+            time.sleep(0.5)
+            if self._website_dev_server_running(port=port):
+                return True, ""
+            if self._vite_dev_proc is not None and self._vite_dev_proc.poll() is not None:
+                return (
+                    False,
+                    f"npm run dev завершился с кодом {self._vite_dev_proc.returncode}.\n"
+                    f"Проверьте в cmd:\n  cd {repo}\n  npm run dev",
+                )
+        return (
+            False,
+            "Сервер не ответил за 20 секунд.\n"
+            f"Попробуйте вручную в cmd:\n  cd {repo}\n  npm run dev",
+        )
+
+    def _export_to_website_sync(self) -> Tuple[bool, str]:
+        card_id = self._resolve_site_card_id_for_export()
+        if not card_id:
+            return False, "Укажите «Код на сайте» (MOSCOW_001 …) в данных дома и сохраните."
+        result_path = Path(self.outdir.get())
+        if export_matches_site_card is not None:
+            ok, err = export_matches_site_card(result_path, card_id, APP_DIR)  # type: ignore[misc]
+            if not ok:
+                return False, err or f"Экспорт не совпадает с {card_id}."
+        script = APP_DIR / "copy_to_website.ps1"
+        if not script.exists():
+            return False, f"Не найден скрипт:\n{script}"
+        repo = self._website_repo_root()
+        cmd = [
+            "powershell",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(script),
+            "-CardId",
+            card_id,
+            "-ResultDir",
+            str(result_path),
+            "-RepoRoot",
+            str(repo),
+            "-NoPrompt",
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if proc.returncode != 0:
+            text = (proc.stderr or proc.stdout or f"exit code {proc.returncode}").strip()
+            return False, text
+        return True, card_id
+
+    def _website_localhost_url(self, card_id: str, repo: Optional[Path] = None) -> Tuple[Optional[str], str]:
+        route_id = ""
+        if website_building_route_id is not None:
+            route_id = website_building_route_id(card_id, APP_DIR)  # type: ignore[misc]
+        if not route_id:
+            display = ""
+            if website_display_name is not None:
+                display = website_display_name(card_id, APP_DIR) or card_id  # type: ignore[misc]
+            return (
+                None,
+                f"Дом {display} ({card_id}) не найден в website_buildings.json.\n"
+                "Добавьте запись buildingId или выберите другой код сайта.",
+            )
+        root = repo or self._website_repo_root()
+        base = self._website_vite_base_path(root).rstrip("/")
+        port = self._website_dev_port()
+        url = f"http://127.0.0.1:{port}{base}/building/{route_id}"
+        return url, ""
+
+    def open_website_localhost_preview(self) -> None:
+        """Скопировать разметку в сайт и открыть страницу дома на localhost."""
+
+        def work() -> str:
+            ok, info = self._export_to_website_sync()
+            if not ok:
+                raise RuntimeError(info)
+            card_id = info
+            repo = self._website_repo_root()
+            ready, err = self._ensure_website_dev_server(repo)
+            if not ready:
+                raise RuntimeError(err)
+            url, route_err = self._website_localhost_url(card_id, repo)
+            if not url:
+                raise RuntimeError(route_err)
+            self._log(f"\nПредпросмотр на сайте: {url}\n")
+            return url
+
+        def done(url: object) -> None:
+            target = str(url)
+            webbrowser.open(target)
+            messagebox.showinfo(
+                "Сайт на localhost",
+                f"Открыта страница дома в браузере:\n{target}\n\n"
+                "Разметка скопирована в public/explorer/ (без GitHub Push).\n"
+                "Сервер Vite останется работать в фоне — закройте окно cmd или Archiview, "
+                "чтобы остановить (если запускали из программы).",
+            )
+
+        self._run_bg("Предпросмотр на сайте (localhost)", work, done)
 
     def _resolve_site_card_id_for_export(self) -> str:
         card = ""
@@ -9597,6 +9777,24 @@ class AppV14(AppV13):
         ttk.Button(side, text="Открыть HTML overlay", command=self.open_overlay).pack(fill="x", padx=10, pady=3)
         ttk.Button(side, text="Открыть HTML до/после", command=self.open_before_after).pack(fill="x", padx=10, pady=3)
         ttk.Button(side, text="Открыть Roboflow export", command=self.open_roboflow_export).pack(fill="x", padx=10, pady=3)
+        tk.Button(
+            side,
+            text="Показать на сайте (localhost)",
+            command=self.open_website_localhost_preview,
+            bg="#1a7f4b",
+            fg="white",
+            activebackground="#14633a",
+            activeforeground="white",
+            font=("TkDefaultFont", 10, "bold"),
+            padx=8,
+            pady=8,
+        ).pack(fill="x", padx=10, pady=(6, 3))
+        ttk.Label(
+            side,
+            text="Копирует разметку в сайт и откроет страницу дома в браузере (npm run dev). Без Push на GitHub.",
+            wraplength=280,
+            foreground="#555",
+        ).pack(anchor="w", padx=10, pady=(0, 6))
         tk.Button(
             side,
             text="Отправить на сайт (GitHub)",
