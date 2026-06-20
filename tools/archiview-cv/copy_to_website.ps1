@@ -248,7 +248,6 @@ if (-not (Test-Path -LiteralPath $Web)) {
 }
 
 $Pairs = @(
-    ,@('07_marked_on_original_modern.png', 'marked-facade.png')
     ,@('08_marked_on_original_modern_labeled.png', 'marked-facade-labeled.png')
     ,@('annotations\manual_annotations.json', 'annotations.json')
     ,@('03_historical_rectified.png', 'historical-rectified.png')
@@ -309,11 +308,20 @@ function Export-ComparisonBundle {
             }
         }
     }
-    if (-not $isSideBySide) {
+    if ($isSideBySide) {
+        $sbMarked = Join-Path $Result '10_side_by_side_marked.png'
+        if (Test-Path -LiteralPath $sbMarked) {
+            Copy-Item -LiteralPath $sbMarked -Destination (Join-Path $WebDest 'marked-facade.png') -Force
+            Write-Host "OK: $WebDest\marked-facade.png (from 10_side_by_side_marked)"
+        }
+    } else {
         $marked06 = Join-Path $Result '06_marked_rectified.png'
         if (Test-Path -LiteralPath $marked06) {
             Copy-Item -LiteralPath $marked06 -Destination (Join-Path $WebDest 'marked-facade.png') -Force
-            Write-Host "OK: $WebDest\marked-facade.png (from 06_labeling_canvas)"
+            Write-Host "OK: $WebDest\marked-facade.png (from 06_marked_rectified)"
+        } else {
+            Write-Host "WARN: 06_marked_rectified.png missing in $Result"
+            Write-Host '      Save markup in Archiview (tab 4) before export. Site uses modern-rectified.png + hover highlights.'
         }
     }
     $ProjectJson = Join-Path $Result 'project_v8.json'
