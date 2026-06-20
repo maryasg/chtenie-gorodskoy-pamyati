@@ -13,6 +13,7 @@ export interface ExplorerComparisonEntry {
   sideBySideMarkedUrl?: string
   historicalRectifiedUrl: string
   modernRectifiedUrl: string
+  modernSourceUrl?: string
   annotationsUrl: string
   facadeProjectUrl: string
 }
@@ -48,6 +49,9 @@ export function manifestEntryToAssets(
     labelingLayout: entry.labelingLayout ?? defaults.labelingLayout,
     historicalRectifiedUrl: resolveExplorerAsset(cardId, entry.historicalRectifiedUrl),
     modernRectifiedUrl: resolveExplorerAsset(cardId, entry.modernRectifiedUrl),
+    modernSourceUrl: entry.modernSourceUrl
+      ? resolveExplorerAsset(cardId, entry.modernSourceUrl)
+      : defaults.modernSourceUrl,
     historicalPhotoYear: entry.historicalPhotoYear ?? defaults.historicalPhotoYear,
     modernPhotoYear: entry.modernPhotoYear ?? defaults.modernPhotoYear,
     annotationsUrl: resolveExplorerAsset(cardId, entry.annotationsUrl),
