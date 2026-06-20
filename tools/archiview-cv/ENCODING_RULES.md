@@ -20,8 +20,12 @@ The string is missing the terminator: '.
 |------------|-------------|
 | Cyrillic in `'...'` or `"..."` | English in `.ps1`; Russian in `.bat` or `README_*_ru.md` |
 | Em dash `—` (U+2014) | ASCII hyphen `-` |
+| Arrow `→` (U+2192) in source | `->` in strings like `"1924 -> 2026"` |
+| Word `сегодня` in strings | `today` |
 | Ellipsis `…` (U+2026) | Three dots `...` |
 | Curly quotes `“` `”` | Straight quotes `'` `"` |
+
+Real-world breaks (fixed in 2026-06): `copy_to_website.ps1` lines with `сегодня`, `—`, Cyrillic in `'Primary (active)'`.
 
 ### Allowed in `.ps1`
 
@@ -56,7 +60,12 @@ Do **not** use `robocopy` / `copy` to paths with Cyrillic — delegate to `.ps1`
 
 ## Check before commit
 
-From repo root:
+```bat
+cd tools\archiview-cv
+check_ps1_encoding.bat
+```
+
+Or from repo root (Linux / CI):
 
 ```bash
 python3 -c "
@@ -67,4 +76,9 @@ for p in Path('tools/archiview-cv').glob('*.ps1'):
 "
 ```
 
-Must print nothing for `.ps1` files.
+Must print nothing / exit 0 for `.ps1` files.
+
+## JSON / TypeScript / Markdown
+
+Cyrillic and `→` are **allowed** in `manifest.json`, `.tsx`, `.md` (UTF-8).  
+Only **`.ps1` source** must stay ASCII in string literals.

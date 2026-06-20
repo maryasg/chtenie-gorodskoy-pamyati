@@ -13,8 +13,8 @@
 
 ## Пошагово для нового дома
 
-1. Запустите **`run_gui_windows.bat`** в папке v15 на рабочем столе.
-2. Вкладка **«1. Выбор фото»**:
+1. Запустите **`ZAPUSK_V16.bat`** (или `run_gui_windows.bat`) в папке **v16** на рабочем столе.
+2. Вкладка **«0. Дом и сравнение»** / **«1. Источники»**:
    - Поле **адрес** — например `Москва, Большая Ордынка, 17` (программа назовёт папку по адресу).
    - **Историческое:** поиск PastVu **или** «Файл…» — выберите **одно** подходящее фото.
    - **Современное:** поиск Wikimedia/OSM **или** «Файл…» — **ваша** съёмка с телефона/камеры.
@@ -23,7 +23,8 @@
    archiview_projects\Большая_Ордынка_17\
      historical_sources\   ← сюда скопировано историческое
      modern_sources\       ← сюда скопировано современное
-     result\               ← сюда попадёт выпрямление и разметка
+     comparisons\cmp_005\   ← отдельные сравнения (v16)
+     result\               ← legacy (cmp_legacy_001), старая разметка
    ```
 4. Вкладки 2–3: углы фасада → выпрямление → разметка → «Сохранить».
 5. **`copy_to_website.bat`** — копирует `result/` на сайт в `public/explorer/<ID>/`.
@@ -60,13 +61,14 @@
 
 ## Связь с сайтом
 
-| На ПК (Archiview) | На сайте |
-|-------------------|----------|
-| `result/03_historical_rectified.png` | `public/explorer/MOSCOW_003/historical-rectified.png` |
-| `result/04_modern_rectified.png` | `modern-rectified.png` |
-| `result/06_marked_rectified.png` | `marked-facade.png` для overlay |
-| `result/10_side_by_side_marked.png` | `side-by-side-marked.png` для side_by_side |
+| На ПК (папка cmp ★ или result) | На сайте |
+|--------------------------------|----------|
+| `03_historical_rectified.png` | `historical-rectified.png` |
+| `04_modern_rectified.png` | `modern-rectified.png` |
+| `06_marked_rectified.png` | `marked-facade.png` (фон с подсветкой) |
+| `10_side_by_side_marked.png` | `side-by-side-marked.png` |
 | `annotations/manual_annotations.json` | `annotations.json` |
+| несколько cmp | `manifest.json` + `comparisons/cmp_XXX/` |
 
 `07_marked_on_original_modern.png` остаётся полезным для проверки и архива, но для overlay на сайте используется `06_marked_rectified.png`, чтобы координаты полигонов не съезжали.
 

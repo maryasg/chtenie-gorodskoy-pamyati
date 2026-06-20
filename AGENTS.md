@@ -14,6 +14,13 @@ This is a **Vite + React 19 + TypeScript + Tailwind v4** single-page app (no bac
 - `vite build` also copies `dist/index.html` to `dist/404.html` (GitHub Pages SPA fallback) via a custom plugin in `vite.config.ts`.
 - Deploy is via GitHub Actions (`.github/workflows/deploy-pages.yml`, preview workflows); no manual deploy step needed locally.
 
+### Archiview CV (`tools/archiview-cv/`)
+- Maria runs **v16** from Desktop (`archiview_cv_easy_v16_package`), synced via `setup_v16_desktop.bat` — not directly from git.
+- **Python 3.10–3.13 only**; 3.14 breaks NumPy/OpenCV (`install_windows.bat` rejects it).
+- **All `.ps1` string literals must be ASCII** — see `tools/archiview-cv/ENCODING_RULES.md`. Run `check_ps1_encoding.bat` before committing script changes.
+- Site facade: `ArchiviewFacadePanel` uses `marked-facade.png` (06) with hover-only curator plaques; multi-comparison via `public/explorer/*/manifest.json`.
+- Full agent context: `tools/archiview-cv/TECHNICAL_NOTES_RU.md` and repo root `ПРОДОЛЖИТЬ_РАБОТУ.md`.
+
 ### Archiview CV (`tools/archiview-cv/`) — Windows + Cyrillic
 
 Maria uses **cmd on Windows**; Desktop paths include Cyrillic (`Проект Память стен`).
