@@ -84,7 +84,8 @@ check_ps1_encoding.bat
 
 | Элемент | Поведение |
 |---------|-----------|
-| Фон | `marked-facade.png` (= 06) — выпрямленное фото **с подсветкой** |
+| Фон | `modern-rectified.png` (= **04**) — как вкладка «Результат»; подсветка при наведении (SVG) |
+| Запасной файл | `marked-facade.png` (= 06) — экспорт для архива; на сайте не обязателен для overlay |
 | Кураторские плашки | **Только при наведении** на область |
 | Координаты SVG | `buildRegionsRectified` — **без** гомографии H |
 | Несколько сравнений | `public/explorer/MOSCOW_NNN/manifest.json` + `ArchiviewComparisonPicker` |

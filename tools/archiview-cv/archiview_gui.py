@@ -2264,17 +2264,18 @@ def save_annotations_and_exports(outdir: Path, annotations: List[dict]) -> Dict[
     ann_dir = outdir / "annotations"
     ann_dir.mkdir(parents=True, exist_ok=True)
     manual_json = ann_dir / "manual_annotations.json"
+    annotations = normalize_annotation_list(annotations)
+    is_sb = project_is_side_by_side(project)
+    export_image_path = comparison_path if is_sb else modern_rect_path
     payload = {
         "version": APP_VERSION,
-        "image": str(comparison_path),
+        "image": str(export_image_path),
         "rectified_size": project.get("rectified_size"),
         "labeling_layout": project.get("labeling_layout", "overlay"),
         "side_by_side": project.get("side_by_side"),
         "annotations": annotations,
         "classes": CLASS_LABELS,
     }
-    annotations = normalize_annotation_list(annotations)
-    is_sb = project_is_side_by_side(project)
     historical_src_path = Path(project.get("historical_image") or "")
     historical_rect_path = Path(outputs.get("historical_rectified", outdir / "03_historical_rectified.png"))
 

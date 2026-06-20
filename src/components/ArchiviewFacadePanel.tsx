@@ -111,8 +111,8 @@ export function ArchiviewFacadePanel({
     if (assets.labelingLayout === 'side_by_side' && assets.sideBySideMarkedUrl) {
       return assets.sideBySideMarkedUrl
     }
-    // marked-facade.png = 06_marked_rectified: выпрямленный фасад с обводками подсветки
-    return assets.markedFacadeUrl
+    // Как вкладка «Результат» в Archiview: выпрямлённый modern (04), не overlay для разметки (05).
+    return assets.modernRectifiedUrl || assets.markedFacadeUrl
   }, [assets])
 
   const makeRegion = useCallback(
@@ -223,6 +223,7 @@ export function ArchiviewFacadePanel({
         } else if (
           !isSb &&
           (explicitLayout === 'overlay' ||
+            explicitLayout == null ||
             imageMatchesRectifiedSize(img.naturalWidth, img.naturalHeight, annData?.rectified_size))
         ) {
           buildRegionsRectified(annotations, img.naturalWidth, img.naturalHeight)
