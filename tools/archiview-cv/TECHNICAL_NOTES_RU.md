@@ -67,8 +67,9 @@ check_ps1_encoding.bat
 | `03_historical_rectified.png` | Выпрямленное историческое |
 | `04_modern_rectified.png` | Выпрямленное современное |
 | `05_comparison_for_labeling.png` | **Фон разметки** (overlay / до-после / настройки с вкладки «3. Сравнение») |
-| `06_marked_rectified.png` | Обводки на **выпрямленном** modern → на сайт как `marked-facade.png` |
+| `06_marked_rectified.png` | Обводки на **выпрямленном** modern → архив / `marked-facade.png` |
 | `07_marked_on_original_modern.png` | Архив на полном кадре; **не** основа интерактива на сайте |
+| `11_modern_source_for_site.png` | Исходное современное (с обрезкой) → `modern-source.png` на сайте |
 | `08_marked_on_original_modern_labeled.png` | С подписями на фото; не для hover-плашек на сайте |
 | `10_side_by_side_marked.png` | Режим разных ракурсов |
 
