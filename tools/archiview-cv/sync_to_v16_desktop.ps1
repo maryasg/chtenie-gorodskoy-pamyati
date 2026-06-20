@@ -90,6 +90,8 @@ $files = @(
     'website_buildings.json',
     'README_v16_ru.md',
     'ENCODING_RULES.md',
+    'TECHNICAL_NOTES_RU.md',
+    'check_ps1_encoding.bat',
     'archiview_gui.py',
     'archiview_project_model.py',
     'archiview_project_ui.py',

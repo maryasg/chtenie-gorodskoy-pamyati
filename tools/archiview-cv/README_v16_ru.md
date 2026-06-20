@@ -78,6 +78,23 @@ npm install
 
 Нужен **Node.js** (https://nodejs.org/). Код дома — в поле «Код на сайте» (MOSCOW_001 …).
 
+## Python и venv
+
+- Подходит **Python 3.10 – 3.13** (установщик ищет 3.12 / 3.11 в первую очередь).
+- **Python 3.14 не подходит** — NumPy и OpenCV не запустятся. Если видите ошибку импорта: `PERESOZDAT_VENV.bat`, затем снова `install_windows.bat`.
+
+## Технические файлы (для чата Cursor)
+
+| Файл | Зачем |
+|------|--------|
+| `ENCODING_RULES.md` | Почему в `.ps1` нельзя кириллицу (ломает localhost) |
+| `TECHNICAL_NOTES_RU.md` | Картинки 03–10, manifest, git-конфликты |
+| `check_ps1_encoding.bat` | Проверка скриптов перед коммитом |
+
+## Git: конфликт manifest.json
+
+Если `git pull` ругается на `public/explorer/MOSCOW_001/manifest.json` — чаще всего спор только в строке `updatedAt`. См. `TECHNICAL_NOTES_RU.md`. Перед экспортом на сайт делайте `git pull`.
+
 ## Редактирование областей (новое в v16)
 
 1. Вкладка **4. Разметка**

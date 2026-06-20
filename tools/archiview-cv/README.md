@@ -1,39 +1,33 @@
-# Archiview CV
+# Archiview CV (в репозитории сайта)
 
-Две папки на рабочем столе:
+Рабочая программа Maria — **отдельная папка v16 на рабочем столе** (`archiview_cv_easy_v16_package`).
 
-| Папка | Версия | Зачем |
-|--------|--------|--------|
-| `archiview_cv_easy_v15_package` | v15 | Стабильная, без редактирования точек |
-| `archiview_cv_easy_v16_package` | v16 | Редактирование вершин полигонов |
+Здесь в Git — код, чтобы не потерять версию вместе с сайтом.
 
-## v15 (как сейчас)
+## Документация
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\sync_to_v15_desktop.ps1
+| Файл | Для кого |
+|------|----------|
+| [README_v16_ru.md](README_v16_ru.md) | Maria — установка, вкладки, localhost |
+| [README_v15_ru.md](README_v15_ru.md) | Старая v15 (запасная) |
+| [ENCODING_RULES.md](ENCODING_RULES.md) | Агенты — **только ASCII в .ps1** |
+| [TECHNICAL_NOTES_RU.md](TECHNICAL_NOTES_RU.md) | Агенты — Python, картинки, manifest, git |
+| [КАК_РАБОТАЕТ_ПАПКА_ПРОЕКТА_ru.md](КАК_РАБОТАЕТ_ПАПКА_ПРОЕКТА_ru.md) | Структура папки дома |
+| [../../ПРОДОЛЖИТЬ_РАБОТУ.md](../../ПРОДОЛЖИТЬ_РАБОТУ.md) | Handoff для нового чата Cursor |
+
+## Быстрый старт (Maria)
+
+```bat
+cd tools\archiview-cv
+setup_v16_desktop.bat
 ```
 
-Запуск: `run_gui_windows.bat` в папке v15. Заголовок: **v15**.
+На Desktop в папке v16: `install_windows.bat` (первый раз), затем `ZAPUSK_V16.bat`.
 
-## v16 (редактирование областей)
+## Результат → сайт
 
-Первый раз:
+1. Archiview: «Отправить на сайт» или `copy_to_website.bat`
+2. GitHub Desktop: Commit + Push
+3. Ctrl+F5 на странице дома
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\bootstrap_v16_desktop.ps1
-powershell -ExecutionPolicy Bypass -File .\sync_to_v16_desktop.ps1
-```
-
-В папке v16: `install_windows.bat` → `run_gui_windows.bat`. Заголовок: **v16 polygon edit**.
-
-Подробно: `README_v16_ru.md`.
-
-## Если разметка пропала
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\restore_markup_from_website.ps1 -CardId MOSCOW_003
-```
-
-## На сайт
-
-`copy_to_website.bat` → GitHub Desktop → Push.
+Проверка `.ps1` перед коммитом: `check_ps1_encoding.bat`
