@@ -111,8 +111,12 @@ export function ArchiviewFacadePanel({
     if (assets.labelingLayout === 'side_by_side' && assets.sideBySideMarkedUrl) {
       return assets.sideBySideMarkedUrl
     }
-    // Как вкладка «Результат» в Archiview: выпрямлённый modern (04), не overlay для разметки (05).
-    return assets.modernRectifiedUrl || assets.markedFacadeUrl
+    // Исходное современное фото (с обрезкой, если была) — как вкладка «Результат» в Archiview.
+    return assets.modernSourceUrl || assets.modernRectifiedUrl || assets.markedFacadeUrl
+  }, [assets])
+
+  const usesSourceModernPhoto = useMemo(() => {
+    return assets.labelingLayout !== 'side_by_side' && Boolean(assets.modernSourceUrl)
   }, [assets])
 
   const makeRegion = useCallback(
@@ -220,11 +224,11 @@ export function ArchiviewFacadePanel({
         }
         if (isSb && annData?.side_by_side) {
           buildRegionsSideBySide(annotations, annData, img.naturalWidth, img.naturalHeight)
+        } else if (!isSb && usesSourceModernPhoto && H) {
+          buildRegionsOverlay(annotations, H, img.naturalWidth, img.naturalHeight)
         } else if (
           !isSb &&
-          (explicitLayout === 'overlay' ||
-            explicitLayout == null ||
-            imageMatchesRectifiedSize(img.naturalWidth, img.naturalHeight, annData?.rectified_size))
+          imageMatchesRectifiedSize(img.naturalWidth, img.naturalHeight, annData?.rectified_size)
         ) {
           buildRegionsRectified(annotations, img.naturalWidth, img.naturalHeight)
         } else if (H) {
@@ -245,7 +249,7 @@ export function ArchiviewFacadePanel({
     return () => {
       cancelled = true
     }
-  }, [assets, buildRegionsOverlay, buildRegionsRectified, buildRegionsSideBySide, displayImageUrl])
+  }, [assets, buildRegionsOverlay, buildRegionsRectified, buildRegionsSideBySide, displayImageUrl, usesSourceModernPhoto])
 
   const active =
     hoverIdx !== null
@@ -271,8 +275,8 @@ export function ArchiviewFacadePanel({
           </>
         ) : (
           <>
-            Выпрямленное фото с подсветкой областей. Наведите на <strong>область</strong> — сверху
-            появится кураторская плашка с историей. Список справа синхронизирован с подсветкой.
+            Современное фото в исходном ракурсе с подсветкой областей. Наведите на <strong>область</strong>{' '}
+            — сверху появится кураторская плашка с историей. Список справа синхронизирован с подсветкой.
           </>
         )}
       </p>
@@ -296,7 +300,7 @@ export function ArchiviewFacadePanel({
                 alt={
                   sideBySide
                     ? 'Историческое и современное фото с разметкой Archiview'
-                    : 'Выпрямленное фото фасада с подсветкой Archiview'
+                    : 'Современное фото фасада с подсветкой Archiview'
                 }
                 width={imgSize.w}
                 height={imgSize.h}

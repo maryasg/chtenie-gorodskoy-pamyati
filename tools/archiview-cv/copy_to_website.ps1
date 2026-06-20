@@ -248,6 +248,7 @@ if (-not (Test-Path -LiteralPath $Web)) {
 }
 
 $Pairs = @(
+    ,@('11_modern_source_for_site.png', 'modern-source.png')
     ,@('08_marked_on_original_modern_labeled.png', 'marked-facade-labeled.png')
     ,@('annotations\manual_annotations.json', 'annotations.json')
     ,@('03_historical_rectified.png', 'historical-rectified.png')
@@ -293,10 +294,21 @@ function Export-ComparisonBundle {
         $src = Join-Path $Result $pair[0]
         $dst = Join-Path $WebDest $pair[1]
         if (-not (Test-Path -LiteralPath $src)) {
-            if ($pair[0] -notmatch '^10_') {
-                Write-Host "MISSING: $($pair[0]) in $Result"
+            if ($pair[0] -eq '11_modern_source_for_site.png' -and -not $isSideBySide) {
+                $venvPy = Join-Path $ScriptDir '.venv\Scripts\python.exe'
+                $exportPy = Join-Path $ScriptDir 'archiview_site_export.py'
+                if ((Test-Path -LiteralPath $venvPy) -and (Test-Path -LiteralPath $exportPy)) {
+                    try {
+                        & $venvPy $exportPy $Result 2>$null
+                    } catch { }
+                }
             }
-            continue
+            if (-not (Test-Path -LiteralPath $src)) {
+                if ($pair[0] -notmatch '^(10_|11_)') {
+                    Write-Host "MISSING: $($pair[0]) in $Result"
+                }
+                continue
+            }
         }
         Copy-Item -LiteralPath $src -Destination $dst -Force
         Write-Host "OK: $WebDest\$($pair[1])"
@@ -401,6 +413,7 @@ function New-ManifestEntry {
         labeledFacadeUrl = "${prefix}marked-facade-labeled.png"
         historicalRectifiedUrl = "${prefix}historical-rectified.png"
         modernRectifiedUrl = "${prefix}modern-rectified.png"
+        modernSourceUrl = "${prefix}modern-source.png"
         annotationsUrl = "${prefix}annotations.json"
         facadeProjectUrl = "${prefix}facade-project.json"
     }

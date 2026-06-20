@@ -79,6 +79,9 @@ $entryLines += @(
     ('    historicalRectifiedUrl: `${base}explorer/{0}/historical-rectified.png`,' -f $CardId)
     ('    modernRectifiedUrl: `${base}explorer/{0}/modern-rectified.png`,' -f $CardId)
 )
+if (-not $hasSideBySide) {
+    $entryLines += ('    modernSourceUrl: `${base}explorer/{0}/modern-source.png`,' -f $CardId)
+}
 if ($histLine) { $entryLines += $histLine }
 $entryLines += @(
     ('    modernPhotoYear: ''{0}'',' -f $modYear)

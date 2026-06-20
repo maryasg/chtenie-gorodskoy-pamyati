@@ -2128,6 +2128,11 @@ def prepare_rectified_project(
         "outputs": {k: str(v) for k, v in paths.items() if k != "project_json"},
     }
     paths["project_json"].write_text(json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8")
+    if not side_by_side:
+        try:
+            export_modern_source_for_site(outdir, project)
+        except Exception:
+            pass
     return project
 
 
@@ -2244,6 +2249,18 @@ def draw_polygons_on_image(
     return out
 
 
+def export_modern_source_for_site(outdir: Path, project: dict) -> Optional[Path]:
+    from archiview_site_export import export_modern_source_for_site as _export
+
+    return _export(outdir, project)
+
+
+def export_modern_source_for_site_from_result(result_dir: str) -> int:
+    from archiview_site_export import export_modern_source_for_site_from_result as _export
+
+    return _export(result_dir)
+
+
 def save_annotations_and_exports(outdir: Path, annotations: List[dict]) -> Dict[str, str]:
     project_path = outdir / "project_v8.json"
     if not project_path.exists():
@@ -2266,7 +2283,13 @@ def save_annotations_and_exports(outdir: Path, annotations: List[dict]) -> Dict[
     manual_json = ann_dir / "manual_annotations.json"
     annotations = normalize_annotation_list(annotations)
     is_sb = project_is_side_by_side(project)
-    export_image_path = comparison_path if is_sb else modern_rect_path
+    modern_source_for_site = None
+    if not is_sb:
+        try:
+            modern_source_for_site = export_modern_source_for_site(outdir, project)
+        except Exception:
+            modern_source_for_site = None
+    export_image_path = comparison_path if is_sb else (modern_source_for_site or modern_rect_path)
     payload = {
         "version": APP_VERSION,
         "image": str(export_image_path),

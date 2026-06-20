@@ -24,6 +24,8 @@ export interface ArchiviewBuildingAssets {
   historicalRectifiedUrl: string
   /** 04_modern_rectified.png */
   modernRectifiedUrl: string
+  /** 11_modern_source_for_site.png — исходное современное (с обрезкой, если была) */
+  modernSourceUrl?: string
   historicalPhotoYear?: string
   modernPhotoYear?: string
   annotationsUrl: string
@@ -42,6 +44,7 @@ export const ARCHIVIEW_ASSETS: Record<string, ArchiviewBuildingAssets> = {
     labelingLayout: 'overlay',
     historicalRectifiedUrl: `${base}explorer/MOSCOW_001/historical-rectified.png`,
     modernRectifiedUrl: `${base}explorer/MOSCOW_001/modern-rectified.png`,
+    modernSourceUrl: `${base}explorer/MOSCOW_001/modern-source.png`,
     historicalPhotoYear: '1924',
     modernPhotoYear: '2026',
     annotationsUrl: `${base}explorer/MOSCOW_001/annotations.json`,
@@ -54,6 +57,7 @@ export const ARCHIVIEW_ASSETS: Record<string, ArchiviewBuildingAssets> = {
     labeledFacadeUrl: `${base}explorer/MOSCOW_003/marked-facade-labeled.png`,
     historicalRectifiedUrl: `${base}explorer/MOSCOW_003/historical-rectified.png`,
     modernRectifiedUrl: `${base}explorer/MOSCOW_003/modern-rectified.png`,
+    modernSourceUrl: `${base}explorer/MOSCOW_003/modern-source.png`,
     historicalPhotoYear: '1911',
     modernPhotoYear: '2026',
     annotationsUrl: `${base}explorer/MOSCOW_003/annotations.json`,
