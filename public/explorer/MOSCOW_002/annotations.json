@@ -1,0 +1,77 @@
+{
+    "version":  "v15 projects + hand cursor + delete any region",
+    "image":  "04_modern_rectified.png",
+    "rectified_size":  {
+                           "width":  4200,
+                           "height":  2494
+                       },
+    "labeling_layout":  "overlay",
+    "side_by_side":  {
+
+                     },
+    "annotations":  [
+                        {
+                            "id":  1,
+                            "class":  "other_artifact",
+                            "label_ru":  "Другой артефакт / другое изменение",
+                            "comment":  "Обнаруженный при реставрации исторический фасад",
+                            "polygon":  [
+                                            [
+                                                1471.4,
+                                                2109.5
+                                            ],
+                                            [
+                                                1457.2,
+                                                1570.6
+                                            ],
+                                            [
+                                                1985.4,
+                                                1542.3
+                                            ],
+                                            [
+                                                1974.8,
+                                                2137.9
+                                            ]
+                                        ],
+                            "coordinate_space":  "rectified",
+                            "image_side":  "modern",
+                            "polygon_source":  [
+                                                   [
+                                                       1218.3916015625,
+                                                       2230.83837890625
+                                                   ],
+                                                   [
+                                                       1334.1109619140625,
+                                                       1541.913330078125
+                                                   ],
+                                                   [
+                                                       1907.8450927734375,
+                                                       1534.908935546875
+                                                   ],
+                                                   [
+                                                       1844.45849609375,
+                                                       2298.753662109375
+                                                   ]
+                                               ]
+                        }
+                    ],
+    "classes":  {
+                    "added_floor":  "Надстройка / новый этаж",
+                    "extension":  "Пристройка / новый объём",
+                    "filled_window":  "Заложенное окно",
+                    "new_window":  "Новое окно / новый проём",
+                    "lost_balcony":  "Утраченный балкон",
+                    "new_balcony":  "Новый балкон / устройство балкона",
+                    "changed_entrance":  "Изменённый вход",
+                    "lost_decor":  "Утраченный декор",
+                    "historical_signage":  "Историческая вывеска (на старом фото)",
+                    "lost_signage":  "Утраченная вывеска",
+                    "signage_rediscovered":  "Обнаруженная при реставрации вывеска",
+                    "restored_signage":  "Восстановленная вывеска",
+                    "new_signage":  "Новая вывеска (не историческая)",
+                    "memorial_plaque":  "Мемориальная / памятная табличка",
+                    "technical_artifact":  "Новый технический элемент",
+                    "other_artifact":  "Другой артефакт / другое изменение",
+                    "check_manually":  "Проверить вручную"
+                }
+}
