@@ -8537,9 +8537,10 @@ class AppV12(AppV11):
         return True
 
     def _schedule_apply_compare_to_markup(self, delay: int = 320) -> None:
-        if self._labeling_sync_job is not None:
+        job = getattr(self, "_labeling_sync_job", None)
+        if job is not None:
             try:
-                self.after_cancel(self._labeling_sync_job)
+                self.after_cancel(job)
             except Exception:
                 pass
         self._labeling_sync_job = self.after(delay, self._run_scheduled_apply_compare_to_markup)
@@ -9178,6 +9179,7 @@ class AppV13(AppV12):
         self._compare_refresh_job = None
         self._markup_refresh_job = None
         self._result_refresh_job = None
+        self._labeling_sync_job = None
         self._preview_base_cache: Dict[Tuple[object, int, int], Tuple[object, object]] = {}
 
         self.compare_mode = tk.StringVar(value="overlay")
