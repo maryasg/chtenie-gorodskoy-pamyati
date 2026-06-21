@@ -89,6 +89,17 @@ function shortText(text: string, maxLength = 260): string {
   return `${shortened.trim()}...`
 }
 
+type FacadeImageKind = 'side_by_side' | 'source_modern' | 'rectified' | 'marked'
+
+function probeImageSize(url: string): Promise<{ w: number; h: number } | null> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight })
+    img.onerror = () => resolve(null)
+    img.src = url
+  })
+}
+
 export function ArchiviewFacadePanel({
   assets,
   building,
@@ -102,21 +113,27 @@ export function ArchiviewFacadePanel({
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
   const [imgSize, setImgSize] = useState({ w: 1, h: 1 })
   const [sideBySide, setSideBySide] = useState(false)
+  const [displayImageUrl, setDisplayImageUrl] = useState('')
+  const [imageKind, setImageKind] = useState<FacadeImageKind | null>(null)
 
   const tracesById = useMemo(() => {
     return new Map(building?.memoryTraces.map((trace) => [trace.id, trace]) ?? [])
   }, [building])
 
-  const displayImageUrl = useMemo(() => {
+  const facadeImageCandidates = useMemo(() => {
     if (assets.labelingLayout === 'side_by_side' && assets.sideBySideMarkedUrl) {
-      return assets.sideBySideMarkedUrl
+      return [{ url: assets.sideBySideMarkedUrl, kind: 'side_by_side' as const }]
     }
-    // Исходное современное фото (с обрезкой, если была) — как вкладка «Результат» в Archiview.
-    return assets.modernSourceUrl || assets.modernRectifiedUrl || assets.markedFacadeUrl
-  }, [assets])
-
-  const usesSourceModernPhoto = useMemo(() => {
-    return assets.labelingLayout !== 'side_by_side' && Boolean(assets.modernSourceUrl)
+    const items: { url: string; kind: FacadeImageKind }[] = []
+    if (assets.modernSourceUrl) items.push({ url: assets.modernSourceUrl, kind: 'source_modern' })
+    if (assets.markedFacadeUrl) items.push({ url: assets.markedFacadeUrl, kind: 'marked' })
+    if (assets.modernRectifiedUrl) items.push({ url: assets.modernRectifiedUrl, kind: 'rectified' })
+    const seen = new Set<string>()
+    return items.filter((item) => {
+      if (seen.has(item.url)) return false
+      seen.add(item.url)
+      return true
+    })
   }, [assets])
 
   const makeRegion = useCallback(
@@ -200,6 +217,11 @@ export function ArchiviewFacadePanel({
     let cancelled = false
 
     const load = async () => {
+      setImageOk(false)
+      setDisplayImageUrl('')
+      setImageKind(null)
+      setRegions([])
+
       const [annRes, projRes] = await Promise.all([
         fetch(assets.annotationsUrl),
         fetch(assets.facadeProjectUrl),
@@ -208,48 +230,59 @@ export function ArchiviewFacadePanel({
       const projData = projRes.ok ? await projRes.json() : null
       const H = isHomography(projData?.H_rect_to_modern) ? projData.H_rect_to_modern : undefined
       const annotations = (annData?.annotations ?? []) as ArchiviewAnnotation[]
-      const explicitLayout = annData?.labeling_layout ?? assets.labelingLayout
-      const layout = explicitLayout ?? 'legacy_overlay'
+      const layout = (annData?.labeling_layout ?? assets.labelingLayout) ?? 'legacy_overlay'
       const isSb = layout === 'side_by_side'
       if (!cancelled) setSideBySide(isSb)
 
-      const img = new Image()
-      img.onload = () => {
+      let loaded: { url: string; kind: FacadeImageKind; w: number; h: number } | null = null
+      for (const candidate of facadeImageCandidates) {
+        const size = await probeImageSize(candidate.url)
         if (cancelled) return
-        setImgSize({ w: img.naturalWidth, h: img.naturalHeight })
-        setImageOk(true)
-        if (!annotations.length) {
-          setRegions([])
-          return
-        }
-        if (isSb && annData?.side_by_side) {
-          buildRegionsSideBySide(annotations, annData, img.naturalWidth, img.naturalHeight)
-        } else if (!isSb && usesSourceModernPhoto && H) {
-          buildRegionsOverlay(annotations, H, img.naturalWidth, img.naturalHeight)
-        } else if (
-          !isSb &&
-          imageMatchesRectifiedSize(img.naturalWidth, img.naturalHeight, annData?.rectified_size)
-        ) {
-          buildRegionsRectified(annotations, img.naturalWidth, img.naturalHeight)
-        } else if (H) {
-          buildRegionsOverlay(annotations, H, img.naturalWidth, img.naturalHeight)
-        } else if (!isSb && !annData?.rectified_size) {
-          buildRegionsRectified(annotations, img.naturalWidth, img.naturalHeight)
-        } else {
-          setRegions([])
+        if (size) {
+          loaded = { url: candidate.url, kind: candidate.kind, w: size.w, h: size.h }
+          break
         }
       }
-      img.onerror = () => {
+
+      if (!loaded || cancelled) {
         if (!cancelled) setImageOk(false)
+        return
       }
-      img.src = displayImageUrl
+
+      setDisplayImageUrl(loaded.url)
+      setImageKind(loaded.kind)
+      setImgSize({ w: loaded.w, h: loaded.h })
+      setImageOk(true)
+
+      if (!annotations.length) {
+        setRegions([])
+        return
+      }
+
+      if (isSb && annData?.side_by_side) {
+        buildRegionsSideBySide(annotations, annData, loaded.w, loaded.h)
+      } else if (!isSb && loaded.kind === 'source_modern' && H) {
+        buildRegionsOverlay(annotations, H, loaded.w, loaded.h)
+      } else if (
+        !isSb &&
+        (loaded.kind === 'rectified' ||
+          imageMatchesRectifiedSize(loaded.w, loaded.h, annData?.rectified_size))
+      ) {
+        buildRegionsRectified(annotations, loaded.w, loaded.h)
+      } else if (H) {
+        buildRegionsOverlay(annotations, H, loaded.w, loaded.h)
+      } else if (!isSb && !annData?.rectified_size) {
+        buildRegionsRectified(annotations, loaded.w, loaded.h)
+      } else {
+        setRegions([])
+      }
     }
 
     load()
     return () => {
       cancelled = true
     }
-  }, [assets, buildRegionsOverlay, buildRegionsRectified, buildRegionsSideBySide, displayImageUrl, usesSourceModernPhoto])
+  }, [assets, buildRegionsOverlay, buildRegionsRectified, buildRegionsSideBySide, facadeImageCandidates])
 
   const active =
     hoverIdx !== null
@@ -272,6 +305,11 @@ export function ArchiviewFacadePanel({
           <>
             Слева — историческое фото, справа — современное. Наведите на <strong>номер или область</strong>{' '}
             — сверху появится кураторская плашка.
+          </>
+        ) : imageKind === 'rectified' ? (
+          <>
+            Выпрямленное фото с подсветкой областей. Наведите на <strong>область</strong> — сверху
+            появится кураторская плашка с историей. Список справа синхронизирован с подсветкой.
           </>
         ) : (
           <>
