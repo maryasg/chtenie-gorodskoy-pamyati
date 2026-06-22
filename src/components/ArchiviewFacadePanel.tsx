@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ArchiviewAnnotation, ArchiviewBuildingAssets } from '../data/explorer/archiviewAssets'
 import type { Building, MemoryTrace } from '../types/building'
-import { ConfidenceBadge } from './ConfidenceBadge'
 import {
   polygonAreaAbs,
   polygonCentroid,
@@ -434,7 +433,6 @@ export function ArchiviewFacadePanel({
   }, [assets, buildRegionsOverlay, buildRegionsRectified, buildRegionsSideBySide, resetView])
 
   const active = hoverIdx !== null ? regions.find((r) => r.idx === hoverIdx) : null
-  const selected = selectedIdx !== null ? regions.find((r) => r.idx === selectedIdx) : null
 
   /** Large regions (e.g. #12) must not block clicks on smaller ones (#6, #9) underneath. */
   const regionsForHit = useMemo(
@@ -694,21 +692,6 @@ export function ArchiviewFacadePanel({
                   </li>
                 )
               })}
-              {selected?.trace && (
-                <li className="rounded-xl border border-arch-green/25 bg-arch-green-soft p-3">
-                  <p className="arch-kicker mb-1">Информация от куратора</p>
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <h3 className="font-semibold leading-tight text-arch-green-deep">
-                      {selected.trace.title}
-                    </h3>
-                    <ConfidenceBadge level={selected.trace.confidence} />
-                  </div>
-                  <p className="text-xs text-arch-muted">{selected.trace.period}</p>
-                  <p className="mt-2 text-sm leading-relaxed text-arch-ink/80">
-                    {selected.trace.userMessage}
-                  </p>
-                </li>
-              )}
             </ol>
           )}
         </div>
