@@ -4,7 +4,7 @@
     "comparisons":  [
                         {
                             "comparisonId":  "cmp_005",
-                            "title":  "1924 -\u003e 2026",
+                            "title":  "1920–1930-е -> 2026",
                             "labelingLayout":  "overlay",
                             "annotationCount":  11,
                             "isLegacy":  false,
@@ -15,7 +15,7 @@
                             "modernSourceUrl":  "modern-source.png",
                             "annotationsUrl":  "annotations.json",
                             "facadeProjectUrl":  "facade-project.json",
-                            "historicalPhotoYear":  "1924",
+                            "historicalPhotoYear":  "1920–1930-е",
                             "modernPhotoYear":  "2026"
                         },
                         {
