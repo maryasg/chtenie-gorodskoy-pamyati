@@ -13,6 +13,7 @@ import {
   type ExplorerManifest,
 } from '../data/explorer/explorerManifest'
 import { ArchiviewComparisonPicker } from '../components/ArchiviewComparisonPicker'
+import { TraceMessageBody } from '../lib/traceMessage'
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Building, MemoryTrace } from '../types/building'
@@ -341,7 +342,13 @@ export function BuildingPage() {
                 <ConfidenceBadge level={t.confidence} />
                 <span className="text-xs text-arch-muted">{t.period}</span>
               </div>
-              <p className="mt-2 text-sm text-arch-ink/80">{t.userMessage}</p>
+              <p className="mt-2 text-sm leading-relaxed">
+                <TraceMessageBody
+                  text={t.userMessage}
+                  bodyClassName="text-arch-ink/80"
+                  sourceClassName="text-xs leading-relaxed text-arch-muted"
+                />
+              </p>
               <MemoryTraceImage trace={t} />
             </li>
           ))}
