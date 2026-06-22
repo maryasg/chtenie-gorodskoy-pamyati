@@ -7,7 +7,7 @@ export const MAP_STATUS_META: Record<
   MapStatus,
   { label: string; color: string; marker: string }
 > = {
-  verified: { label: 'Достоверные данные', color: '#16a34a', marker: '#15803d' },
+  verified: { label: 'Проверено куратором', color: '#16a34a', marker: '#15803d' },
   preliminary_reading: {
     label: 'Предварительное чтение',
     color: '#ca8a04',
