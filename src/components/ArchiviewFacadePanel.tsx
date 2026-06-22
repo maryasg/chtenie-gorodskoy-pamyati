@@ -9,6 +9,7 @@ import {
   transformPolygon,
   type Point,
 } from '../lib/archiviewGeometry'
+import { TraceMessageBody } from '../lib/traceMessage'
 
 const CLASS_COLORS: Record<string, string> = {
   added_floor: '#00aa00',
@@ -478,9 +479,11 @@ export function ArchiviewFacadePanel({
           <div className="relative min-w-0 flex-1">
             <div
               ref={viewportRef}
-              className={`relative max-h-[min(78vh,820px)] w-full overflow-hidden rounded-xl border border-arch-line bg-arch-surface-2/20 shadow-sm ${
-                zoom > ZOOM_MIN ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : ''
-              }`}
+              className={`relative w-full rounded-xl border border-arch-line bg-arch-surface-2/20 shadow-sm ${
+                zoom > ZOOM_MIN
+                  ? 'max-h-[min(78vh,820px)] overflow-hidden'
+                  : 'overflow-visible'
+              } ${zoom > ZOOM_MIN ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
               onMouseLeave={() => setHoverIdx(null)}
               onPointerDown={handleViewportPointerDown}
               onPointerMove={handleViewportPointerMove}
@@ -523,7 +526,7 @@ export function ArchiviewFacadePanel({
               </div>
 
               <div
-                className="relative inline-block max-w-full origin-top-left will-change-transform"
+                className="relative inline-block max-w-full origin-top-left p-1 will-change-transform"
                 style={{
                   transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
                   transition: isPanning ? undefined : 'transform 160ms ease-out',
@@ -541,9 +544,9 @@ export function ArchiviewFacadePanel({
                   draggable={false}
                   className="block h-auto w-auto max-h-[min(78vh,820px)] max-w-full select-none rounded-xl"
                 />
-              {regions.length > 0 && (
+                {regions.length > 0 && (
                 <svg
-                  className="pointer-events-none absolute inset-0 h-full w-full rounded-xl"
+                  className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
                   viewBox="0 0 100 100"
                   preserveAspectRatio="none"
                   aria-hidden
@@ -565,7 +568,7 @@ export function ArchiviewFacadePanel({
                 </svg>
               )}
               {regions.length > 0 && (
-                <div className="pointer-events-none absolute inset-0 rounded-xl" aria-hidden>
+                <div className="pointer-events-none absolute inset-0 overflow-visible" aria-hidden>
                   {regions.map((r) => {
                     const on = hoverIdx === r.idx || selectedIdx === r.idx
                     const color = CLASS_COLORS[r.cls] ?? '#444'
@@ -593,7 +596,7 @@ export function ArchiviewFacadePanel({
               )}
               {regions.length > 0 && (
                 <svg
-                  className="absolute inset-0 h-full w-full rounded-xl"
+                  className="absolute inset-0 h-full w-full overflow-visible"
                   viewBox="0 0 100 100"
                   preserveAspectRatio="none"
                 >
@@ -633,8 +636,12 @@ export function ArchiviewFacadePanel({
                           <span className="mt-0.5 block text-[11px] text-arch-surface/75">
                             {active.trace.period}
                           </span>
-                          <span className="mt-1 block text-[11px] font-normal text-arch-surface/90">
-                            {shortText(active.trace.userMessage)}
+                          <span className="mt-1 block text-[11px] font-normal">
+                            <TraceMessageBody
+                              text={shortText(active.trace.userMessage)}
+                              bodyClassName="text-arch-surface/90"
+                              sourceClassName="text-[10px] font-normal leading-snug text-arch-surface/55"
+                            />
                           </span>
                         </>
                       ) : active.comment ? (
