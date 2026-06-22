@@ -22,6 +22,8 @@
                             "labelingLayout":  "overlay",
                             "annotationCount":  10,
                             "isLegacy":  false,
+                            "historicalPhotoYear":  "1924",
+                            "modernPhotoYear":  "2026",
                             "markedFacadeUrl":  "comparisons/cmp_005/marked-facade.png",
                             "labeledFacadeUrl":  "comparisons/cmp_005/marked-facade-labeled.png",
                             "historicalRectifiedUrl":  "comparisons/cmp_005/historical-rectified.png",
@@ -29,20 +31,6 @@
                             "modernSourceUrl":  "comparisons/cmp_005/modern-source.png",
                             "annotationsUrl":  "comparisons/cmp_005/annotations.json",
                             "facadeProjectUrl":  "comparisons/cmp_005/facade-project.json"
-                        },
-                        {
-                            "comparisonId":  "cmp_008",
-                            "title":  "manual_old_plan_1840_usadba_2.jpg + modern_20260520_151333.jpg",
-                            "labelingLayout":  "overlay",
-                            "annotationCount":  2,
-                            "isLegacy":  false,
-                            "markedFacadeUrl":  "comparisons/cmp_008/marked-facade.png",
-                            "labeledFacadeUrl":  "comparisons/cmp_008/marked-facade-labeled.png",
-                            "historicalRectifiedUrl":  "comparisons/cmp_008/historical-rectified.png",
-                            "modernRectifiedUrl":  "comparisons/cmp_008/modern-rectified.png",
-                            "modernSourceUrl":  "comparisons/cmp_008/modern-source.png",
-                            "annotationsUrl":  "comparisons/cmp_008/annotations.json",
-                            "facadeProjectUrl":  "comparisons/cmp_008/facade-project.json"
                         }
                     ],
     "updatedAt":  "2026-06-21T10:51:30.1958072Z"

@@ -91,13 +91,73 @@ function shortText(text: string, maxLength = 260): string {
 
 type FacadeImageKind = 'side_by_side' | 'source_modern' | 'rectified' | 'marked'
 
-function probeImageSize(url: string): Promise<{ w: number; h: number } | null> {
+type ImageProbe = { w: number; h: number; bytes: number }
+
+async function probeImageMeta(url: string): Promise<ImageProbe | null> {
+  let bytes = 0
+  try {
+    const head = await fetch(url, { method: 'HEAD', cache: 'no-cache' })
+    if (!head.ok) return null
+    bytes = Number(head.headers.get('content-length') || 0)
+  } catch {
+    return null
+  }
   return new Promise((resolve) => {
     const img = new Image()
-    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight })
+    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight, bytes })
     img.onerror = () => resolve(null)
     img.src = url
   })
+}
+
+/** marked-facade из 06 (overlay) часто заметно меньше modern-rectified — не берём как фон. */
+function markedLooksLikeOverlayExport(markedBytes: number, rectifiedBytes: number): boolean {
+  if (markedBytes <= 0 || rectifiedBytes <= 0) return false
+  return markedBytes < rectifiedBytes * 0.93
+}
+
+async function pickFacadeImage(
+  assets: ArchiviewBuildingAssets,
+): Promise<{ url: string; kind: FacadeImageKind; w: number; h: number } | null> {
+  if (assets.labelingLayout === 'side_by_side' && assets.sideBySideMarkedUrl) {
+    const sb = await probeImageMeta(assets.sideBySideMarkedUrl)
+    return sb ? { url: assets.sideBySideMarkedUrl, kind: 'side_by_side', w: sb.w, h: sb.h } : null
+  }
+
+  if (assets.modernSourceUrl) {
+    const source = await probeImageMeta(assets.modernSourceUrl)
+    if (source) {
+      return { url: assets.modernSourceUrl, kind: 'source_modern', w: source.w, h: source.h }
+    }
+  }
+
+  const markedUrl = assets.markedFacadeUrl
+  const rectifiedUrl = assets.modernRectifiedUrl
+  if (markedUrl && rectifiedUrl) {
+    const [marked, rectified] = await Promise.all([
+      probeImageMeta(markedUrl),
+      probeImageMeta(rectifiedUrl),
+    ])
+    if (marked && rectified && markedLooksLikeOverlayExport(marked.bytes, rectified.bytes)) {
+      return { url: rectifiedUrl, kind: 'rectified', w: rectified.w, h: rectified.h }
+    }
+    if (marked) {
+      return { url: markedUrl, kind: 'marked', w: marked.w, h: marked.h }
+    }
+    if (rectified) {
+      return { url: rectifiedUrl, kind: 'rectified', w: rectified.w, h: rectified.h }
+    }
+  }
+
+  if (markedUrl) {
+    const marked = await probeImageMeta(markedUrl)
+    if (marked) return { url: markedUrl, kind: 'marked', w: marked.w, h: marked.h }
+  }
+  if (rectifiedUrl) {
+    const rectified = await probeImageMeta(rectifiedUrl)
+    if (rectified) return { url: rectifiedUrl, kind: 'rectified', w: rectified.w, h: rectified.h }
+  }
+  return null
 }
 
 export function ArchiviewFacadePanel({
@@ -119,22 +179,6 @@ export function ArchiviewFacadePanel({
   const tracesById = useMemo(() => {
     return new Map(building?.memoryTraces.map((trace) => [trace.id, trace]) ?? [])
   }, [building])
-
-  const facadeImageCandidates = useMemo(() => {
-    if (assets.labelingLayout === 'side_by_side' && assets.sideBySideMarkedUrl) {
-      return [{ url: assets.sideBySideMarkedUrl, kind: 'side_by_side' as const }]
-    }
-    const items: { url: string; kind: FacadeImageKind }[] = []
-    if (assets.modernSourceUrl) items.push({ url: assets.modernSourceUrl, kind: 'source_modern' })
-    if (assets.markedFacadeUrl) items.push({ url: assets.markedFacadeUrl, kind: 'marked' })
-    if (assets.modernRectifiedUrl) items.push({ url: assets.modernRectifiedUrl, kind: 'rectified' })
-    const seen = new Set<string>()
-    return items.filter((item) => {
-      if (seen.has(item.url)) return false
-      seen.add(item.url)
-      return true
-    })
-  }, [assets])
 
   const makeRegion = useCallback(
     (ann: ArchiviewAnnotation, idx: number, polygonPct: Point[]): DisplayRegion => {
@@ -234,18 +278,11 @@ export function ArchiviewFacadePanel({
       const isSb = layout === 'side_by_side'
       if (!cancelled) setSideBySide(isSb)
 
-      let loaded: { url: string; kind: FacadeImageKind; w: number; h: number } | null = null
-      for (const candidate of facadeImageCandidates) {
-        const size = await probeImageSize(candidate.url)
-        if (cancelled) return
-        if (size) {
-          loaded = { url: candidate.url, kind: candidate.kind, w: size.w, h: size.h }
-          break
-        }
-      }
+      const loaded = await pickFacadeImage(assets)
+      if (cancelled) return
 
-      if (!loaded || cancelled) {
-        if (!cancelled) setImageOk(false)
+      if (!loaded) {
+        setImageOk(false)
         return
       }
 
@@ -282,7 +319,7 @@ export function ArchiviewFacadePanel({
     return () => {
       cancelled = true
     }
-  }, [assets, buildRegionsOverlay, buildRegionsRectified, buildRegionsSideBySide, facadeImageCandidates])
+  }, [assets, buildRegionsOverlay, buildRegionsRectified, buildRegionsSideBySide])
 
   const active =
     hoverIdx !== null
