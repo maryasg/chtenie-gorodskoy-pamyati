@@ -321,12 +321,7 @@ export function ArchiviewFacadePanel({
     }
   }, [assets, buildRegionsOverlay, buildRegionsRectified, buildRegionsSideBySide])
 
-  const active =
-    hoverIdx !== null
-      ? regions.find((r) => r.idx === hoverIdx)
-      : selectedIdx !== null
-        ? regions.find((r) => r.idx === selectedIdx)
-        : null
+  const active = hoverIdx !== null ? regions.find((r) => r.idx === hoverIdx) : null
   const selected = selectedIdx !== null ? regions.find((r) => r.idx === selectedIdx) : null
 
   /** Large regions (e.g. #12) must not block clicks on smaller ones (#6, #9) underneath. */
@@ -345,13 +340,15 @@ export function ArchiviewFacadePanel({
           </>
         ) : imageKind === 'rectified' ? (
           <>
-            Выпрямленное фото с подсветкой областей. Наведите на <strong>область</strong> — сверху
-            появится кураторская плашка с историей. Список справа синхронизирован с подсветкой.
+            Выпрямленное фото с подсветкой областей. Номера и цветные зоны видны сразу; при
+            наведении на <strong>область</strong> сверху появится кураторская плашка. Список справа
+            синхронизирован с подсветкой.
           </>
         ) : (
           <>
-            Современное фото в исходном ракурсе с подсветкой областей. Наведите на <strong>область</strong>{' '}
-            — сверху появится кураторская плашка с историей. Список справа синхронизирован с подсветкой.
+            Современное фото в исходном ракурсе с подсветкой областей. Номера и цветные зоны видны
+            сразу; при наведении на <strong>область</strong> сверху появится кураторская плашка.
+            Список справа синхронизирован с подсветкой.
           </>
         )}
       </p>
@@ -389,16 +386,37 @@ export function ArchiviewFacadePanel({
                   aria-hidden
                 >
                   {regions.map((r) => {
-                    const on = hoverIdx === r.idx
+                    const on = hoverIdx === r.idx || selectedIdx === r.idx
                     const color = CLASS_COLORS[r.cls] ?? '#444'
                     return (
-                      <polygon
-                        key={r.idx}
-                        points={r.polygonPct.map(([x, y]) => `${x},${y}`).join(' ')}
-                        fill={on ? `${color}66` : 'transparent'}
-                        stroke={on ? color : 'transparent'}
-                        strokeWidth={on ? 0.5 : 0}
-                      />
+                      <g key={r.idx}>
+                        <polygon
+                          points={r.polygonPct.map(([x, y]) => `${x},${y}`).join(' ')}
+                          fill={on ? `${color}66` : `${color}40`}
+                          stroke={color}
+                          strokeWidth={on ? 0.55 : 0.35}
+                        />
+                        <circle
+                          cx={r.cx}
+                          cy={r.cy}
+                          r={on ? 1.35 : 1.15}
+                          fill={color}
+                          stroke="#fff"
+                          strokeWidth={0.12}
+                        />
+                        <text
+                          x={r.cx}
+                          y={r.cy}
+                          textAnchor="middle"
+                          dominantBaseline="central"
+                          fill="#fff"
+                          fontSize={on ? 1.35 : 1.2}
+                          fontWeight={700}
+                          style={{ pointerEvents: 'none' }}
+                        >
+                          {r.idx}
+                        </text>
+                      </g>
                     )
                   })}
                 </svg>
