@@ -3,7 +3,7 @@ import type { Building } from '../../types/building'
 export const MOSCOW_004: Building = {
   id: 'MOSCOW_004_krivokolenny',
   cardId: 'MOSCOW_004',
-  name: 'Дом с вывеской Фалькевича',
+  name: 'Доходный дом Скальского / Дом с историческими вывесками',
   alternativeNames: ['Доходный дом Скальского', 'Дом с вывеской «Сжатый газ»'],
   address: 'Москва, Кривоколенный переулок, 14, строение 1',
   lat: 55.7624,

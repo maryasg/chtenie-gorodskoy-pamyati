@@ -4,7 +4,7 @@ export const MOSCOW_001: Building = {
   id: 'MOSCOW_001_kumaninykh',
   cardId: 'MOSCOW_001',
   name: 'Усадьба Куманиных / Дом Ардовых',
-  address: 'Москва, Большая Ордынка, 17',
+  address: 'Москва, Большая Ордынка, 17, стр. 1',
   lat: 55.7425,
   lng: 37.6258,
   mapStatus: 'verified',
