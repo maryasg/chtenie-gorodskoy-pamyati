@@ -49,3 +49,34 @@ export function ConfidenceLegend({ compact = false }: { compact?: boolean }) {
     </div>
   )
 }
+
+export function ConfidenceTable() {
+  return (
+    <div className="overflow-x-auto rounded-xl border border-arch-line">
+      <table className="w-full min-w-[640px] text-sm">
+        <thead>
+          <tr className="border-b border-arch-line bg-arch-surface-2/60 text-left">
+            <th className="px-4 py-3 font-semibold text-arch-green-deep">Статус</th>
+            <th className="px-4 py-3 font-semibold text-arch-green-deep">Уровень источников</th>
+            <th className="px-4 py-3 font-semibold text-arch-green-deep">Когда ставить</th>
+            <th className="px-4 py-3 font-semibold text-arch-green-deep">Примеры</th>
+          </tr>
+        </thead>
+        <tbody>
+          {CONFIDENCE_LEVELS.map((item) => (
+            <tr key={item.value} className="border-b border-arch-line last:border-0">
+              <td className="px-4 py-3 align-top">
+                <ConfidenceBadge level={item.value} title={item.hint} />
+              </td>
+              <td className="px-4 py-3 align-top font-medium text-arch-ink">{item.sourceTiers}</td>
+              <td className="px-4 py-3 align-top leading-relaxed text-arch-ink/80">{item.hint}</td>
+              <td className="px-4 py-3 align-top text-xs leading-relaxed text-arch-muted">
+                {item.sourceExamples}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
