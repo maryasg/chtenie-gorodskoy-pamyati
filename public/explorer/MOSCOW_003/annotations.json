@@ -468,7 +468,8 @@
                                                        673.4827270507812
                                                    ]
                                                ],
-                            "coordinate_space":  "rectified"
+                            "coordinate_space":  "rectified",
+                            "traceId":  "MOSCOW_003_T008"
                         },
                         {
                             "id":  3,
@@ -512,7 +513,8 @@
                                                        337.50830078125
                                                    ]
                                                ],
-                            "coordinate_space":  "rectified"
+                            "coordinate_space":  "rectified",
+                            "traceId":  "MOSCOW_003_T009"
                         },
                         {
                             "id":  4,
@@ -556,7 +558,8 @@
                                                        340.18927001953125
                                                    ]
                                                ],
-                            "coordinate_space":  "rectified"
+                            "coordinate_space":  "rectified",
+                            "traceId":  "MOSCOW_003_T010"
                         },
                         {
                             "id":  5,
@@ -648,7 +651,8 @@
                                                        357.4006042480469
                                                    ]
                                                ],
-                            "coordinate_space":  "rectified"
+                            "coordinate_space":  "rectified",
+                            "traceId":  "MOSCOW_003_T011"
                         },
                         {
                             "id":  6,
@@ -745,7 +749,8 @@
                                                        318.6579895019531
                                                    ]
                                                ],
-                            "coordinate_space":  "rectified"
+                            "coordinate_space":  "rectified",
+                            "traceId":  "MOSCOW_003_T012"
                         },
                         {
                             "id":  8,
@@ -789,7 +794,8 @@
                                                        324.0674743652344
                                                    ]
                                                ],
-                            "coordinate_space":  "rectified"
+                            "coordinate_space":  "rectified",
+                            "traceId":  "MOSCOW_003_T013"
                         },
                         {
                             "id":  9,
@@ -916,7 +922,7 @@
                                                    ]
                                                ],
                             "coordinate_space":  "rectified",
-                            "traceId":  "MOSCOW_003_T004"
+                            "traceId":  "MOSCOW_003_T016"
                         },
                         {
                             "id":  13,
@@ -968,7 +974,8 @@
                                                        349.49420166015625
                                                    ]
                                                ],
-                            "coordinate_space":  "rectified"
+                            "coordinate_space":  "rectified",
+                            "traceId":  "MOSCOW_003_T014"
                         },
                         {
                             "id":  14,
@@ -1012,7 +1019,8 @@
                                                        382.2629699707031
                                                    ]
                                                ],
-                            "coordinate_space":  "rectified"
+                            "coordinate_space":  "rectified",
+                            "traceId":  "MOSCOW_003_T015"
                         }
                     ],
     "classes":  {
