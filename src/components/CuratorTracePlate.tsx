@@ -13,6 +13,8 @@ type Props = {
   verification?: BuildingVerification
   /** Полная карточка (по клику) или краткий превью (при наведении) */
   expanded: boolean
+  /** Компактная карточка (верхние зоны фасада — не заезжает под меню) */
+  compact?: boolean
   onClose?: () => void
   className?: string
 }
@@ -25,6 +27,7 @@ export function CuratorTracePlate({
   comment,
   verification,
   expanded,
+  compact = false,
   onClose,
   className = '',
 }: Props) {
@@ -74,7 +77,11 @@ export function CuratorTracePlate({
                 />
               ) : (
                 <TraceMessageBody
-                  text={message.length > 220 ? `${message.slice(0, 220).trim()}…` : message}
+                  text={
+                    message.length > (compact ? 120 : 220)
+                      ? `${message.slice(0, compact ? 120 : 220).trim()}…`
+                      : message
+                  }
                   bodyClassName="text-arch-surface/90"
                   sourceClassName="text-[10px] leading-snug text-arch-surface/55"
                 />
@@ -99,7 +106,7 @@ export function CuratorTracePlate({
             </div>
           ) : null}
 
-          {expanded ? (
+          {expanded && !compact ? (
             <p className="mt-2 text-[10px] text-arch-surface/50">
               Повторный клик по зоне или заметке в списке — закрыть карточку
             </p>

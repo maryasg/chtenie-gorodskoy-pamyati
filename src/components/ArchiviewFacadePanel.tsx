@@ -10,6 +10,7 @@ import {
   type Point,
 } from '../lib/archiviewGeometry'
 import { CuratorTracePlate } from './CuratorTracePlate'
+import { tracePlatePlacement } from '../lib/tracePlatePlacement'
 
 const CLASS_COLORS: Record<string, string> = {
   added_floor: '#00aa00',
@@ -442,6 +443,9 @@ export function ArchiviewFacadePanel({
         ? regions.find((r) => r.idx === hoverIdx) ?? null
         : null
   const plateExpanded = selectedIdx !== null && plateRegion?.idx === selectedIdx
+  const platePlacement = plateRegion
+    ? tracePlatePlacement(plateRegion.cy, plateExpanded)
+    : null
 
   /** Small regions (e.g. #6, #9) must paint above large overlaps (#12) for clicks — render largest first, smallest last in SVG. */
   const regionsForHit = useMemo(
@@ -674,15 +678,23 @@ export function ArchiviewFacadePanel({
                     : null}
                 </svg>
               )}
-              {plateRegion && (
+              {plateRegion && platePlacement && (
                 <div
-                  className={`absolute z-20 max-w-[min(92%,${plateExpanded ? '420px' : '360px'})] rounded-xl border border-arch-gold/70 bg-arch-green-deep/90 px-3 py-2.5 text-left text-xs leading-snug text-arch-surface shadow-xl backdrop-blur-md ${
-                    plateExpanded ? 'pointer-events-auto' : 'pointer-events-none'
+                  className={`absolute z-20 max-w-[min(92%,${
+                    plateExpanded
+                      ? platePlacement.compact
+                        ? '300px'
+                        : '380px'
+                      : platePlacement.compact
+                        ? '260px'
+                        : '320px'
+                  })] rounded-xl border border-arch-gold/70 bg-arch-green-deep/90 px-3 py-2.5 text-left text-xs leading-snug text-arch-surface shadow-xl backdrop-blur-md ${
+                    plateExpanded ? 'pointer-events-auto max-h-[min(50vh,340px)] overflow-y-auto' : 'pointer-events-none'
                   }`}
                   style={{
                     left: `${plateRegion.cx}%`,
                     top: `${plateRegion.cy}%`,
-                    transform: 'translate(-50%, calc(-100% - 8px))',
+                    transform: platePlacement.transform,
                   }}
                   onClick={
                     plateExpanded
@@ -701,6 +713,7 @@ export function ArchiviewFacadePanel({
                     comment={plateRegion.comment}
                     verification={building?.verification}
                     expanded={plateExpanded}
+                    compact={platePlacement.compact}
                     onClose={plateExpanded ? () => setSelectedIdx(null) : undefined}
                   />
                 </div>
