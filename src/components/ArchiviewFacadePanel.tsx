@@ -9,7 +9,7 @@ import {
   transformPolygon,
   type Point,
 } from '../lib/archiviewGeometry'
-import { TraceMessageBody } from '../lib/traceMessage'
+import { CuratorTracePlate } from './CuratorTracePlate'
 
 const CLASS_COLORS: Record<string, string> = {
   added_floor: '#00aa00',
@@ -96,14 +96,6 @@ function annotationDisplayIndex(ann: ArchiviewAnnotation, arrayIndex: number): n
   const id = ann.id
   if (typeof id === 'number' && Number.isFinite(id) && id > 0) return id
   return arrayIndex + 1
-}
-
-function shortText(text: string, maxLength = 260): string {
-  if (text.length <= maxLength) return text
-  const shortened = text.slice(0, maxLength)
-  const sentenceEnd = Math.max(shortened.lastIndexOf('.'), shortened.lastIndexOf('!'), shortened.lastIndexOf('?'))
-  if (sentenceEnd > maxLength * 0.55) return shortened.slice(0, sentenceEnd + 1)
-  return `${shortened.trim()}...`
 }
 
 type FacadeImageKind = 'side_by_side' | 'source_modern' | 'rectified' | 'marked'
@@ -433,7 +425,13 @@ export function ArchiviewFacadePanel({
     }
   }, [assets, buildRegionsOverlay, buildRegionsRectified, buildRegionsSideBySide, resetView])
 
-  const active = hoverIdx !== null ? regions.find((r) => r.idx === hoverIdx) : null
+  const plateRegion =
+    selectedIdx !== null
+      ? regions.find((r) => r.idx === selectedIdx) ?? null
+      : hoverIdx !== null
+        ? regions.find((r) => r.idx === hoverIdx) ?? null
+        : null
+  const plateExpanded = selectedIdx !== null && plateRegion?.idx === selectedIdx
 
   /** Large regions (e.g. #12) must not block clicks on smaller ones (#6, #9) underneath. */
   const regionsForHit = useMemo(
@@ -447,21 +445,22 @@ export function ArchiviewFacadePanel({
         {sideBySide ? (
           <>
             Слева — историческое фото, справа — современное. Наведите на <strong>номер или область</strong>{' '}
-            — сверху появится кураторская плашка. Кнопки <strong>+</strong> / <strong>−</strong> приближают
+            — краткая плашка. <strong>Клик</strong> по заметке в списке или по зоне откроет полную карточку
+            с текстом, источниками и достоверностью. Кнопки <strong>+</strong> / <strong>−</strong> приближают
             фото.
           </>
         ) : imageKind === 'rectified' ? (
           <>
             Выпрямленное фото с подсветкой областей. Номера и цветные зоны видны сразу; при
-            наведении на <strong>область</strong> сверху появится кураторская плашка. Список справа
-            синхронизирован с подсветкой. Кнопки <strong>+</strong> / <strong>−</strong> приближают фото;
+            наведении — краткая плашка, <strong>клик</strong> по зоне или заметке в списке — полная карточка
+            с источниками и достоверностью. Кнопки <strong>+</strong> / <strong>−</strong> приближают фото;
             при увеличении можно сдвигать картинку мышью.
           </>
         ) : (
           <>
             Современное фото в исходном ракурсе с подсветкой областей. Номера и цветные зоны видны
-            сразу; при наведении на <strong>область</strong> сверху появится кураторская плашка.
-            Список справа синхронизирован с подсветкой. Кнопки <strong>+</strong> / <strong>−</strong>{' '}
+            сразу; при наведении — краткая плашка, <strong>клик</strong> по зоне или заметке в списке —
+            полная карточка с источниками и достоверностью. Кнопки <strong>+</strong> / <strong>−</strong>{' '}
             приближают фото; при увеличении можно сдвигать картинку мышью.
           </>
         )}
@@ -616,41 +615,23 @@ export function ArchiviewFacadePanel({
                   ))}
                 </svg>
               )}
-              {active && (
+              {plateRegion && (
                 <div
-                  className="pointer-events-none absolute z-20 max-w-[min(92%,360px)] rounded-xl border border-arch-gold/70 bg-arch-green-deep/90 px-3 py-2.5 text-left text-xs leading-snug text-arch-surface shadow-xl backdrop-blur-md"
+                  className={`pointer-events-none absolute z-20 max-w-[min(92%,${plateExpanded ? '420px' : '360px'})] rounded-xl border border-arch-gold/70 bg-arch-green-deep/90 px-3 py-2.5 text-left text-xs leading-snug text-arch-surface shadow-xl backdrop-blur-md`}
                   style={{
-                    left: `${active.cx}%`,
-                    top: `${active.cy}%`,
+                    left: `${plateRegion.cx}%`,
+                    top: `${plateRegion.cy}%`,
                     transform: 'translate(-50%, calc(-100% - 8px))',
                   }}
                 >
-                  <div className="flex items-start gap-2">
-                    <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-arch-gold text-[11px] font-bold text-arch-green-deep">
-                      {active.idx}
-                    </span>
-                    <span>
-                      <span className="block font-semibold">{active.trace?.title ?? active.label}</span>
-                      {active.trace ? (
-                        <>
-                          <span className="mt-0.5 block text-[11px] text-arch-surface/75">
-                            {active.trace.period}
-                          </span>
-                          <span className="mt-1 block text-[11px] font-normal">
-                            <TraceMessageBody
-                              text={shortText(active.trace.userMessage)}
-                              bodyClassName="text-arch-surface/90"
-                              sourceClassName="text-[10px] font-normal leading-snug text-arch-surface/55"
-                            />
-                          </span>
-                        </>
-                      ) : active.comment ? (
-                        <span className="mt-1 block text-[11px] font-normal text-arch-surface/80">
-                          {active.comment}
-                        </span>
-                      ) : null}
-                    </span>
-                  </div>
+                  <CuratorTracePlate
+                    idx={plateRegion.idx}
+                    title={plateRegion.trace?.title ?? plateRegion.label}
+                    period={plateRegion.trace?.period}
+                    trace={plateRegion.trace}
+                    comment={plateRegion.comment}
+                    expanded={plateExpanded}
+                  />
                 </div>
               )}
               </div>

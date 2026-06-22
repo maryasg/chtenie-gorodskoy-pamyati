@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { BUILDINGS } from '../data/buildings'
-import { ConfidenceLegend } from '../components/ConfidenceBadge'
+import { ConfidenceTable } from '../components/ConfidenceBadge'
 
 const PIPELINE = [
   {
@@ -194,7 +194,7 @@ export function MethodPage() {
           держится. Акт экспертизы с подписью архитекторов-экспертов — высший уровень; статья в СМИ без
           ссылки на документ — повод поставить «Требует проверки», а не «Подтверждено».
         </p>
-        <ConfidenceLegend />
+        <ConfidenceTable />
       </MethodSection>
 
       <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
