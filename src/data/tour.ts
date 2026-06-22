@@ -16,7 +16,8 @@ export const PILOT_TOUR: TourStop[] = [
   {
     buildingId: 'MOSCOW_002_turgenev_library',
     title: 'Тургеневская библиотека',
-    methodologyNote: 'Современная надстройка 2003 — бюро Асадова, «дом над домом».',
+    methodologyNote:
+      'Палаты XVII–XVIII вв., доходный дом 1895 г., период профсоюзов, реконструкция Асадова — «дом над домом».',
   },
   {
     buildingId: 'MOSCOW_004_krivokolenny',
