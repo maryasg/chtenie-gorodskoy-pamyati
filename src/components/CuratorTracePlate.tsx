@@ -1,5 +1,6 @@
-import type { MemoryTrace } from '../types/building'
+import type { BuildingVerification, MemoryTrace } from '../types/building'
 import { getConfidenceInfo } from '../data/confidenceGuide'
+import { describeConfidenceBasis, traceConfidenceSourceLine } from '../lib/traceConfidence'
 import { ConfidenceBadge } from './ConfidenceBadge'
 import { splitTraceMessage, TraceMessageBody } from '../lib/traceMessage'
 
@@ -9,8 +10,10 @@ type Props = {
   period?: string
   trace?: MemoryTrace
   comment?: string
+  verification?: BuildingVerification
   /** Полная карточка (по клику) или краткий превью (при наведении) */
   expanded: boolean
+  onClose?: () => void
   className?: string
 }
 
@@ -20,13 +23,19 @@ export function CuratorTracePlate({
   period,
   trace,
   comment,
+  verification,
   expanded,
+  onClose,
   className = '',
 }: Props) {
   const confidence = trace?.confidence
   const confidenceInfo = confidence ? getConfidenceInfo(confidence) : null
   const message = trace?.userMessage ?? comment ?? ''
-  const hasListedSources = Boolean(splitTraceMessage(message).source)
+  const traceSource = splitTraceMessage(message).source
+  const confidenceBasis = confidence
+    ? describeConfidenceBasis(confidence, traceSource, verification)
+    : null
+  const confidenceSourceLine = traceConfidenceSourceLine(traceSource, verification)
 
   return (
     <div className={className}>
@@ -35,7 +44,22 @@ export function CuratorTracePlate({
           {idx}
         </span>
         <div className="min-w-0 flex-1">
-          <span className="block font-semibold leading-snug">{title}</span>
+          <div className="flex items-start justify-between gap-2">
+            <span className="block font-semibold leading-snug">{title}</span>
+            {expanded && onClose ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onClose()
+                }}
+                aria-label="Закрыть карточку"
+                className="pointer-events-auto -mr-1 -mt-0.5 shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-arch-surface/70 transition hover:bg-arch-surface/15 hover:text-arch-surface"
+              >
+                ✕
+              </button>
+            ) : null}
+          </div>
           {period ? (
             <span className="mt-0.5 block text-[11px] text-arch-surface/75">{period}</span>
           ) : null}
@@ -66,22 +90,18 @@ export function CuratorTracePlate({
                 </span>
                 <ConfidenceBadge level={confidenceInfo.value} />
               </div>
-              <p className="mt-1.5 text-[10px] leading-snug text-arch-surface/80">
-                {confidenceInfo.hint}
-                {hasListedSources
-                  ? ' Статус выбран с опорой на источники ниже.'
-                  : ' Для этой зоны прямых источников в тексте пока нет — статус по методике.'}
-              </p>
-              <p className="mt-1 text-[10px] leading-snug text-arch-surface/55">
-                Уровень источников: {confidenceInfo.sourceTiers}. Примеры:{' '}
-                {confidenceInfo.sourceExamples}
-              </p>
+              <p className="mt-1.5 text-[10px] leading-snug text-arch-surface/80">{confidenceBasis}</p>
+              {confidenceSourceLine ? (
+                <p className="mt-1 text-[10px] leading-snug text-arch-surface/55">
+                  Источник статуса: {confidenceSourceLine}
+                </p>
+              ) : null}
             </div>
           ) : null}
 
           {expanded ? (
             <p className="mt-2 text-[10px] text-arch-surface/50">
-              Повторный клик по заметке — закрыть карточку
+              Повторный клик по зоне или заметке в списке — закрыть карточку
             </p>
           ) : null}
         </div>
