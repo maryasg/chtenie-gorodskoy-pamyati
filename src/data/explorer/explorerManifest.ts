@@ -73,3 +73,37 @@ export async function fetchExplorerManifest(cardId: string): Promise<ExplorerMan
     return null
   }
 }
+
+/** Источники annotations.json для кураторской страницы — по всем сравнениям из manifest. */
+export type CuratorAnnotationSource = {
+  comparisonId: string
+  comparisonTitle: string
+  annotationsUrl: string
+  annotationsRelPath: string
+}
+
+export async function fetchCuratorAnnotationSources(
+  cardId: string,
+  fallbackAnnotationsUrl: string,
+): Promise<CuratorAnnotationSource[]> {
+  const manifest = await fetchExplorerManifest(cardId)
+  if (!manifest?.comparisons?.length) {
+    return [
+      {
+        comparisonId: 'default',
+        comparisonTitle: 'Основное сравнение',
+        annotationsUrl: fallbackAnnotationsUrl,
+        annotationsRelPath: 'annotations.json',
+      },
+    ]
+  }
+  return manifest.comparisons.map((entry) => ({
+    comparisonId: entry.comparisonId,
+    comparisonTitle:
+      entry.historicalPhotoYear && entry.modernPhotoYear
+        ? `${entry.historicalPhotoYear} → ${entry.modernPhotoYear}`
+        : entry.title || entry.comparisonId,
+    annotationsUrl: resolveExplorerAsset(cardId, entry.annotationsUrl),
+    annotationsRelPath: entry.annotationsUrl.replace(/^\.\//, ''),
+  }))
+}

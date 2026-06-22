@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getArchiviewAssets } from '../data/explorer/archiviewAssets'
 import type { ArchiviewAnnotation } from '../data/explorer/archiviewAssets'
+import { fetchCuratorAnnotationSources } from '../data/explorer/explorerManifest'
 import { getBuildingById } from '../data/buildings'
 import type { Building, Confidence, MemoryTrace } from '../types/building'
 import { ConfidenceBadge } from '../components/ConfidenceBadge'
@@ -25,7 +26,23 @@ type DraftRow = {
   confirmed: boolean
 }
 
-type ConfirmedRow = { ann: CuratorAnnotation; draft: DraftRow }
+type AnnotationBundle = {
+  comparisonId: string
+  comparisonTitle: string
+  annotationsRelPath: string
+  payload: AnnotationsPayload
+}
+
+type CuratorTableRow = {
+  rowKey: string
+  comparisonId: string
+  comparisonTitle: string
+  annotationsRelPath: string
+  ann: CuratorAnnotation
+  isNew: boolean
+}
+
+type ConfirmedTableRow = CuratorTableRow & { draft: DraftRow }
 
 const CONFIDENCE_OPTIONS: { value: Confidence; label: string }[] = [
   { value: 'confirmed', label: 'Подтверждено' },
@@ -43,16 +60,31 @@ function traceDraft(trace?: MemoryTrace): Omit<DraftRow, 'traceId' | 'confirmed'
   }
 }
 
-function nextTraceId(buildingId: string, index: number): string {
-  const card = buildingId.match(/MOSCOW_\d+/)?.[0] ?? buildingId
-  return `${card}_T${String(index + 1).padStart(3, '0')}`
+/** Предлагаемый traceId для новой подсветки: номер области → T012 для #12. */
+function defaultTraceIdForAnnotation(annotationId: number): string {
+  return `T${String(annotationId).padStart(3, '0')}`
 }
 
-function buildExportSnippet(rows: ConfirmedRow[]): string {
+function buildInitialDraft(
+  ann: CuratorAnnotation,
+  tracesById: Map<string, MemoryTrace>,
+): DraftRow {
+  const traceId = ann.traceId || defaultTraceIdForAnnotation(ann.id)
+  const trace =
+    (ann.traceId ? tracesById.get(ann.traceId) : undefined) ?? tracesById.get(traceId)
+  return {
+    traceId,
+    ...traceDraft(trace),
+    title: trace?.title ?? ann.label_ru,
+    confirmed: Boolean(trace && ann.traceId),
+  }
+}
+
+function buildExportSnippet(rows: ConfirmedTableRow[]): string {
   return rows
-    .map(({ ann, draft }) => {
+    .map(({ ann, draft, comparisonTitle }) => {
       return [
-        `Подсветка #${ann.id}:`,
+        `Подсветка #${ann.id}${comparisonTitle ? ` (${comparisonTitle})` : ''}:`,
         `  annotations.json -> "traceId": "${draft.traceId}"`,
         `  moscow00X.ts -> memoryTraces:`,
         `    id: '${draft.traceId}'`,
@@ -128,11 +160,12 @@ function formatMemoryTrace(trace: MemoryTrace & { type: string }): string {
 }
 
 function buildMemoryTracesExport(
-  confirmedRows: ConfirmedRow[],
+  confirmedRows: ConfirmedTableRow[],
   tracesById: Map<string, MemoryTrace>,
 ): string {
   const entries = confirmedRows.map(({ ann, draft }) => {
-    const existing = tracesById.get(draft.traceId) ?? (ann.traceId ? tracesById.get(ann.traceId) : undefined)
+    const existing =
+      tracesById.get(draft.traceId) ?? (ann.traceId ? tracesById.get(ann.traceId) : undefined)
     return formatMemoryTrace(buildMemoryTraceFromDraft(ann, draft, existing))
   })
 
@@ -146,28 +179,35 @@ function buildMemoryTracesExport(
 
 function buildUpdatedAnnotationsPayload(
   rawPayload: AnnotationsPayload,
-  confirmedById: Map<number, DraftRow>,
+  confirmedByAnnId: Map<number, DraftRow>,
 ): AnnotationsPayload {
   const payload = structuredClone(rawPayload)
   payload.annotations = (payload.annotations ?? []).map((ann) => {
-    const draft = confirmedById.get(ann.id)
+    const draft = confirmedByAnnId.get(ann.id)
     if (!draft) return ann
     return { ...ann, traceId: draft.traceId }
   })
   return payload
 }
 
-function buildReadme(building: Building, confirmedCount: number): string {
+function buildReadme(
+  building: Building,
+  confirmedCount: number,
+  annotationPaths: string[],
+): string {
   const buildingFile = buildingDataFileName(building.cardId)
+  const annLines = annotationPaths.map(
+    (rel) => `   — public/explorer/${building.cardId}/${rel}`,
+  )
   return [
     `КУРАТОРСКИЙ ЭКСПОРТ — ${building.cardId}`,
     `Здание: ${building.name}`,
     `Подтверждено подсветок: ${confirmedCount}`,
     `Дата: ${new Date().toLocaleString('ru-RU')}`,
     '',
-    '1. annotations.json',
-    `   Куда: public/explorer/${building.cardId}/annotations.json`,
-    '   Действие: заменить файл целиком на GitHub (Edit → вставить → Commit).',
+    '1. annotations.json (по одному файлу на сравнение, если их несколько)',
+    ...annLines,
+    '   Действие: заменить соответствующий файл на GitHub.',
     '',
     '2. memory-traces.ts',
     `   Куда: src/data/buildings/${buildingFile}`,
@@ -178,21 +218,42 @@ function buildReadme(building: Building, confirmedCount: number): string {
     '3. Commit → Push → на сайте Ctrl+F5.',
     '',
     'Важно: в скачанные файлы попали только строки с галочкой «Подтверждаю».',
+    '',
+    'Новые подсветки из Archiview появятся здесь после «Отправить на сайт» → Push → «Обновить список».',
   ].join('\n')
 }
 
 function downloadCuratorFiles(
   building: Building,
-  rawPayload: AnnotationsPayload,
-  confirmedRows: ConfirmedRow[],
+  bundles: AnnotationBundle[],
+  confirmedRows: ConfirmedTableRow[],
   tracesById: Map<string, MemoryTrace>,
 ): void {
-  const confirmedById = new Map(confirmedRows.map(({ ann, draft }) => [ann.id, draft]))
-  const annotationsContent = `${JSON.stringify(buildUpdatedAnnotationsPayload(rawPayload, confirmedById), null, 2)}\n`
-  const memoryTracesContent = `${buildMemoryTracesExport(confirmedRows, tracesById)}\n`
-  const readmeContent = `${buildReadme(building, confirmedRows.length)}\n`
+  const paths: string[] = []
+  bundles.forEach((bundle) => {
+    const confirmedInBundle = confirmedRows.filter(
+      (row) => row.annotationsRelPath === bundle.annotationsRelPath,
+    )
+    if (confirmedInBundle.length === 0) return
+    const confirmedByAnnId = new Map(
+      confirmedInBundle.map(({ ann, draft }) => [ann.id, draft]),
+    )
+    const annotationsContent = `${JSON.stringify(
+      buildUpdatedAnnotationsPayload(bundle.payload, confirmedByAnnId),
+      null,
+      2,
+    )}\n`
+    const filename =
+      bundle.annotationsRelPath === 'annotations.json'
+        ? 'annotations.json'
+        : bundle.annotationsRelPath.replace(/\//g, '-')
+    paths.push(bundle.annotationsRelPath)
+    downloadTextFile(filename, annotationsContent, 'application/json;charset=utf-8')
+  })
 
-  downloadTextFile('annotations.json', annotationsContent, 'application/json;charset=utf-8')
+  const memoryTracesContent = `${buildMemoryTracesExport(confirmedRows, tracesById)}\n`
+  const readmeContent = `${buildReadme(building, confirmedRows.length, paths)}\n`
+
   window.setTimeout(() => {
     downloadTextFile(
       `memory-traces-${building.cardId}.ts`,
@@ -209,64 +270,103 @@ function downloadCuratorFiles(
   }, 400)
 }
 
+function flattenBundles(
+  bundles: AnnotationBundle[],
+  tracesById: Map<string, MemoryTrace>,
+): { rows: CuratorTableRow[]; drafts: Record<string, DraftRow> } {
+  const rows: CuratorTableRow[] = []
+  const drafts: Record<string, DraftRow> = {}
+
+  bundles.forEach((bundle) => {
+    const list = bundle.payload.annotations ?? []
+    list.forEach((ann) => {
+      const rowKey = `${bundle.comparisonId}:${ann.id}`
+      const isNew = !ann.traceId && !tracesById.has(defaultTraceIdForAnnotation(ann.id))
+      rows.push({
+        rowKey,
+        comparisonId: bundle.comparisonId,
+        comparisonTitle: bundle.comparisonTitle,
+        annotationsRelPath: bundle.annotationsRelPath,
+        ann,
+        isNew,
+      })
+      drafts[rowKey] = buildInitialDraft(ann, tracesById)
+    })
+  })
+
+  rows.sort((a, b) => {
+    if (a.comparisonId !== b.comparisonId) {
+      return a.comparisonTitle.localeCompare(b.comparisonTitle, 'ru')
+    }
+    return a.ann.id - b.ann.id
+  })
+
+  return { rows, drafts }
+}
+
 export function CuratorReviewPage() {
   const { id } = useParams<{ id: string }>()
   const building = id ? getBuildingById(id) : undefined
   const assets = building ? getArchiviewAssets(building.id) : undefined
-  const [annotations, setAnnotations] = useState<CuratorAnnotation[]>([])
-  const [rawPayload, setRawPayload] = useState<AnnotationsPayload | null>(null)
-  const [drafts, setDrafts] = useState<Record<number, DraftRow>>({})
+  const [bundles, setBundles] = useState<AnnotationBundle[]>([])
+  const [tableRows, setTableRows] = useState<CuratorTableRow[]>([])
+  const [drafts, setDrafts] = useState<Record<string, DraftRow>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [reloadToken, setReloadToken] = useState(0)
 
   const tracesById = useMemo(() => {
     return new Map(building?.memoryTraces.map((trace) => [trace.id, trace]) ?? [])
   }, [building])
 
-  useEffect(() => {
+  const showComparisonColumn = bundles.length > 1
+
+  const loadAnnotations = useCallback(async () => {
     if (!building || !assets) return
-    let cancelled = false
-
-    const load = async () => {
-      setLoading(true)
-      setError(null)
-      try {
-        const response = await fetch(assets.annotationsUrl)
-        if (!response.ok) throw new Error(`Не удалось загрузить annotations.json (${response.status})`)
+    setLoading(true)
+    setError(null)
+    try {
+      const sources = await fetchCuratorAnnotationSources(building.cardId, assets.annotationsUrl)
+      const loaded: AnnotationBundle[] = []
+      for (const source of sources) {
+        const response = await fetch(source.annotationsUrl, { cache: 'no-cache' })
+        if (!response.ok) {
+          throw new Error(
+            `Не удалось загрузить ${source.annotationsRelPath} (${response.status})`,
+          )
+        }
         const payload = (await response.json()) as AnnotationsPayload
-        const list = payload.annotations ?? []
-        if (cancelled) return
-        setRawPayload(payload)
-        setAnnotations(list)
-        setDrafts(
-          Object.fromEntries(
-            list.map((ann, index) => {
-              const trace = ann.traceId ? tracesById.get(ann.traceId) : undefined
-              const fallbackTraceId = ann.traceId || nextTraceId(building.id, building.memoryTraces.length + index)
-              return [
-                ann.id,
-                {
-                  traceId: fallbackTraceId,
-                  ...traceDraft(trace),
-                  title: trace?.title ?? ann.label_ru,
-                  confirmed: Boolean(trace),
-                },
-              ]
-            }),
-          ),
-        )
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Неизвестная ошибка')
-      } finally {
-        if (!cancelled) setLoading(false)
+        loaded.push({
+          comparisonId: source.comparisonId,
+          comparisonTitle: source.comparisonTitle,
+          annotationsRelPath: source.annotationsRelPath,
+          payload,
+        })
       }
-    }
-
-    load()
-    return () => {
-      cancelled = true
+      const { rows, drafts: nextDrafts } = flattenBundles(loaded, tracesById)
+      setBundles(loaded)
+      setTableRows(rows)
+      setDrafts(nextDrafts)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Неизвестная ошибка')
+    } finally {
+      setLoading(false)
     }
   }, [assets, building, tracesById])
+
+  useEffect(() => {
+    void loadAnnotations()
+  }, [loadAnnotations, reloadToken])
+
+  const patchDraft = useCallback((rowKey: string, patch: Partial<DraftRow>, row: CuratorTableRow) => {
+    setDrafts((current) => ({
+      ...current,
+      [rowKey]: {
+        ...(current[rowKey] ?? buildInitialDraft(row.ann, tracesById)),
+        ...patch,
+      },
+    }))
+  }, [tracesById])
 
   if (!building) {
     return (
@@ -276,11 +376,10 @@ export function CuratorReviewPage() {
     )
   }
 
-  const rows = annotations.map((ann) => ({ ann, draft: drafts[ann.id] }))
-  const confirmedRows = rows.filter(
-    (row): row is ConfirmedRow => Boolean(row.draft?.confirmed),
-  )
+  const rows = tableRows.map((row) => ({ ...row, draft: drafts[row.rowKey] }))
+  const confirmedRows = rows.filter((row): row is ConfirmedTableRow => Boolean(row.draft?.confirmed))
   const readyCount = confirmedRows.length
+  const newCount = rows.filter((row) => row.isNew).length
   const hasMissingLinks = rows.some((row) => !row.ann.traceId)
   const exportSnippet = buildExportSnippet(confirmedRows)
 
@@ -295,15 +394,14 @@ export function CuratorReviewPage() {
           Проверка подсветок: {building.name}
         </h1>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-arch-muted">
-          Отметьте галочкой проверенные строки и нажмите «Скачать готовые файлы» — получите
-          <code className="mx-1 rounded bg-arch-surface-2/80 px-1">annotations.json</code>,
-          фрагмент для <code className="mx-1 rounded bg-arch-surface-2/80 px-1">memoryTraces</code>
-          и короткую инструкцию. Затем загрузите их в репозиторий на GitHub.
+          Список подсветок подгружается из <code className="rounded bg-arch-surface-2/80 px-1">manifest.json</code>{' '}
+          (все сравнения Archiview на сайте). Добавили зону в Archiview → «Отправить на сайт» → Push →
+          нажмите <strong>Обновить список</strong> здесь.
         </p>
       </header>
 
       <section className="arch-section">
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-4">
           <div>
             <p className="arch-kicker mb-1">Здание</p>
             <p className="font-semibold text-arch-green-deep">{building.cardId}</p>
@@ -311,22 +409,30 @@ export function CuratorReviewPage() {
           </div>
           <div>
             <p className="arch-kicker mb-1">Подсветки</p>
-            <p className="font-semibold text-arch-green-deep">{annotations.length}</p>
-            <p className="text-sm text-arch-muted">зон из annotations.json</p>
+            <p className="font-semibold text-arch-green-deep">{tableRows.length}</p>
+            <p className="text-sm text-arch-muted">
+              {bundles.length > 1
+                ? `из ${bundles.length} сравнений`
+                : 'зон из annotations.json'}
+            </p>
+          </div>
+          <div>
+            <p className="arch-kicker mb-1">Новые</p>
+            <p className="font-semibold text-arch-green-deep">{newCount}</p>
+            <p className="text-sm text-arch-muted">без traceId на сайте</p>
           </div>
           <div>
             <p className="arch-kicker mb-1">Подтверждено</p>
             <p className="font-semibold text-arch-green-deep">
-              {readyCount} / {annotations.length}
+              {readyCount} / {tableRows.length}
             </p>
-            <p className="text-sm text-arch-muted">отмечено куратором на этой странице</p>
+            <p className="text-sm text-arch-muted">отмечено куратором</p>
           </div>
         </div>
         {hasMissingLinks && (
           <p className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
-            У части подсветок нет <code>traceId</code>. Это не ошибка фасада, но перед публикацией
-            нужно решить: привязать их к существующему тексту, создать новый текст или оставить как
-            техническую подпись Archiview.
+            У части подсветок нет <code>traceId</code> в annotations.json — для новых зон предложен
+            черновик (<code>T012</code> для #12). Отредактируйте текст, поставьте галочку и скачайте файлы.
           </p>
         )}
       </section>
@@ -346,12 +452,21 @@ export function CuratorReviewPage() {
               <p className="arch-kicker mb-1">Таблица сверки</p>
               <h2 className="arch-section-title">Подсветка → текст куратора</h2>
             </div>
-            <Link
-              to={`/building/${building.id}`}
-              className="rounded-full border border-arch-line bg-arch-surface px-4 py-2 text-sm font-medium text-arch-green-deep hover:border-arch-green/40 hover:bg-arch-green-soft"
-            >
-              Открыть публичную карточку
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setReloadToken((value) => value + 1)}
+                className="rounded-full border border-arch-line bg-arch-surface px-4 py-2 text-sm font-medium text-arch-green-deep hover:border-arch-green/40 hover:bg-arch-green-soft"
+              >
+                Обновить список
+              </button>
+              <Link
+                to={`/building/${building.id}`}
+                className="rounded-full border border-arch-line bg-arch-surface px-4 py-2 text-sm font-medium text-arch-green-deep hover:border-arch-green/40 hover:bg-arch-green-soft"
+              >
+                Открыть публичную карточку
+              </Link>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -359,6 +474,9 @@ export function CuratorReviewPage() {
               <thead>
                 <tr className="text-xs uppercase tracking-[0.08em] text-arch-muted">
                   <th className="border-b border-arch-line px-3 py-2">#</th>
+                  {showComparisonColumn ? (
+                    <th className="border-b border-arch-line px-3 py-2">Сравнение</th>
+                  ) : null}
                   <th className="border-b border-arch-line px-3 py-2">Archiview</th>
                   <th className="border-b border-arch-line px-3 py-2">Связь</th>
                   <th className="border-b border-arch-line px-3 py-2">Кураторский текст</th>
@@ -366,13 +484,26 @@ export function CuratorReviewPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(({ ann, draft }) => {
-                  const linkedTrace = ann.traceId ? tracesById.get(ann.traceId) : undefined
+                {rows.map((row) => {
+                  const { ann, draft, rowKey } = row
+                  const linkedTrace =
+                    (ann.traceId ? tracesById.get(ann.traceId) : undefined) ??
+                    (draft?.traceId ? tracesById.get(draft.traceId) : undefined)
                   return (
-                    <tr key={ann.id} className="align-top">
+                    <tr key={rowKey} className="align-top">
                       <td className="border-b border-arch-line px-3 py-4 font-semibold text-arch-green-deep">
                         {ann.id}
+                        {row.isNew ? (
+                          <span className="mt-1 block text-[10px] font-medium uppercase tracking-wide text-amber-700">
+                            новая
+                          </span>
+                        ) : null}
                       </td>
+                      {showComparisonColumn ? (
+                        <td className="border-b border-arch-line px-3 py-4 text-xs text-arch-muted">
+                          {row.comparisonTitle}
+                        </td>
+                      ) : null}
                       <td className="border-b border-arch-line px-3 py-4">
                         <p className="font-medium text-arch-ink">{ann.label_ru}</p>
                         <p className="mt-1 text-xs text-arch-muted">
@@ -387,16 +518,7 @@ export function CuratorReviewPage() {
                         <input
                           value={draft?.traceId ?? ''}
                           onChange={(event) =>
-                            setDrafts((current) => ({
-                              ...current,
-                              [ann.id]: {
-                                ...(current[ann.id] ?? {
-                                  ...traceDraft(),
-                                  confirmed: false,
-                                }),
-                                traceId: event.target.value,
-                              },
-                            }))
+                            patchDraft(rowKey, { traceId: event.target.value }, row)
                           }
                           className="w-56 rounded-lg border border-arch-line bg-arch-surface px-2 py-1 font-mono text-xs"
                         />
@@ -410,17 +532,7 @@ export function CuratorReviewPage() {
                           <input
                             value={draft?.title ?? ''}
                             onChange={(event) =>
-                              setDrafts((current) => ({
-                                ...current,
-                                [ann.id]: {
-                                  ...(current[ann.id] ?? {
-                                    traceId: ann.traceId ?? '',
-                                    ...traceDraft(),
-                                    confirmed: false,
-                                  }),
-                                  title: event.target.value,
-                                },
-                              }))
+                              patchDraft(rowKey, { title: event.target.value }, row)
                             }
                             className="mt-1 block w-full rounded-lg border border-arch-line bg-arch-surface px-2 py-1 text-sm font-normal text-arch-ink"
                           />
@@ -431,17 +543,7 @@ export function CuratorReviewPage() {
                             <input
                               value={draft?.period ?? ''}
                               onChange={(event) =>
-                                setDrafts((current) => ({
-                                  ...current,
-                                  [ann.id]: {
-                                    ...(current[ann.id] ?? {
-                                      traceId: ann.traceId ?? '',
-                                      ...traceDraft(),
-                                      confirmed: false,
-                                    }),
-                                    period: event.target.value,
-                                  },
-                                }))
+                                patchDraft(rowKey, { period: event.target.value }, row)
                               }
                               className="mt-1 block w-full rounded-lg border border-arch-line bg-arch-surface px-2 py-1 text-sm font-normal text-arch-ink"
                             />
@@ -451,17 +553,9 @@ export function CuratorReviewPage() {
                             <select
                               value={draft?.confidence ?? 'needs_verification'}
                               onChange={(event) =>
-                                setDrafts((current) => ({
-                                  ...current,
-                                  [ann.id]: {
-                                    ...(current[ann.id] ?? {
-                                      traceId: ann.traceId ?? '',
-                                      ...traceDraft(),
-                                      confirmed: false,
-                                    }),
-                                    confidence: event.target.value as Confidence,
-                                  },
-                                }))
+                                patchDraft(rowKey, {
+                                  confidence: event.target.value as Confidence,
+                                }, row)
                               }
                               className="mt-1 block w-full rounded-lg border border-arch-line bg-arch-surface px-2 py-1 text-sm font-normal text-arch-ink"
                             >
@@ -478,17 +572,7 @@ export function CuratorReviewPage() {
                           <textarea
                             value={draft?.userMessage ?? ''}
                             onChange={(event) =>
-                              setDrafts((current) => ({
-                                ...current,
-                                [ann.id]: {
-                                  ...(current[ann.id] ?? {
-                                    traceId: ann.traceId ?? '',
-                                    ...traceDraft(),
-                                    confirmed: false,
-                                  }),
-                                  userMessage: event.target.value,
-                                },
-                              }))
+                              patchDraft(rowKey, { userMessage: event.target.value }, row)
                             }
                             rows={4}
                             className="mt-1 block w-full rounded-lg border border-arch-line bg-arch-surface px-2 py-1 text-sm font-normal leading-relaxed text-arch-ink"
@@ -506,16 +590,7 @@ export function CuratorReviewPage() {
                             type="checkbox"
                             checked={Boolean(draft?.confirmed)}
                             onChange={(event) =>
-                              setDrafts((current) => ({
-                                ...current,
-                                [ann.id]: {
-                                  ...(current[ann.id] ?? {
-                                    traceId: ann.traceId ?? '',
-                                    ...traceDraft(),
-                                  }),
-                                  confirmed: event.target.checked,
-                                },
-                              }))
+                              patchDraft(rowKey, { confirmed: event.target.checked }, row)
                             }
                             className="mt-1"
                           />
@@ -539,15 +614,14 @@ export function CuratorReviewPage() {
               <h2 className="arch-section-title">Скачать готовые файлы</h2>
               <p className="mt-2 max-w-2xl text-sm leading-relaxed text-arch-muted">
                 В скачивание попадут только строки с галочкой «Подтверждаю» ({readyCount} из{' '}
-                {annotations.length}).
+                {tableRows.length}).
               </p>
             </div>
             <button
               type="button"
-              disabled={readyCount === 0 || !rawPayload}
+              disabled={readyCount === 0 || bundles.length === 0}
               onClick={() => {
-                if (!building || !rawPayload) return
-                downloadCuratorFiles(building, rawPayload, confirmedRows, tracesById)
+                downloadCuratorFiles(building, bundles, confirmedRows, tracesById)
               }}
               className="rounded-full bg-arch-green-deep px-5 py-2.5 text-sm font-semibold text-arch-surface transition hover:bg-arch-green disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -560,16 +634,15 @@ export function CuratorReviewPage() {
             </p>
           ) : (
             <ul className="list-inside list-disc space-y-1 text-sm text-arch-muted">
-              <li>
-                <code>annotations.json</code> — полный файл для{' '}
-                <code>public/explorer/{building.cardId}/</code>
-              </li>
+              {bundles.map((bundle) => (
+                <li key={bundle.comparisonId}>
+                  <code>{bundle.annotationsRelPath}</code> — для{' '}
+                  <code>public/explorer/{building.cardId}/</code>
+                </li>
+              ))}
               <li>
                 <code>memory-traces-{building.cardId}.ts</code> — записи для{' '}
                 <code>src/data/buildings/{buildingDataFileName(building.cardId)}</code>
-              </li>
-              <li>
-                <code>README-{building.cardId}.txt</code> — куда положить каждый файл
               </li>
             </ul>
           )}
