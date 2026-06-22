@@ -33,6 +33,29 @@ export const MOSCOW_001: Building = {
         issuedAt: '2019',
       },
     ],
+    mediaReports: [
+      {
+        outlet: 'Вести',
+        title: 'Материал о Большой Ордынке',
+        url: 'https://www.vesti.ru/article/2042653',
+      },
+      {
+        outlet: 'Комсомольская правда',
+        title: 'Публикация о Большой Ордынке',
+        url: 'https://www.kp.ru/daily/26093/2993193/',
+      },
+      {
+        outlet: 'АиФ',
+        title: 'Ахматова и Никулин: жители Большой Ордынки рассказали о легендарных соседях',
+        url: 'https://aif.ru/moscow/ahmatova-i-nikulin-zhiteli-bolshoy-ordynki-rasskazali-o-legendarnyh-sosedyah',
+      },
+      {
+        outlet: 'Московский комсомолец',
+        title: 'Путешествие на Большую Ахматовку',
+        url: 'https://www.mk.ru/culture/2015/04/03/puteshestvie-na-bolshuyu-akhmatovku.html',
+        issuedAt: '2015-04-03',
+      },
+    ],
   },
   memoryTraces: [
     {
