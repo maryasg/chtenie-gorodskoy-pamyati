@@ -1,19 +1,34 @@
 {
     "cardId":  "MOSCOW_001",
-    "defaultComparisonId":  "cmp_005",
+    "defaultComparisonId":  "cmp_009",
     "comparisons":  [
+                        {
+                            "comparisonId":  "cmp_009",
+                            "title":  "новое2 с усадьбой",
+                            "labelingLayout":  "overlay",
+                            "annotationCount":  2,
+                            "isLegacy":  false,
+                            "markedFacadeUrl":  "marked-facade.png",
+                            "labeledFacadeUrl":  "marked-facade-labeled.png",
+                            "historicalRectifiedUrl":  "historical-rectified.png",
+                            "modernRectifiedUrl":  "modern-rectified.png",
+                            "modernSourceUrl":  "modern-source.png",
+                            "annotationsUrl":  "annotations.json",
+                            "facadeProjectUrl":  "facade-project.json"
+                        },
                         {
                             "comparisonId":  "cmp_005",
                             "title":  "PastVu #68053 + modern_20260520_143508.jpg",
                             "labelingLayout":  "overlay",
                             "annotationCount":  10,
                             "isLegacy":  false,
-                            "markedFacadeUrl":  "marked-facade.png",
-                            "labeledFacadeUrl":  "marked-facade-labeled.png",
-                            "historicalRectifiedUrl":  "historical-rectified.png",
-                            "modernRectifiedUrl":  "modern-rectified.png",
-                            "annotationsUrl":  "annotations.json",
-                            "facadeProjectUrl":  "facade-project.json"
+                            "markedFacadeUrl":  "comparisons/cmp_005/marked-facade.png",
+                            "labeledFacadeUrl":  "comparisons/cmp_005/marked-facade-labeled.png",
+                            "historicalRectifiedUrl":  "comparisons/cmp_005/historical-rectified.png",
+                            "modernRectifiedUrl":  "comparisons/cmp_005/modern-rectified.png",
+                            "modernSourceUrl":  "comparisons/cmp_005/modern-source.png",
+                            "annotationsUrl":  "comparisons/cmp_005/annotations.json",
+                            "facadeProjectUrl":  "comparisons/cmp_005/facade-project.json"
                         },
                         {
                             "comparisonId":  "cmp_008",
@@ -25,9 +40,10 @@
                             "labeledFacadeUrl":  "comparisons/cmp_008/marked-facade-labeled.png",
                             "historicalRectifiedUrl":  "comparisons/cmp_008/historical-rectified.png",
                             "modernRectifiedUrl":  "comparisons/cmp_008/modern-rectified.png",
+                            "modernSourceUrl":  "comparisons/cmp_008/modern-source.png",
                             "annotationsUrl":  "comparisons/cmp_008/annotations.json",
                             "facadeProjectUrl":  "comparisons/cmp_008/facade-project.json"
                         }
                     ],
-    "updatedAt":  "2026-06-20T05:03:56.7654557Z"
+    "updatedAt":  "2026-06-21T10:51:30.1958072Z"
 }
