@@ -151,7 +151,15 @@ async function probeImageMeta(url: string): Promise<ImageProbe | null> {
  */
 async function pickFacadeImage(
   assets: ArchiviewBuildingAssets,
+  options?: { arMode?: boolean },
 ): Promise<{ url: string; kind: FacadeImageKind; w: number; h: number } | null> {
+  if (options?.arMode && assets.modernSourceUrl) {
+    const source = await probeImageMeta(assets.modernSourceUrl)
+    if (source) {
+      return { url: assets.modernSourceUrl, kind: 'source_modern', w: source.w, h: source.h }
+    }
+  }
+
   if (assets.labelingLayout === 'side_by_side' && assets.sideBySideMarkedUrl) {
     const sb = await probeImageMeta(assets.sideBySideMarkedUrl)
     return sb ? { url: assets.sideBySideMarkedUrl, kind: 'side_by_side', w: sb.w, h: sb.h } : null
@@ -183,9 +191,11 @@ async function pickFacadeImage(
 export function ArchiviewFacadePanel({
   assets,
   building,
+  variant = 'default',
 }: {
   assets: ArchiviewBuildingAssets
   building?: Building
+  variant?: 'default' | 'ar'
 }) {
   const [regions, setRegions] = useState<DisplayRegion[]>([])
   const [imageOk, setImageOk] = useState(false)
@@ -382,7 +392,7 @@ export function ArchiviewFacadePanel({
       const isSb = layout === 'side_by_side'
       if (!cancelled) setSideBySide(isSb)
 
-      const loaded = await pickFacadeImage(assets)
+      const loaded = await pickFacadeImage(assets, { arMode: variant === 'ar' })
       if (cancelled) return
 
       if (!loaded) {
@@ -423,7 +433,7 @@ export function ArchiviewFacadePanel({
     return () => {
       cancelled = true
     }
-  }, [assets, buildRegionsOverlay, buildRegionsRectified, buildRegionsSideBySide, resetView])
+  }, [assets, buildRegionsOverlay, buildRegionsRectified, buildRegionsSideBySide, resetView, variant])
 
   const plateRegion =
     selectedIdx !== null
@@ -446,44 +456,70 @@ export function ArchiviewFacadePanel({
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-arch-muted">
-        {sideBySide ? (
-          <>
-            Слева — историческое фото, справа — современное. Наведите на <strong>номер или область</strong>{' '}
-            — краткая плашка. <strong>Клик</strong> по заметке в списке или по зоне откроет полную карточку
-            с текстом, источниками и достоверностью. Кнопки <strong>+</strong> / <strong>−</strong> приближают
-            фото.
-          </>
-        ) : imageKind === 'rectified' ? (
-          <>
-            Выпрямленное фото с подсветкой областей. Номера и цветные зоны видны сразу; при
-            наведении — краткая плашка, <strong>клик</strong> по зоне или заметке в списке — полная карточка
-            с источниками и достоверностью. Кнопки <strong>+</strong> / <strong>−</strong> приближают фото;
-            при увеличении можно сдвигать картинку мышью.
-          </>
-        ) : (
-          <>
-            Современное фото в исходном ракурсе с подсветкой областей. Номера и цветные зоны видны
-            сразу; при наведении — краткая плашка, <strong>клик</strong> по зоне или заметке в списке —
-            полная карточка с источниками и достоверностью. Кнопки <strong>+</strong> / <strong>−</strong>{' '}
-            приближают фото; при увеличении можно сдвигать картинку мышью.
-          </>
-        )}
-      </p>
+      {variant === 'default' ? (
+        <p className="text-sm text-arch-muted">
+          {sideBySide ? (
+            <>
+              Слева — историческое фото, справа — современное. Наведите на <strong>номер или область</strong>{' '}
+              — краткая плашка. <strong>Клик</strong> по заметке в списке или по зоне откроет полную карточку
+              с текстом, источниками и достоверностью. Кнопки <strong>+</strong> / <strong>−</strong> приближают
+              фото.
+            </>
+          ) : imageKind === 'rectified' ? (
+            <>
+              Выпрямленное фото с подсветкой областей. Номера и цветные зоны видны сразу; при
+              наведении — краткая плашка, <strong>клик</strong> по зоне или заметке в списке — полная карточка
+              с источниками и достоверностью. Кнопки <strong>+</strong> / <strong>−</strong> приближают фото;
+              при увеличении можно сдвигать картинку мышью.
+            </>
+          ) : (
+            <>
+              Современное фото в исходном ракурсе с подсветкой областей. Номера и цветные зоны видны
+              сразу; при наведении — краткая плашка, <strong>клик</strong> по зоне или заметке в списке —
+              полная карточка с источниками и достоверностью. Кнопки <strong>+</strong> / <strong>−</strong>{' '}
+              приближают фото; при увеличении можно сдвигать картинку мышью.
+            </>
+          )}
+        </p>
+      ) : (
+        <p className="text-sm text-arch-surface/75">
+          Исходный ракурс с улицы — как в видоискателе. Номера и зоны Archiview совпадают с разметкой
+          на карточке; <strong>клик</strong> по зоне открывает кураторскую заметку.
+        </p>
+      )}
 
       {!imageOk && (
-        <p className="rounded-lg border border-dashed border-arch-line bg-arch-surface-2/60 p-4 text-sm text-arch-muted">
-          Файл разметки пока не на сайте. Экспортируйте из Archiview → <code>copy_to_website.bat</code>{' '}
-          (CardId: {assets.cardId}) → Push → Ctrl+F5.
+        <p
+          className={`rounded-lg border border-dashed p-4 text-sm ${
+            variant === 'ar'
+              ? 'border-arch-surface/30 bg-arch-green-deep/40 text-arch-surface/75'
+              : 'border-arch-line bg-arch-surface-2/60 text-arch-muted'
+          }`}
+        >
+          {variant === 'ar' ? (
+            <>
+              Для AR-preview нужен файл <code>modern-source.png</code> (исходное полевое фото) и разметка
+              Archiview. Экспортируйте → <code>copy_to_website.bat</code> (CardId: {assets.cardId}) → Push.
+            </>
+          ) : (
+            <>
+              Файл разметки пока не на сайте. Экспортируйте из Archiview → <code>copy_to_website.bat</code>{' '}
+              (CardId: {assets.cardId}) → Push → Ctrl+F5.
+            </>
+          )}
         </p>
       )}
 
       {imageOk && (
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+        <div className={`flex flex-col gap-4 ${variant === 'ar' ? '' : 'lg:flex-row lg:items-start'}`}>
           <div className="relative min-w-0 flex-1">
             <div
               ref={viewportRef}
-              className={`relative w-full rounded-xl border border-arch-line bg-arch-surface-2/20 shadow-sm ${
+              className={`relative w-full shadow-sm ${
+                variant === 'ar'
+                  ? 'rounded-lg border border-arch-surface/15 bg-arch-green-deep/80'
+                  : 'rounded-xl border border-arch-line bg-arch-surface-2/20'
+              } ${
                 zoom > ZOOM_MIN
                   ? 'max-h-[min(78vh,820px)] overflow-hidden'
                   : 'overflow-visible'
@@ -674,7 +710,11 @@ export function ArchiviewFacadePanel({
           </div>
 
           {regions.length > 0 && (
-            <ol className="w-full shrink-0 space-y-1.5 text-sm lg:w-64 xl:w-72">
+            <ol
+              className={`w-full shrink-0 space-y-1.5 text-sm ${
+                variant === 'ar' ? '' : 'lg:w-64 xl:w-72'
+              }`}
+            >
               {regions.map((r) => {
                 const on = hoverIdx === r.idx
                 const color = CLASS_COLORS[r.cls] ?? '#444'
