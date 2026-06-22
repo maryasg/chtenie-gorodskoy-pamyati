@@ -11,17 +11,6 @@ import {
   type Point,
 } from '../lib/archiviewGeometry'
 
-type DisplayRegion = {
-  idx: number
-  cls: string
-  label: string
-  comment: string
-  trace?: MemoryTrace
-  polygonPct: Point[]
-  cx: number
-  cy: number
-}
-
 const CLASS_COLORS: Record<string, string> = {
   added_floor: '#00aa00',
   extension: '#ff8c00',
@@ -40,6 +29,34 @@ const CLASS_COLORS: Record<string, string> = {
   technical_artifact: '#7a8a00',
   other_artifact: '#8a8a00',
   check_manually: '#b000b0',
+}
+
+/** Окна и узкие проёмы: без сплошной заливки-квадрата — только контур и кружок. */
+const COMPACT_REGION_AREA = 90
+
+type DisplayRegion = {
+  idx: number
+  cls: string
+  label: string
+  comment: string
+  trace?: MemoryTrace
+  polygonPct: Point[]
+  cx: number
+  cy: number
+  areaPct: number
+}
+
+function regionPolygonStyle(color: string, area: number, on: boolean): { fill: string; strokeWidth: number } {
+  if (area < COMPACT_REGION_AREA) {
+    return {
+      fill: on ? `${color}33` : 'none',
+      strokeWidth: on ? 0.7 : 0.55,
+    }
+  }
+  return {
+    fill: on ? `${color}66` : `${color}40`,
+    strokeWidth: on ? 0.55 : 0.35,
+  }
 }
 
 type AnnPayload = {
@@ -286,6 +303,7 @@ export function ArchiviewFacadePanel({
         polygonPct,
         cx,
         cy,
+        areaPct: polygonAreaAbs(polygonPct),
       }
     },
     [tracesById],
@@ -523,7 +541,7 @@ export function ArchiviewFacadePanel({
                   width={imgSize.w}
                   height={imgSize.h}
                   draggable={false}
-                  className="block max-h-[min(78vh,820px)] w-full select-none rounded-xl object-contain"
+                  className="block h-auto w-auto max-h-[min(78vh,820px)] max-w-full select-none rounded-xl"
                 />
               {regions.length > 0 && (
                 <svg
@@ -535,13 +553,14 @@ export function ArchiviewFacadePanel({
                   {regions.map((r) => {
                     const on = hoverIdx === r.idx || selectedIdx === r.idx
                     const color = CLASS_COLORS[r.cls] ?? '#444'
+                    const style = regionPolygonStyle(color, r.areaPct, on)
                     return (
                       <polygon
                         key={r.idx}
                         points={r.polygonPct.map(([x, y]) => `${x},${y}`).join(' ')}
-                        fill={on ? `${color}66` : `${color}40`}
+                        fill={style.fill}
                         stroke={color}
-                        strokeWidth={on ? 0.55 : 0.35}
+                        strokeWidth={style.strokeWidth}
                       />
                     )
                   })}
