@@ -66,20 +66,15 @@ export interface OfficialExpertise {
   issuedAt?: string
 }
 
-export interface MediaReport {
-  title: string
-  url: string
-  outlet?: string
-  issuedAt?: string
-}
-
 export interface BuildingVerification {
   historicalPhoto: boolean
   historicalPhotoYear?: string
   modernPhotoYear?: string
   officialExpertise?: OfficialExpertise[]
-  /** Публикации СМИ как подтверждение фактов (не официальная экспертиза) */
-  mediaReports?: MediaReport[]
+  /** Обоснование выбора статусов достоверности (без перечисления ссылок — они в «Источниках»). */
+  confidenceNote?: string
+  /** Опорный статус достоверности для карточки в целом */
+  overallConfidence?: Confidence
 }
 
 export interface Building {

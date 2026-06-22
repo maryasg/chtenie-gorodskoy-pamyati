@@ -33,29 +33,9 @@ export const MOSCOW_001: Building = {
         issuedAt: '2019',
       },
     ],
-    mediaReports: [
-      {
-        outlet: 'Вести',
-        title: 'Материал о Большой Ордынке',
-        url: 'https://www.vesti.ru/article/2042653',
-      },
-      {
-        outlet: 'Комсомольская правда',
-        title: 'Публикация о Большой Ордынке',
-        url: 'https://www.kp.ru/daily/26093/2993193/',
-      },
-      {
-        outlet: 'АиФ',
-        title: 'Ахматова и Никулин: жители Большой Ордынки рассказали о легендарных соседях',
-        url: 'https://aif.ru/moscow/ahmatova-i-nikulin-zhiteli-bolshoy-ordynki-rasskazali-o-legendarnyh-sosedyah',
-      },
-      {
-        outlet: 'Московский комсомолец',
-        title: 'Путешествие на Большую Ахматовку',
-        url: 'https://www.mk.ru/culture/2015/04/03/puteshestvie-na-bolshuyu-akhmatovku.html',
-        issuedAt: '2015-04-03',
-      },
-    ],
+    overallConfidence: 'confirmed',
+    confidenceNote:
+      'Архитектурные выводы по фасаду и датировка надстройки 1938 года — из акта экспертизы mos.ru (2019). Сравнение облика до надстройки: фото ~1924 (PastVu, «Визуальные материалы») и съёмка 2026 (Archiview). Контекст Ордынского лагеря 1920-х — по Topos.memo.ru и картографическим материалам. Публикации СМИ о жильцах и квартале — вспомогательный контекст, ссылки в «Источниках».',
   },
   memoryTraces: [
     {
@@ -309,7 +289,6 @@ export const MOSCOW_001: Building = {
       url: EXPERTISE_ACT_URL,
     },
     { id: 'S002', name: 'Узнай Москву', url: 'https://um.mos.ru/houses/usadba_kumaninykh/' },
-    { id: 'S003', name: 'PastVu (~1924)', url: 'https://pastvu.com/p/2517403' },
     { id: 'S004', name: 'ГИМ', url: 'https://catalog.shm.ru/entity/OBJECT/3106660' },
     {
       id: 'S005',
@@ -320,6 +299,26 @@ export const MOSCOW_001: Building = {
       id: 'S006',
       name: 'Polish POV Map — Ордынский лагерь',
       url: 'http://polishpovmap.ru/karta/ordynskij-konclager/',
+    },
+    {
+      id: 'smi-vesti',
+      name: 'Вести: Материал о Большой Ордынке',
+      url: 'https://www.vesti.ru/article/2042653',
+    },
+    {
+      id: 'smi-kp',
+      name: 'Комсомольская правда: Публикация о Большой Ордынке',
+      url: 'https://www.kp.ru/daily/26093/2993193/',
+    },
+    {
+      id: 'smi-aif',
+      name: 'АиФ: Ахматова и Никулин — жители Большой Ордынки о легендарных соседях',
+      url: 'https://aif.ru/moscow/ahmatova-i-nikulin-zhiteli-bolshoy-ordynki-rasskazali-o-legendarnyh-sosedyah',
+    },
+    {
+      id: 'smi-mk',
+      name: 'Московский комсомолец: Путешествие на Большую Ахматовку (2015-04-03)',
+      url: 'https://www.mk.ru/culture/2015/04/03/puteshestvie-na-bolshuyu-akhmatovku.html',
     },
   ],
 }
