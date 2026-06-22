@@ -3,7 +3,7 @@ import L from 'leaflet'
 import { Link } from 'react-router-dom'
 import { BUILDINGS, MAP_CENTER, MAP_ZOOM } from '../data/buildings'
 import type { Building } from '../types/building'
-import { MAP_STATUS_META } from '../data/statuses'
+import { MAP_LEGEND_STATUSES, MAP_STATUS_META } from '../data/statuses'
 
 import iconRetina from 'leaflet/dist/images/marker-icon-2x.png'
 import icon from 'leaflet/dist/images/marker-icon.png'
@@ -84,15 +84,18 @@ export function MapView() {
     <div className="space-y-4">
       <div ref={containerRef} className="h-[420px] w-full rounded-xl border border-arch-line shadow-sm" />
       <div className="flex flex-wrap gap-3 text-sm">
-        {Object.entries(MAP_STATUS_META).map(([key, meta]) => (
-          <span key={key} className="flex items-center gap-1.5">
-            <span
-              className="inline-block h-3 w-3 rounded-full border border-white shadow"
-              style={{ background: meta.marker }}
-            />
-            {meta.label}
-          </span>
-        ))}
+        {MAP_LEGEND_STATUSES.map((key) => {
+          const meta = MAP_STATUS_META[key]
+          return (
+            <span key={key} className="flex items-center gap-1.5">
+              <span
+                className="inline-block h-3 w-3 rounded-full border border-white shadow"
+                style={{ background: meta.marker }}
+              />
+              {meta.label}
+            </span>
+          )
+        })}
       </div>
       <p className="text-xs text-arch-muted">
         Наведите на карточку здания ниже — на карте подсветится точка и названия следов.

@@ -271,7 +271,7 @@ export function BuildingPage() {
           to="/"
           className="text-sm font-medium text-arch-green-light hover:text-arch-green-deep"
         >
-          ← Карта пилота
+          ← Москва
         </Link>
         <div className="mt-3">
           <h1 className="text-2xl font-semibold tracking-tight text-arch-green-deep">{building.name}</h1>

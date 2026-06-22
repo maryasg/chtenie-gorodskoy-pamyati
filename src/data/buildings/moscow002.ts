@@ -3,7 +3,7 @@ import type { Building } from '../../types/building'
 export const MOSCOW_002: Building = {
   id: 'MOSCOW_002_turgenev_library',
   cardId: 'MOSCOW_002',
-  name: 'Тургеневская библиотека',
+  name: 'Доходный дом А.А. Бирюковой-Валерьяновой / МГБ им. И.С. Тургенева',
   address: 'Москва, Бобров переулок, 6, строение 1',
   lat: 55.7651,
   lng: 37.6344,

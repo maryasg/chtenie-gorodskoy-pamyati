@@ -1,10 +1,13 @@
 import type { MapStatus } from '../types/building'
 
+/** Подписи под картой — только активные статусы объектов. */
+export const MAP_LEGEND_STATUSES: MapStatus[] = ['verified', 'in_preparation']
+
 export const MAP_STATUS_META: Record<
   MapStatus,
   { label: string; color: string; marker: string }
 > = {
-  verified: { label: 'Проверено', color: '#16a34a', marker: '#15803d' },
+  verified: { label: 'Достоверные данные', color: '#16a34a', marker: '#15803d' },
   preliminary_reading: {
     label: 'Предварительное чтение',
     color: '#ca8a04',
