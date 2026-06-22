@@ -433,9 +433,14 @@ export function ArchiviewFacadePanel({
         : null
   const plateExpanded = selectedIdx !== null && plateRegion?.idx === selectedIdx
 
-  /** Large regions (e.g. #12) must not block clicks on smaller ones (#6, #9) underneath. */
+  /** Small regions (e.g. #6, #9) must paint above large overlaps (#12) for clicks — render largest first, smallest last in SVG. */
   const regionsForHit = useMemo(
-    () => [...regions].sort((a, b) => polygonAreaAbs(a.polygonPct) - polygonAreaAbs(b.polygonPct)),
+    () => [...regions].sort((a, b) => polygonAreaAbs(b.polygonPct) - polygonAreaAbs(a.polygonPct)),
+    [regions],
+  )
+
+  const regionsBadges = useMemo(
+    () => [...regions].sort((a, b) => polygonAreaAbs(b.polygonPct) - polygonAreaAbs(a.polygonPct)),
     [regions],
   )
 
@@ -568,7 +573,7 @@ export function ArchiviewFacadePanel({
               )}
               {regions.length > 0 && (
                 <div className="pointer-events-none absolute inset-0 overflow-visible" aria-hidden>
-                  {regions.map((r) => {
+                  {regionsBadges.map((r) => {
                     const on = hoverIdx === r.idx || selectedIdx === r.idx
                     const color = CLASS_COLORS[r.cls] ?? '#444'
                     const size = on ? 26 : 22
