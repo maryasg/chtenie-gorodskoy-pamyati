@@ -23,33 +23,9 @@ export const MOSCOW_002: Building = {
     historicalPhoto: true,
     historicalPhotoYear: '1934',
     modernPhotoYear: '2026',
-    mediaReports: [
-      {
-        outlet: 'Москвич Mag',
-        title: 'Дом недели: Тургеневская библиотека в Бобровом переулке',
-        url: 'https://moskvichmag.ru/gorod/dom-nedeli-turgenevskaya-biblioteka-v-bobrovom-pereulke/',
-      },
-      {
-        outlet: 'Т—Ж',
-        title: 'Необычные московские библиотеки',
-        url: 'https://t-j.ru/list/moscow-libraries/',
-      },
-      {
-        outlet: 'МИР 24',
-        title: 'Девять необычных библиотек Москвы',
-        url: 'https://mir24.tv/articles/16362147/devyat-neobychnyh-bibliotek-moskvy',
-      },
-      {
-        outlet: 'Милосердие.ру',
-        title: 'Легендарная «Тургеневка»: благотворительный проект вдовы Морозовой',
-        url: 'https://www.miloserdie.ru/article/legendarnaya-turgenevka-blagotvoritelnyj-proekt-morozovskoj-vdovy/',
-      },
-      {
-        outlet: 'The City',
-        title: 'Материал о Тургеневской библиотеке',
-        url: 'https://thecity.m24.ru/articles/8414',
-      },
-    ],
+    overallConfidence: 'confirmed',
+    confidenceNote:
+      'История здания и библиотеки — по официальной справке МГБ им. И. С. Тургенева (не СМИ) и публикациям в прессе. Визуальное сравнение слоёв фасада: архив 1934 (PastVu, см. «Визуальные материалы») и полевая съёмка 2026 (Archiview). Статьи СМИ — вспомогательный контекст, ссылки в блоке «Источники».',
   },
   memoryTraces: [
     {
@@ -144,16 +120,35 @@ export const MOSCOW_002: Building = {
   ],
   hotspots: [],
   sources: [
-    { id: 'S001', name: 'PastVu — 1934', url: 'https://pastvu.com/p/2053853' },
     {
-      id: 'S002',
-      name: 'Москвич Mag — Тургеневская библиотека',
+      id: 'turgenev-history',
+      name: 'МГБ им. И. С. Тургенева — история библиотеки',
+      url: 'https://turgenev.ru/o-biblioteke/istoriya/',
+    },
+    {
+      id: 'smi-moskvichmag',
+      name: 'Москвич Mag: Дом недели — Тургеневская библиотека в Бобровом переулке',
       url: 'https://moskvichmag.ru/gorod/dom-nedeli-turgenevskaya-biblioteka-v-bobrovom-pereulke/',
     },
     {
-      id: 'S003',
-      name: 'Милосердие.ру — история «Тургеневки»',
+      id: 'smi-miloserdie',
+      name: 'Милосердие.ру: Легендарная «Тургеневка» — благотворительный проект вдовы Морозовой',
       url: 'https://www.miloserdie.ru/article/legendarnaya-turgenevka-blagotvoritelnyj-proekt-morozovskoj-vdovy/',
+    },
+    {
+      id: 'smi-tj',
+      name: 'Т—Ж: Необычные московские библиотеки',
+      url: 'https://t-j.ru/list/moscow-libraries/',
+    },
+    {
+      id: 'smi-mir24',
+      name: 'МИР 24: Девять необычных библиотек Москвы',
+      url: 'https://mir24.tv/articles/16362147/devyat-neobychnyh-bibliotek-moskvy',
+    },
+    {
+      id: 'smi-thecity',
+      name: 'The City: Материал о Тургеневской библиотеке',
+      url: 'https://thecity.m24.ru/articles/8414',
     },
   ],
 }

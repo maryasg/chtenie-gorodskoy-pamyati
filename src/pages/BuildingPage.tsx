@@ -82,7 +82,7 @@ function BuildingStatusChips({
   const hasVerification =
     Boolean(building.verification?.historicalPhoto) ||
     Boolean(building.verification?.officialExpertise?.length) ||
-    Boolean(building.verification?.mediaReports?.length) ||
+    Boolean(building.verification?.confidenceNote?.trim()) ||
     building.sources.length > 0
   const hasFieldObservation =
     Boolean(modernPhotoYear) ||

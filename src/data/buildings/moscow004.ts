@@ -20,29 +20,9 @@ export const MOSCOW_004: Building = {
     historicalPhoto: true,
     historicalPhotoYear: '1989',
     modernPhotoYear: '2026',
-    mediaReports: [
-      {
-        outlet: 'Москвич Mag',
-        title: 'Волонтёры восстановили в Кривоколенном вывеску 1920-х годов, найденную под слоями штукатурки',
-        url: 'https://moskvichmag.ru/gorod/volontery-vosstanovili-v-krivokolennom-vyvesku-1920-h-godov-najdennuyu-pod-sloyami-shtukaturki/',
-        issuedAt: '2024-12-05',
-      },
-      {
-        outlet: 'Day.ru',
-        title: 'Там Есенин бил Пастернака в морду: кровавая тайна тихого Кривоколенного переулка',
-        url: 'https://day.ru/nasledie/tam-esenin-bil-pasternaka-v-mordu-krovavaya-tayna-tikhogo-krivokolennogo-pereulka_id16340_a515',
-      },
-      {
-        outlet: 'REGNUM',
-        title: 'Материал о вывеске на доме в Кривоколенном переулке',
-        url: 'https://regnum.ru/news/1973741',
-      },
-      {
-        outlet: 'Rambler Weekend',
-        title: 'Стало известно, что написано на столетней вывеске, обнаруженной на доме в центре Москвы',
-        url: 'https://weekend.rambler.ru/read/53399220-stalo-izvestno-chto-napisano-na-stoletney-vyveske-ee-obnaruzhili-na-dome-v-tsentre-moskvy/',
-      },
-    ],
+    overallConfidence: 'highly_probable',
+    confidenceNote:
+      'Официального акта экспертизы по дому нет. Выводы о вывесках — «Высокая вероятность»: надписи читаются на полевой съёмке 2026 и архивном фото 1989; датировки и история реставрации опираются на публикации СМИ (ссылки — в блоке «Источники» ниже). Статус «Подтверждено» на сайте — только для актов mos.ru и реестров.',
   },
   memoryTraces: [
     {
@@ -151,11 +131,25 @@ export const MOSCOW_004: Building = {
     { id: 'hs-sign-gas', label: 'Вывеска «Сжатый газ»', x: 55, y: 50, width: 25, height: 14, traceId: 'T002' },
   ],
   sources: [
-    { id: 'pastvu', name: 'PastVu', url: 'https://pastvu.com/p/55243' },
     {
-      id: 'moskvichmag-2024',
-      name: 'Москвич Mag',
+      id: 'smi-moskvichmag',
+      name: 'Москвич Mag: Волонтёры восстановили в Кривоколенном вывеску 1920-х годов, найденную под слоями штукатурки (2024-12-05)',
       url: 'https://moskvichmag.ru/gorod/volontery-vosstanovili-v-krivokolennom-vyvesku-1920-h-godov-najdennuyu-pod-sloyami-shtukaturki/',
+    },
+    {
+      id: 'smi-day',
+      name: 'Day.ru: Там Есенин бил Пастернака в морду: кровавая тайна тихого Кривоколенного переулка',
+      url: 'https://day.ru/nasledie/tam-esenin-bil-pasternaka-v-mordu-krovavaya-tayna-tikhogo-krivokolennogo-pereulka_id16340_a515',
+    },
+    {
+      id: 'smi-regnum',
+      name: 'REGNUM: Материал о вывеске на доме в Кривоколенном переулке',
+      url: 'https://regnum.ru/news/1973741',
+    },
+    {
+      id: 'smi-rambler',
+      name: 'Rambler Weekend: Стало известно, что написано на столетней вывеске, обнаруженной на доме в центре Москвы',
+      url: 'https://weekend.rambler.ru/read/53399220-stalo-izvestno-chto-napisano-na-stoletney-vyveske-ee-obnaruzhili-na-dome-v-tsentre-moskvy/',
     },
   ],
 }

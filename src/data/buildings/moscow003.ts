@@ -31,40 +31,9 @@ export const MOSCOW_003: Building = {
         issuedAt: '2019',
       },
     ],
-    mediaReports: [
-      {
-        outlet: 'Мослента',
-        title: 'Львы со временем превратились в котов: история столичного дома со зверями, драконов, грифонов и акул',
-        url: 'https://moslenta.ru/city/dom-v-kotorom/lvy-so-vremenem-prevratilis-v-kotov-istoriya-stolichnogo-doma-so-zveryami-drakonov-grifonov-i-akul.htm',
-      },
-      {
-        outlet: 'Snob',
-        title: 'Жизнь в тишине московских переулков: история пяти знаковых домов района Чистых прудов',
-        url: 'https://snob.ru/style/zhizn-v-tishine-moskovskih-pereulkov-istoriya-pyati-znakovyh-domov-rajona-chistyh-prudov',
-      },
-      {
-        outlet: 'Metro',
-        title: 'Дом со зверьми долго боролся с акулами: здание на Чистопрудном бульваре отмечает 115-летие',
-        url: 'https://www.gazetametro.ru/articles/dom-so-zverjami-dolgo-borolsja-s-akulami-zdanie-na-chistoprudnom-bulvare-otmechaet-115-letie-21-07-2024',
-        issuedAt: '2024-07-21',
-      },
-      {
-        outlet: 'Комсомольская правда (Москва)',
-        title: 'Материал о доме со зверями',
-        url: 'https://www.msk.kp.ru/daily/27601/4928220/',
-      },
-      {
-        outlet: 'НТВ',
-        title: 'Сюжет о доме со зверями на Чистопрудном бульваре',
-        url: 'https://www.ntv.ru/novosti/2744643/',
-      },
-      {
-        outlet: 'Российская газета',
-        title: 'Вышли из лесов',
-        url: 'https://rg.ru/2023/09/11/reg-cfo/vyshli-iz-lesov.html',
-        issuedAt: '2023-09-11',
-      },
-    ],
+    overallConfidence: 'confirmed',
+    confidenceNote:
+      'Архитектурные выводы по фасаду — из акта экспертизы mos.ru (2019). Визуальное сравнение до и после надстройки 1945 года: фото ~1911 (PastVu, «Визуальные материалы») и съёмка 2026 (Archiview). Публикации СМИ о здании — вспомогательный контекст, ссылки в блоке «Источники».',
   },
   memoryTraces: [
     {
@@ -315,6 +284,35 @@ export const MOSCOW_003: Building = {
       url: 'https://www.mos.ru/upload/documents/files/5859/AKTGIKEsprilChistoprydnii14str3polvalChistoprydnii14str3polval.pdf',
     },
     { id: 'S002', name: 'Узнай Москву', url: 'https://um.mos.ru/houses/dom_so_zveryami/' },
-    { id: 'S003', name: 'PastVu — до надстройки', url: 'https://pastvu.com/p/45932' },
+    {
+      id: 'smi-moslenta',
+      name: 'Мослента: Львы со временем превратились в котов — история дома со зверями',
+      url: 'https://moslenta.ru/city/dom-v-kotorom/lvy-so-vremenem-prevratilis-v-kotov-istoriya-stolichnogo-doma-so-zveryami-drakonov-grifonov-i-akul.htm',
+    },
+    {
+      id: 'smi-snob',
+      name: 'Snob: Жизнь в тишине московских переулков — пять знаковых домов Чистых прудов',
+      url: 'https://snob.ru/style/zhizn-v-tishine-moskovskih-pereulkov-istoriya-pyati-znakovyh-domov-rajona-chistyh-prudov',
+    },
+    {
+      id: 'smi-metro',
+      name: 'Metro: Дом со зверьми долго боролся с акулами (2024-07-21)',
+      url: 'https://www.gazetametro.ru/articles/dom-so-zverjami-dolgo-borolsja-s-akulami-zdanie-na-chistoprudnom-bulvare-otmechaet-115-letie-21-07-2024',
+    },
+    {
+      id: 'smi-kp',
+      name: 'Комсомольская правда (Москва): Материал о доме со зверями',
+      url: 'https://www.msk.kp.ru/daily/27601/4928220/',
+    },
+    {
+      id: 'smi-ntv',
+      name: 'НТВ: Сюжет о доме со зверями на Чистопрудном бульваре',
+      url: 'https://www.ntv.ru/novosti/2744643/',
+    },
+    {
+      id: 'smi-rg',
+      name: 'Российская газета: Вышли из лесов (2023-09-11)',
+      url: 'https://rg.ru/2023/09/11/reg-cfo/vyshli-iz-lesov.html',
+    },
   ],
 }
