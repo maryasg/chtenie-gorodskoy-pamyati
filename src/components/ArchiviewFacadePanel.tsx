@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ArchiviewAnnotation, ArchiviewBuildingAssets } from '../data/explorer/archiviewAssets'
 import type { Building, MemoryTrace } from '../types/building'
 import { ConfidenceBadge } from './ConfidenceBadge'
@@ -91,6 +91,32 @@ function shortText(text: string, maxLength = 260): string {
 
 type FacadeImageKind = 'side_by_side' | 'source_modern' | 'rectified' | 'marked'
 
+const ZOOM_MIN = 1
+const ZOOM_MAX = 4
+const ZOOM_STEP = 0.35
+
+type Pan = { x: number; y: number }
+
+function clampZoom(value: number): number {
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value))
+}
+
+function panForZoomAtCenter(
+  pan: Pan,
+  zoom: number,
+  nextZoom: number,
+  centerX: number,
+  centerY: number,
+): Pan {
+  if (nextZoom <= ZOOM_MIN) return { x: 0, y: 0 }
+  const cx = (centerX - pan.x) / zoom
+  const cy = (centerY - pan.y) / zoom
+  return {
+    x: centerX - cx * nextZoom,
+    y: centerY - cy * nextZoom,
+  }
+}
+
 type ImageProbe = { w: number; h: number; bytes: number }
 
 async function probeImageMeta(url: string): Promise<ImageProbe | null> {
@@ -160,6 +186,88 @@ export function ArchiviewFacadePanel({
   const [sideBySide, setSideBySide] = useState(false)
   const [displayImageUrl, setDisplayImageUrl] = useState('')
   const [imageKind, setImageKind] = useState<FacadeImageKind | null>(null)
+  const [zoom, setZoom] = useState(ZOOM_MIN)
+  const [pan, setPan] = useState<Pan>({ x: 0, y: 0 })
+  const [isPanning, setIsPanning] = useState(false)
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const panSessionRef = useRef<{ startPan: Pan; startX: number; startY: number; moved: boolean } | null>(
+    null,
+  )
+
+  const resetView = useCallback(() => {
+    setZoom(ZOOM_MIN)
+    setPan({ x: 0, y: 0 })
+  }, [])
+
+  const viewportCenter = useCallback((): { x: number; y: number } => {
+    const el = viewportRef.current
+    if (!el) return { x: 0, y: 0 }
+    const rect = el.getBoundingClientRect()
+    return { x: rect.width / 2, y: rect.height / 2 }
+  }, [])
+
+  const zoomIn = useCallback(() => {
+    setZoom((current) => {
+      const next = clampZoom(Number((current + ZOOM_STEP).toFixed(2)))
+      if (next === current) return current
+      const center = viewportCenter()
+      setPan((p) => panForZoomAtCenter(p, current, next, center.x, center.y))
+      return next
+    })
+  }, [viewportCenter])
+
+  const zoomOut = useCallback(() => {
+    setZoom((current) => {
+      const next = clampZoom(Number((current - ZOOM_STEP).toFixed(2)))
+      if (next === current) return current
+      if (next <= ZOOM_MIN) {
+        setPan({ x: 0, y: 0 })
+        return ZOOM_MIN
+      }
+      const center = viewportCenter()
+      setPan((p) => panForZoomAtCenter(p, current, next, center.x, center.y))
+      return next
+    })
+  }, [viewportCenter])
+
+  const handleViewportPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (zoom <= ZOOM_MIN || event.button !== 0) return
+      const target = event.target as HTMLElement
+      if (target.closest('button') || target.tagName === 'polygon') return
+      panSessionRef.current = {
+        startPan: pan,
+        startX: event.clientX,
+        startY: event.clientY,
+        moved: false,
+      }
+      setIsPanning(true)
+      event.currentTarget.setPointerCapture(event.pointerId)
+    },
+    [pan, zoom],
+  )
+
+  const handleViewportPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const session = panSessionRef.current
+    if (!session) return
+    const dx = event.clientX - session.startX
+    const dy = event.clientY - session.startY
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) session.moved = true
+    setPan({
+      x: session.startPan.x + dx,
+      y: session.startPan.y + dy,
+    })
+  }, [])
+
+  const endPanSession = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (panSessionRef.current) {
+      panSessionRef.current = null
+      setIsPanning(false)
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      }
+    }
+  }, [])
 
   const tracesById = useMemo(() => {
     return new Map(building?.memoryTraces.map((trace) => [trace.id, trace]) ?? [])
@@ -250,6 +358,7 @@ export function ArchiviewFacadePanel({
       setDisplayImageUrl('')
       setImageKind(null)
       setRegions([])
+      resetView()
 
       const [annRes, projRes] = await Promise.all([
         fetch(assets.annotationsUrl),
@@ -304,7 +413,7 @@ export function ArchiviewFacadePanel({
     return () => {
       cancelled = true
     }
-  }, [assets, buildRegionsOverlay, buildRegionsRectified, buildRegionsSideBySide])
+  }, [assets, buildRegionsOverlay, buildRegionsRectified, buildRegionsSideBySide, resetView])
 
   const active = hoverIdx !== null ? regions.find((r) => r.idx === hoverIdx) : null
   const selected = selectedIdx !== null ? regions.find((r) => r.idx === selectedIdx) : null
@@ -321,19 +430,22 @@ export function ArchiviewFacadePanel({
         {sideBySide ? (
           <>
             Слева — историческое фото, справа — современное. Наведите на <strong>номер или область</strong>{' '}
-            — сверху появится кураторская плашка.
+            — сверху появится кураторская плашка. Кнопки <strong>+</strong> / <strong>−</strong> приближают
+            фото.
           </>
         ) : imageKind === 'rectified' ? (
           <>
             Выпрямленное фото с подсветкой областей. Номера и цветные зоны видны сразу; при
             наведении на <strong>область</strong> сверху появится кураторская плашка. Список справа
-            синхронизирован с подсветкой.
+            синхронизирован с подсветкой. Кнопки <strong>+</strong> / <strong>−</strong> приближают фото;
+            при увеличении можно сдвигать картинку мышью.
           </>
         ) : (
           <>
             Современное фото в исходном ракурсе с подсветкой областей. Номера и цветные зоны видны
             сразу; при наведении на <strong>область</strong> сверху появится кураторская плашка.
-            Список справа синхронизирован с подсветкой.
+            Список справа синхронизирован с подсветкой. Кнопки <strong>+</strong> / <strong>−</strong>{' '}
+            приближают фото; при увеличении можно сдвигать картинку мышью.
           </>
         )}
       </p>
@@ -349,20 +461,70 @@ export function ArchiviewFacadePanel({
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
           <div className="relative min-w-0 flex-1">
             <div
-              className="relative inline-block max-w-full"
+              ref={viewportRef}
+              className={`relative max-h-[min(78vh,820px)] w-full overflow-hidden rounded-xl border border-arch-line bg-arch-surface-2/20 shadow-sm ${
+                zoom > ZOOM_MIN ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : ''
+              }`}
               onMouseLeave={() => setHoverIdx(null)}
+              onPointerDown={handleViewportPointerDown}
+              onPointerMove={handleViewportPointerMove}
+              onPointerUp={endPanSession}
+              onPointerCancel={endPanSession}
             >
-              <img
-                src={displayImageUrl}
-                alt={
-                  sideBySide
-                    ? 'Историческое и современное фото с разметкой Archiview'
-                    : 'Современное фото фасада с подсветкой Archiview'
-                }
-                width={imgSize.w}
-                height={imgSize.h}
-                className="block max-h-[min(78vh,820px)] w-full rounded-xl border border-arch-line object-contain shadow-sm"
-              />
+              <div
+                className="absolute right-2 top-2 z-30 flex items-center gap-1 rounded-lg border border-arch-line/80 bg-arch-surface/95 p-1 shadow-md backdrop-blur-sm"
+                role="toolbar"
+                aria-label="Масштаб фасада"
+              >
+                <button
+                  type="button"
+                  onClick={zoomOut}
+                  disabled={zoom <= ZOOM_MIN}
+                  aria-label="Уменьшить"
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-lg font-semibold text-arch-green-deep transition hover:bg-arch-green-soft disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  −
+                </button>
+                <button
+                  type="button"
+                  onClick={resetView}
+                  disabled={zoom <= ZOOM_MIN && pan.x === 0 && pan.y === 0}
+                  aria-label="Сбросить масштаб"
+                  title="Сбросить"
+                  className="flex h-8 min-w-8 items-center justify-center rounded-md px-1.5 text-xs font-semibold text-arch-green-deep transition hover:bg-arch-green-soft disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  1:1
+                </button>
+                <button
+                  type="button"
+                  onClick={zoomIn}
+                  disabled={zoom >= ZOOM_MAX}
+                  aria-label="Увеличить"
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-lg font-semibold text-arch-green-deep transition hover:bg-arch-green-soft disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  +
+                </button>
+              </div>
+
+              <div
+                className="relative inline-block max-w-full origin-top-left will-change-transform"
+                style={{
+                  transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                  transition: isPanning ? undefined : 'transform 160ms ease-out',
+                }}
+              >
+                <img
+                  src={displayImageUrl}
+                  alt={
+                    sideBySide
+                      ? 'Историческое и современное фото с разметкой Archiview'
+                      : 'Современное фото фасада с подсветкой Archiview'
+                  }
+                  width={imgSize.w}
+                  height={imgSize.h}
+                  draggable={false}
+                  className="block max-h-[min(78vh,820px)] w-full select-none rounded-xl object-contain"
+                />
               {regions.length > 0 && (
                 <svg
                   className="pointer-events-none absolute inset-0 h-full w-full rounded-xl"
@@ -467,6 +629,7 @@ export function ArchiviewFacadePanel({
                   </div>
                 </div>
               )}
+              </div>
             </div>
           </div>
 
