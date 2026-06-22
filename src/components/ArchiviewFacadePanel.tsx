@@ -110,12 +110,10 @@ async function probeImageMeta(url: string): Promise<ImageProbe | null> {
   })
 }
 
-/** marked-facade из 06 (overlay) часто заметно меньше modern-rectified — не берём как фон. */
-function markedLooksLikeOverlayExport(markedBytes: number, rectifiedBytes: number): boolean {
-  if (markedBytes <= 0 || rectifiedBytes <= 0) return false
-  return markedBytes < rectifiedBytes * 0.93
-}
-
+/**
+ * Фон фасада: чистое фото без запечённой разметки.
+ * Номера и цветные зоны рисует панель поверх (кружки — HTML, полигоны — SVG).
+ */
 async function pickFacadeImage(
   assets: ArchiviewBuildingAssets,
 ): Promise<{ url: string; kind: FacadeImageKind; w: number; h: number } | null> {
@@ -131,31 +129,18 @@ async function pickFacadeImage(
     }
   }
 
-  const markedUrl = assets.markedFacadeUrl
   const rectifiedUrl = assets.modernRectifiedUrl
-  if (markedUrl && rectifiedUrl) {
-    const [marked, rectified] = await Promise.all([
-      probeImageMeta(markedUrl),
-      probeImageMeta(rectifiedUrl),
-    ])
-    if (marked && rectified && markedLooksLikeOverlayExport(marked.bytes, rectified.bytes)) {
-      return { url: rectifiedUrl, kind: 'rectified', w: rectified.w, h: rectified.h }
-    }
-    if (marked) {
-      return { url: markedUrl, kind: 'marked', w: marked.w, h: marked.h }
-    }
+  if (rectifiedUrl) {
+    const rectified = await probeImageMeta(rectifiedUrl)
     if (rectified) {
       return { url: rectifiedUrl, kind: 'rectified', w: rectified.w, h: rectified.h }
     }
   }
 
+  const markedUrl = assets.markedFacadeUrl
   if (markedUrl) {
     const marked = await probeImageMeta(markedUrl)
     if (marked) return { url: markedUrl, kind: 'marked', w: marked.w, h: marked.h }
-  }
-  if (rectifiedUrl) {
-    const rectified = await probeImageMeta(rectifiedUrl)
-    if (rectified) return { url: rectifiedUrl, kind: 'rectified', w: rectified.w, h: rectified.h }
   }
   return null
 }
@@ -389,37 +374,43 @@ export function ArchiviewFacadePanel({
                     const on = hoverIdx === r.idx || selectedIdx === r.idx
                     const color = CLASS_COLORS[r.cls] ?? '#444'
                     return (
-                      <g key={r.idx}>
-                        <polygon
-                          points={r.polygonPct.map(([x, y]) => `${x},${y}`).join(' ')}
-                          fill={on ? `${color}66` : `${color}40`}
-                          stroke={color}
-                          strokeWidth={on ? 0.55 : 0.35}
-                        />
-                        <circle
-                          cx={r.cx}
-                          cy={r.cy}
-                          r={on ? 1.35 : 1.15}
-                          fill={color}
-                          stroke="#fff"
-                          strokeWidth={0.12}
-                        />
-                        <text
-                          x={r.cx}
-                          y={r.cy}
-                          textAnchor="middle"
-                          dominantBaseline="central"
-                          fill="#fff"
-                          fontSize={on ? 1.35 : 1.2}
-                          fontWeight={700}
-                          style={{ pointerEvents: 'none' }}
-                        >
-                          {r.idx}
-                        </text>
-                      </g>
+                      <polygon
+                        key={r.idx}
+                        points={r.polygonPct.map(([x, y]) => `${x},${y}`).join(' ')}
+                        fill={on ? `${color}66` : `${color}40`}
+                        stroke={color}
+                        strokeWidth={on ? 0.55 : 0.35}
+                      />
                     )
                   })}
                 </svg>
+              )}
+              {regions.length > 0 && (
+                <div className="pointer-events-none absolute inset-0 rounded-xl" aria-hidden>
+                  {regions.map((r) => {
+                    const on = hoverIdx === r.idx || selectedIdx === r.idx
+                    const color = CLASS_COLORS[r.cls] ?? '#444'
+                    const size = on ? 26 : 22
+                    return (
+                      <div
+                        key={`badge-${r.idx}`}
+                        className="absolute flex items-center justify-center rounded-full border border-white font-bold leading-none text-white shadow-sm"
+                        style={{
+                          left: `${r.cx}%`,
+                          top: `${r.cy}%`,
+                          width: size,
+                          height: size,
+                          marginLeft: -size / 2,
+                          marginTop: -size / 2,
+                          backgroundColor: color,
+                          fontSize: r.idx >= 10 ? 10 : 11,
+                        }}
+                      >
+                        {r.idx}
+                      </div>
+                    )
+                  })}
+                </div>
               )}
               {regions.length > 0 && (
                 <svg
