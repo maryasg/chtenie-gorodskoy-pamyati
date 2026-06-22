@@ -1,5 +1,6 @@
 export type Confidence =
   | 'confirmed'
+  | 'highly_probable'
   | 'probable'
   | 'needs_verification'
   | 'typological_hypothesis'

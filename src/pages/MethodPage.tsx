@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { BUILDINGS } from '../data/buildings'
+import { ConfidenceLegend } from '../components/ConfidenceBadge'
 
 const PIPELINE = [
   {
@@ -184,6 +185,16 @@ export function MethodPage() {
           Если сайту не хватает метаданных для безопасного наложения, он не должен показывать
           интерактивный слой вместо того, чтобы рисовать неверную подсветку.
         </p>
+      </MethodSection>
+
+      <MethodSection title="Статусы достоверности и источники" kicker="Как читать бейджи на карточках">
+        <p className="mb-4 max-w-3xl text-sm leading-relaxed text-arch-muted">
+          Каждый исторический вывод на сайте помечен статусом. Статус показывает не «красоту текста», а
+          <strong className="font-medium text-arch-ink"> насколько надёжны источники</strong>, на которых он
+          держится. Акт экспертизы с подписью архитекторов-экспертов — высший уровень; статья в СМИ без
+          ссылки на документ — повод поставить «Требует проверки», а не «Подтверждено».
+        </p>
+        <ConfidenceLegend />
       </MethodSection>
 
       <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
