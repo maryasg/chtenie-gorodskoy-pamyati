@@ -1,4 +1,4 @@
-{
+﻿{
     "version":  "v15 projects + hand cursor + delete any region",
     "image":  "04_modern_rectified.png",
     "rectified_size":  {
@@ -700,7 +700,8 @@
                                                        340.11688232421875
                                                    ]
                                                ],
-                            "coordinate_space":  "rectified"
+                            "coordinate_space":  "rectified",
+                            "traceId":  "MOSCOW_003_T007"
                         },
                         {
                             "id":  7,
@@ -794,7 +795,7 @@
                             "id":  9,
                             "class":  "other_artifact",
                             "label_ru":  "Другой артефакт / другое изменение",
-                            "comment":  "Шатровая крыша - утраченный элемент",
+                            "comment":  "Шатровая крыша — утраченный элемент",
                             "polygon":  [
                                             [
                                                 456.3,
@@ -825,7 +826,7 @@
                                                    ]
                                                ],
                             "coordinate_space":  "rectified",
-                            "traceId":  "MOSCOW_003_T004"
+                            "traceId":  "MOSCOW_003_T002"
                         },
                         {
                             "id":  10,
@@ -915,7 +916,7 @@
                                                    ]
                                                ],
                             "coordinate_space":  "rectified",
-                            "traceId":  "MOSCOW_003_T007"
+                            "traceId":  "MOSCOW_003_T004"
                         },
                         {
                             "id":  13,
