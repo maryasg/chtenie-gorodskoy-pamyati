@@ -3,7 +3,7 @@ import type { Building } from '../../types/building'
 export const MOSCOW_003: Building = {
   id: 'MOSCOW_003_dom_so_zveryami',
   cardId: 'MOSCOW_003',
-  name: 'Дом со зверями',
+  name: 'Доходный дом церкви Троицы на Грязех / Дом со зверями',
   alternativeNames: ['Дом Перцова', 'Доходный дом церкви Троицы на Грязех'],
   address: 'Москва, Чистопрудный бульвар, 14, строение 3',
   lat: 55.7599,
