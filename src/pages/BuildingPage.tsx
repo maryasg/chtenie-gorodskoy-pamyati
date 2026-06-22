@@ -3,7 +3,7 @@ import { getBuildingById } from '../data/buildings'
 import { ConfidenceBadge } from '../components/ConfidenceBadge'
 import { ArchiviewFacadePanel } from '../components/ArchiviewFacadePanel'
 import { BuildingVerificationBanner } from '../components/BuildingVerificationBanner'
-import { FacadeBeforeAfterSlider } from '../components/FacadeBeforeAfterSlider'
+import { FacadePhotoComparison } from '../components/FacadePhotoComparison'
 import { FacadeHotspotViewer } from '../components/FacadeHotspotViewer'
 import { TransformationTimeline } from '../components/TransformationTimeline'
 import { getArchiviewAssets } from '../data/explorer/archiviewAssets'
@@ -374,12 +374,7 @@ export function BuildingPage() {
             {isSideBySide ? (
               <SideBySidePhotoComparison assets={displayAssets} />
             ) : (
-              <FacadeBeforeAfterSlider
-                historicalUrl={displayAssets.historicalRectifiedUrl}
-                modernUrl={displayAssets.modernRectifiedUrl}
-                historicalYear={displayAssets.historicalPhotoYear}
-                modernYear={displayAssets.modernPhotoYear}
-              />
+              <FacadePhotoComparison building={building} assets={displayAssets} />
             )}
           </Section>
           {!isSideBySide && (
@@ -388,7 +383,7 @@ export function BuildingPage() {
                 to={`/building/${building.id}/ar`}
                 className="inline-flex items-center gap-1 rounded-full border border-arch-line bg-arch-surface px-4 py-2 text-sm font-medium text-arch-green-deep hover:border-arch-green/40 hover:bg-arch-green-soft"
               >
-                AR-preview: слои времени на фасаде →
+                AR-preview: подсветка на полевом фото →
               </Link>
             </p>
           )}

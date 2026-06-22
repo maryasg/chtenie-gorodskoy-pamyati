@@ -19,8 +19,14 @@ export function ARPage() {
         <Link to={`/building/${building.id}`} className="text-sm font-medium text-arch-green-light hover:text-arch-green-deep">
           ← Карточка здания
         </Link>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-arch-green-deep">AR-preview: {building.name}</h1>
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-arch-green-deep">
+          AR-preview: {building.name}
+        </h1>
         <p className="mt-1 text-sm text-arch-muted">{building.address}</p>
+        <p className="mt-2 text-sm text-arch-muted">
+          Симуляция дополненной реальности на исходном полевом фото. Сравнение снимков и слои времени —
+          на карточке здания.
+        </p>
       </header>
 
       {archiview?.labelingLayout === 'side_by_side' ? (
@@ -35,7 +41,7 @@ export function ARPage() {
         <>
           <div className="arch-section text-sm leading-relaxed text-arch-ink/80">
             Для этого здания пока нет экспорта Archiview. Ниже — схема hotspots; после разметки в
-            Archiview и Push на сайт здесь появится режим «слои времени» с реальными фото.
+            Archiview и Push на сайт здесь появится симуляция AR с подсветкой на полевом фото.
           </div>
           <FacadeHotspotViewer building={building} />
         </>
