@@ -27,6 +27,21 @@ export const MOSCOW_004: Building = {
         url: 'https://moskvichmag.ru/gorod/volontery-vosstanovili-v-krivokolennom-vyvesku-1920-h-godov-najdennuyu-pod-sloyami-shtukaturki/',
         issuedAt: '2024-12-05',
       },
+      {
+        outlet: 'Day.ru',
+        title: 'Там Есенин бил Пастернака в морду: кровавая тайна тихого Кривоколенного переулка',
+        url: 'https://day.ru/nasledie/tam-esenin-bil-pasternaka-v-mordu-krovavaya-tayna-tikhogo-krivokolennogo-pereulka_id16340_a515',
+      },
+      {
+        outlet: 'REGNUM',
+        title: 'Материал о вывеске на доме в Кривоколенном переулке',
+        url: 'https://regnum.ru/news/1973741',
+      },
+      {
+        outlet: 'Rambler Weekend',
+        title: 'Стало известно, что написано на столетней вывеске, обнаруженной на доме в центре Москвы',
+        url: 'https://weekend.rambler.ru/read/53399220-stalo-izvestno-chto-napisano-na-stoletney-vyveske-ee-obnaruzhili-na-dome-v-tsentre-moskvy/',
+      },
     ],
   },
   memoryTraces: [
