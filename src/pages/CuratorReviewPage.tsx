@@ -6,6 +6,7 @@ import { fetchCuratorAnnotationSources } from '../data/explorer/explorerManifest
 import { getBuildingById } from '../data/buildings'
 import type { Building, Confidence, MemoryTrace } from '../types/building'
 import { ConfidenceBadge } from '../components/ConfidenceBadge'
+import { CONFIDENCE_SELECT_OPTIONS } from '../data/confidenceGuide'
 
 type CuratorAnnotation = ArchiviewAnnotation & {
   traceId?: string
@@ -43,13 +44,6 @@ type CuratorTableRow = {
 }
 
 type ConfirmedTableRow = CuratorTableRow & { draft: DraftRow }
-
-const CONFIDENCE_OPTIONS: { value: Confidence; label: string }[] = [
-  { value: 'confirmed', label: 'Подтверждено' },
-  { value: 'probable', label: 'Вероятно' },
-  { value: 'needs_verification', label: 'Требует проверки' },
-  { value: 'typological_hypothesis', label: 'Типологическая гипотеза' },
-]
 
 function traceDraft(trace?: MemoryTrace): Omit<DraftRow, 'traceId' | 'confirmed'> {
   return {
@@ -559,12 +553,17 @@ export function CuratorReviewPage() {
                               }
                               className="mt-1 block w-full rounded-lg border border-arch-line bg-arch-surface px-2 py-1 text-sm font-normal text-arch-ink"
                             >
-                              {CONFIDENCE_OPTIONS.map((item) => (
+                              {CONFIDENCE_SELECT_OPTIONS.map((item) => (
                                 <option key={item.value} value={item.value}>
                                   {item.label}
                                 </option>
                               ))}
                             </select>
+                            {draft?.confidence ? (
+                              <p className="mt-1 text-[11px] leading-snug text-arch-muted">
+                                {CONFIDENCE_SELECT_OPTIONS.find((o) => o.value === draft.confidence)?.hint}
+                              </p>
+                            ) : null}
                           </label>
                         </div>
                         <label className="mt-2 block text-xs font-semibold text-arch-green-deep">
