@@ -6,6 +6,7 @@ import {
   polygonAreaAbs,
   polygonCentroid,
   rectifiedPolygonToComparison,
+  shiftPolygon,
   sourceCropOffsetFromProject,
   toPercentPoints,
   transformPolygon,
@@ -167,10 +168,17 @@ async function probeImageMeta(url: string): Promise<ImageProbe | null> {
  */
 async function pickFacadeImage(
   assets: ArchiviewBuildingAssets,
-  options?: { arMode?: boolean; hasArHomography?: boolean },
+  options?: { arMode?: boolean; hasArHomography?: boolean; preferRectified?: boolean },
 ): Promise<{ url: string; kind: FacadeImageKind; w: number; h: number } | null> {
   if (options?.arMode) {
     if (options.hasArHomography && assets.arPhotoUrl) {
+      const arPhoto = await probeImageMeta(assets.arPhotoUrl)
+      if (arPhoto) {
+        return { url: assets.arPhotoUrl, kind: 'source_modern', w: arPhoto.w, h: arPhoto.h }
+      }
+    }
+
+    if (assets.arPhotoUrl) {
       const arPhoto = await probeImageMeta(assets.arPhotoUrl)
       if (arPhoto) {
         return { url: assets.arPhotoUrl, kind: 'source_modern', w: arPhoto.w, h: arPhoto.h }
@@ -192,6 +200,13 @@ async function pickFacadeImage(
     }
 
     return null
+  }
+
+  if (options?.preferRectified && assets.modernRectifiedUrl) {
+    const rectified = await probeImageMeta(assets.modernRectifiedUrl)
+    if (rectified) {
+      return { url: assets.modernRectifiedUrl, kind: 'rectified', w: rectified.w, h: rectified.h }
+    }
   }
 
   if (assets.labelingLayout === 'side_by_side' && assets.sideBySideMarkedUrl) {
@@ -235,10 +250,16 @@ export function ArchiviewFacadePanel({
   assets,
   building,
   variant = 'default',
+  embeddedAr = false,
+  hideIntro = false,
 }: {
   assets: ArchiviewBuildingAssets
   building?: Building
   variant?: 'default' | 'ar'
+  /** Внутри рамки телефона в AR-симуляции */
+  embeddedAr?: boolean
+  /** Скрыть подпись (её рисует FacadeARPreview внутри экрана) */
+  hideIntro?: boolean
 }) {
   const [regions, setRegions] = useState<DisplayRegion[]>([])
   const [imageOk, setImageOk] = useState(false)
@@ -371,11 +392,17 @@ export function ArchiviewFacadePanel({
   )
 
   const buildRegionsFromSourcePolygons = useCallback(
-    (annotations: ArchiviewAnnotation[], width: number, height: number) => {
+    (
+      annotations: ArchiviewAnnotation[],
+      width: number,
+      height: number,
+      offset: Point = [0, 0],
+    ) => {
       const list: DisplayRegion[] = []
       annotations.forEach((ann, i) => {
-        const raw = (ann.polygon_source ?? ann.polygon) as Point[] | undefined
-        if (!raw || raw.length < 3) return
+        const rawBase = (ann.polygon_source ?? ann.polygon) as Point[] | undefined
+        if (!rawBase || rawBase.length < 3) return
+        const raw = shiftPolygon(rawBase, offset)
         const pct = toPercentPoints(raw, width, height)
         list.push(makeRegion(ann, annotationDisplayIndex(ann, i), pct))
       })
@@ -450,6 +477,7 @@ export function ArchiviewFacadePanel({
       const H_modern_full = H_modern
         ? homographyRectToFullSource(H_modern, sourceCropOffsetFromProject(projData))
         : undefined
+      const cropOffset = sourceCropOffsetFromProject(projData)
       const annotations = (annData?.annotations ?? []) as ArchiviewAnnotation[]
       const layout = (annData?.labeling_layout ?? assets.labelingLayout) ?? 'legacy_overlay'
       const isSb = layout === 'side_by_side'
@@ -458,6 +486,7 @@ export function ArchiviewFacadePanel({
       const loaded = await pickFacadeImage(assets, {
         arMode: variant === 'ar',
         hasArHomography: Boolean(H_ar),
+        preferRectified: variant === 'default' && !isSb,
       })
       if (cancelled) return
 
@@ -466,13 +495,25 @@ export function ArchiviewFacadePanel({
         return
       }
 
-      const useArHomography =
-        variant === 'ar' && assets.arPhotoUrl && loaded.url === assets.arPhotoUrl && Boolean(H_ar)
+      const isArFieldPhoto =
+        variant === 'ar' && Boolean(assets.arPhotoUrl) && loaded.url === assets.arPhotoUrl
+      const useArHomography = isArFieldPhoto && Boolean(H_ar)
+      const hasCropOffset = Math.abs(cropOffset[0]) > 0.5 || Math.abs(cropOffset[1]) > 0.5
+      const useSourcePolygonsOnField =
+        isArFieldPhoto &&
+        hasCropOffset &&
+        !useArHomography &&
+        annotationsHaveSourcePolygons(annotations)
+      const useFieldHomography =
+        isArFieldPhoto && !useArHomography && !useSourcePolygonsOnField && Boolean(H_modern_full)
       const useSourcePolygons =
         !isSb &&
         loaded.kind === 'source_modern' &&
         !useArHomography &&
+        !useFieldHomography &&
+        !useSourcePolygonsOnField &&
         annotationsHaveSourcePolygons(annotations)
+      const sourcePolygonOffset: Point = useSourcePolygonsOnField ? cropOffset : [0, 0]
       const H = useArHomography ? H_ar : H_modern_full
 
       setDisplayImageUrl(loaded.url)
@@ -487,8 +528,10 @@ export function ArchiviewFacadePanel({
 
       if (isSb && annData?.side_by_side) {
         buildRegionsSideBySide(annotations, annData, loaded.w, loaded.h)
-      } else if (useSourcePolygons) {
-        buildRegionsFromSourcePolygons(annotations, loaded.w, loaded.h)
+      } else if (useArHomography || useFieldHomography) {
+        buildRegionsOverlay(annotations, H!, loaded.w, loaded.h)
+      } else if (useSourcePolygonsOnField || useSourcePolygons) {
+        buildRegionsFromSourcePolygons(annotations, loaded.w, loaded.h, sourcePolygonOffset)
       } else if (!isSb && loaded.kind === 'source_modern' && H) {
         buildRegionsOverlay(annotations, H, loaded.w, loaded.h)
       } else if (
@@ -543,8 +586,8 @@ export function ArchiviewFacadePanel({
   )
 
   return (
-    <div className="space-y-3">
-      {variant === 'default' ? (
+    <div className={embeddedAr ? 'space-y-0' : 'space-y-3'}>
+      {!hideIntro && variant === 'default' ? (
         <p className="text-sm text-arch-muted">
           {sideBySide ? (
             <>
@@ -569,13 +612,13 @@ export function ArchiviewFacadePanel({
             </>
           )}
         </p>
-      ) : (
+      ) : !hideIntro ? (
         <p className="text-sm text-arch-surface/75">
           Исходный ракурс с улицы — как в видоискателе. Подсветка зон видна сразу;{' '}
-          <strong>наведите</strong> на область — появится Экспертная заметка с номером. Цифры на фото
-          не дублируются.
+          <strong>наведите</strong> на область — краткая подсказка. <strong>Клик</strong> — полная
+          карточка по центру экрана. Цифры на фото не дублируются.
         </p>
-      )}
+      ) : null}
 
       {!imageOk && (
         <p
@@ -587,10 +630,9 @@ export function ArchiviewFacadePanel({
         >
           {variant === 'ar' ? (
             <>
-              Для AR-preview нужны <code>modern-source.png</code> (или выпрямленное фото) и разметка Archiview
-              с <code>polygon_source</code>. Полевое фото <code>20260520_185142.jpg</code> подключается только
-              вместе с <code>H_rect_to_ar</code> в <code>facade-project.json</code>. Экспорт →{' '}
-              <code>copy_to_website.bat</code> (CardId: {assets.cardId}) → Push.
+              Для AR-preview нужны полевое фото и разметка Archiview. Если подсветка съезжает —
+              переэкспортируйте <code>facade-project.json</code> с <code>modern_crop_offset_xy</code>{' '}
+              через <code>copy_to_website.bat</code> (CardId: {assets.cardId}).
             </>
           ) : (
             <>
@@ -603,17 +645,25 @@ export function ArchiviewFacadePanel({
 
       {imageOk && (
         <div className={`flex flex-col gap-4 ${variant === 'ar' ? '' : 'lg:flex-row lg:items-start'}`}>
-          <div className="relative min-w-0 flex-1">
+          <div className={`relative min-w-0 flex-1 ${embeddedAr ? '' : ''}`}>
             <div
               ref={viewportRef}
-              className={`relative w-full shadow-sm ${
+              className={`relative w-full ${
+                embeddedAr ? '' : 'shadow-sm'
+              } ${
                 variant === 'ar'
-                  ? 'rounded-lg border border-arch-surface/15 bg-arch-green-deep/80'
+                  ? embeddedAr
+                    ? 'bg-arch-green-deep'
+                    : 'rounded-lg border border-arch-surface/15 bg-arch-green-deep/80'
                   : 'rounded-xl border border-arch-line bg-arch-surface-2/20'
               } ${
                 zoom > ZOOM_MIN
-                  ? 'max-h-[min(78vh,820px)] overflow-hidden'
-                  : 'overflow-visible'
+                  ? embeddedAr
+                    ? 'max-h-[min(62vh,560px)] overflow-hidden'
+                    : 'max-h-[min(78vh,820px)] overflow-hidden'
+                  : embeddedAr
+                    ? 'overflow-hidden'
+                    : 'overflow-visible'
               } ${zoom > ZOOM_MIN ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
               onMouseLeave={() => setHoverIdx(null)}
               onPointerDown={handleViewportPointerDown}
@@ -673,7 +723,11 @@ export function ArchiviewFacadePanel({
                   width={imgSize.w}
                   height={imgSize.h}
                   draggable={false}
-                  className="block h-auto w-auto max-h-[min(78vh,820px)] max-w-full select-none rounded-xl"
+                  className={`block h-auto w-auto select-none ${
+                    embeddedAr
+                      ? 'max-h-[min(62vh,560px)] w-full object-contain'
+                      : 'max-h-[min(78vh,820px)] max-w-full rounded-xl'
+                  }`}
                 />
                 {regions.length > 0 && (
                 <svg
@@ -793,7 +847,7 @@ export function ArchiviewFacadePanel({
                     : null}
                 </svg>
               )}
-              {plateRegion && platePlacement && (
+              {plateRegion && platePlacement && variant !== 'ar' && (
                 <div
                   className={`absolute z-20 max-w-[min(92%,${
                     plateExpanded
@@ -833,11 +887,55 @@ export function ArchiviewFacadePanel({
                   />
                 </div>
               )}
+
+              {variant === 'ar' && plateRegion && !plateExpanded && (
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 border-t border-arch-surface/15 bg-arch-green-deep/92 px-3 py-2.5 backdrop-blur-sm">
+                  <div className="flex items-center gap-2 text-xs text-arch-surface">
+                    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-arch-gold text-[10px] font-bold text-arch-green-deep">
+                      {plateRegion.idx}
+                    </span>
+                    <span className="min-w-0 truncate font-medium">
+                      {plateRegion.trace?.title ?? plateRegion.label}
+                    </span>
+                    {plateRegion.trace?.period ? (
+                      <span className="hidden shrink-0 text-arch-surface/65 sm:inline">
+                        {plateRegion.trace.period}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+
+              {variant === 'ar' && plateExpanded && plateRegion && (
+                <div
+                  className="absolute inset-0 z-40 flex items-center justify-center bg-black/55 p-3 sm:p-5"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label={`Экспертная заметка ${plateRegion.idx}`}
+                  onClick={() => setSelectedIdx(null)}
+                >
+                  <div
+                    className="pointer-events-auto max-h-[min(82%,520px)] w-full max-w-md overflow-y-auto rounded-2xl border border-arch-gold/70 bg-arch-green-deep px-4 py-3.5 text-left text-xs leading-snug text-arch-surface shadow-2xl"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <ExpertTracePlate
+                      idx={plateRegion.idx}
+                      title={plateRegion.trace?.title ?? plateRegion.label}
+                      period={plateRegion.trace?.period}
+                      trace={plateRegion.trace}
+                      comment={plateRegion.comment}
+                      verification={building?.verification}
+                      expanded
+                      onClose={() => setSelectedIdx(null)}
+                    />
+                  </div>
+                </div>
+              )}
               </div>
             </div>
           </div>
 
-          {regions.length > 0 && (
+          {regions.length > 0 && !embeddedAr && (
             <ol
               className={`w-full shrink-0 space-y-1.5 text-sm ${
                 variant === 'ar' ? '' : 'lg:w-64 xl:w-72'
