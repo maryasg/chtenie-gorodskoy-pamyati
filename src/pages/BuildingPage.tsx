@@ -10,6 +10,7 @@ import { getArchiviewAssets } from '../data/explorer/archiviewAssets'
 import {
   fetchExplorerManifest,
   manifestEntryToAssets,
+  resolveDefaultComparisonId,
   type ExplorerManifest,
 } from '../data/explorer/explorerManifest'
 import { ArchiviewComparisonPicker } from '../components/ArchiviewComparisonPicker'
@@ -238,7 +239,7 @@ export function BuildingPage() {
       if (cancelled) return
       setManifest(data)
       if (data?.comparisons?.length) {
-        setSelectedComparisonId(data.defaultComparisonId || data.comparisons[0].comparisonId)
+        setSelectedComparisonId(resolveDefaultComparisonId(data))
       }
     })
     return () => {
@@ -251,6 +252,7 @@ export function BuildingPage() {
     if (!manifest || manifest.comparisons.length <= 1) return archiview
     const entry =
       manifest.comparisons.find((c) => c.comparisonId === selectedComparisonId) ??
+      manifest.comparisons.find((c) => c.comparisonId === resolveDefaultComparisonId(manifest)) ??
       manifest.comparisons[0]
     return manifestEntryToAssets(archiview.cardId, archiview.buildingId, entry, archiview)
   }, [archiview, manifest, selectedComparisonId])
