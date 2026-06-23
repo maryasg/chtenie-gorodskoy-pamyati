@@ -12,16 +12,19 @@ export function TraceMessageBody({
   text,
   bodyClassName = '',
   sourceClassName = '',
+  showSource = true,
 }: {
   text: string
   bodyClassName?: string
   sourceClassName?: string
+  /** Показывать блок «Источник:» под текстом (на плашке источник — в блоке достоверности) */
+  showSource?: boolean
 }) {
   const { body, source } = splitTraceMessage(text)
   return (
     <>
       <span className={bodyClassName}>{body}</span>
-      {source ? (
+      {showSource && source ? (
         <span className={`mt-2 block ${sourceClassName}`}>Источник: {source}</span>
       ) : null}
     </>

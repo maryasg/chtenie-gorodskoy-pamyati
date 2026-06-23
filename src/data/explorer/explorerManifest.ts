@@ -52,6 +52,9 @@ export function manifestEntryToAssets(
     modernSourceUrl: entry.modernSourceUrl
       ? resolveExplorerAsset(cardId, entry.modernSourceUrl)
       : defaults.modernSourceUrl,
+    arPhotoUrl: (entry as ExplorerComparisonEntry & { arPhotoUrl?: string }).arPhotoUrl
+      ? resolveExplorerAsset(cardId, (entry as ExplorerComparisonEntry & { arPhotoUrl?: string }).arPhotoUrl!)
+      : defaults.arPhotoUrl,
     historicalPhotoYear: entry.historicalPhotoYear ?? defaults.historicalPhotoYear,
     modernPhotoYear: entry.modernPhotoYear ?? defaults.modernPhotoYear,
     annotationsUrl: resolveExplorerAsset(cardId, entry.annotationsUrl),
@@ -74,18 +77,18 @@ export async function fetchExplorerManifest(cardId: string): Promise<ExplorerMan
   }
 }
 
-/** Источники annotations.json для кураторской страницы — по всем сравнениям из manifest. */
-export type CuratorAnnotationSource = {
+/** Источники annotations.json для экспертной страницы — по всем сравнениям из manifest. */
+export type ExpertAnnotationSource = {
   comparisonId: string
   comparisonTitle: string
   annotationsUrl: string
   annotationsRelPath: string
 }
 
-export async function fetchCuratorAnnotationSources(
+export async function fetchExpertAnnotationSources(
   cardId: string,
   fallbackAnnotationsUrl: string,
-): Promise<CuratorAnnotationSource[]> {
+): Promise<ExpertAnnotationSource[]> {
   const manifest = await fetchExplorerManifest(cardId)
   if (!manifest?.comparisons?.length) {
     return [

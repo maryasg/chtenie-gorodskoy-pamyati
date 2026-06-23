@@ -9,7 +9,9 @@ import {
   transformPolygon,
   type Point,
 } from '../lib/archiviewGeometry'
-import { CuratorTracePlate } from './CuratorTracePlate'
+import { ExpertTracePlate } from './ExpertTracePlate'
+import { tracePlatePlacement } from '../lib/tracePlatePlacement'
+import { computeBadgeLayout, type BadgeLayout } from '../lib/regionBadgeLayout'
 
 const CLASS_COLORS: Record<string, string> = {
   added_floor: '#00aa00',
@@ -44,9 +46,21 @@ type DisplayRegion = {
   cx: number
   cy: number
   areaPct: number
+  badgeLayout: BadgeLayout
 }
 
-function regionPolygonStyle(color: string, area: number, on: boolean): { fill: string; strokeWidth: number } {
+function regionPolygonStyle(
+  color: string,
+  area: number,
+  on: boolean,
+  arIdle = false,
+): { fill: string; strokeWidth: number } {
+  if (arIdle && !on) {
+    return {
+      fill: `${color}28`,
+      strokeWidth: 0.45,
+    }
+  }
   if (area < COMPACT_REGION_AREA) {
     return {
       fill: on ? `${color}33` : 'none',
@@ -153,6 +167,13 @@ async function pickFacadeImage(
   assets: ArchiviewBuildingAssets,
   options?: { arMode?: boolean },
 ): Promise<{ url: string; kind: FacadeImageKind; w: number; h: number } | null> {
+  if (options?.arMode && assets.arPhotoUrl) {
+    const arPhoto = await probeImageMeta(assets.arPhotoUrl)
+    if (arPhoto) {
+      return { url: assets.arPhotoUrl, kind: 'source_modern', w: arPhoto.w, h: arPhoto.h }
+    }
+  }
+
   if (options?.arMode && assets.modernSourceUrl) {
     const source = await probeImageMeta(assets.modernSourceUrl)
     if (source) {
@@ -295,6 +316,7 @@ export function ArchiviewFacadePanel({
   const makeRegion = useCallback(
     (ann: ArchiviewAnnotation, idx: number, polygonPct: Point[]): DisplayRegion => {
       const [cx, cy] = polygonCentroid(polygonPct)
+      const areaPct = polygonAreaAbs(polygonPct)
       const traceId = getTraceId(ann)
       return {
         idx,
@@ -305,7 +327,8 @@ export function ArchiviewFacadePanel({
         polygonPct,
         cx,
         cy,
-        areaPct: polygonAreaAbs(polygonPct),
+        areaPct,
+        badgeLayout: computeBadgeLayout(polygonPct, areaPct),
       }
     },
     [tracesById],
@@ -386,7 +409,8 @@ export function ArchiviewFacadePanel({
       ])
       const annData = (annRes.ok ? await annRes.json() : null) as AnnPayload | null
       const projData = projRes.ok ? await projRes.json() : null
-      const H = isHomography(projData?.H_rect_to_modern) ? projData.H_rect_to_modern : undefined
+      const H_ar = isHomography(projData?.H_rect_to_ar) ? projData.H_rect_to_ar : undefined
+      const H_modern = isHomography(projData?.H_rect_to_modern) ? projData.H_rect_to_modern : undefined
       const annotations = (annData?.annotations ?? []) as ArchiviewAnnotation[]
       const layout = (annData?.labeling_layout ?? assets.labelingLayout) ?? 'legacy_overlay'
       const isSb = layout === 'side_by_side'
@@ -399,6 +423,10 @@ export function ArchiviewFacadePanel({
         setImageOk(false)
         return
       }
+
+      const useArHomography =
+        variant === 'ar' && assets.arPhotoUrl && loaded.url === assets.arPhotoUrl && Boolean(H_ar)
+      const H = useArHomography ? H_ar : H_modern
 
       setDisplayImageUrl(loaded.url)
       setImageKind(loaded.kind)
@@ -442,6 +470,9 @@ export function ArchiviewFacadePanel({
         ? regions.find((r) => r.idx === hoverIdx) ?? null
         : null
   const plateExpanded = selectedIdx !== null && plateRegion?.idx === selectedIdx
+  const platePlacement = plateRegion
+    ? tracePlatePlacement(plateRegion.cy, plateExpanded)
+    : null
 
   /** Small regions (e.g. #6, #9) must paint above large overlaps (#12) for clicks — render largest first, smallest last in SVG. */
   const regionsForHit = useMemo(
@@ -483,8 +514,9 @@ export function ArchiviewFacadePanel({
         </p>
       ) : (
         <p className="text-sm text-arch-surface/75">
-          Исходный ракурс с улицы — как в видоискателе. Номера и зоны Archiview совпадают с разметкой
-          на карточке; <strong>клик</strong> по зоне открывает кураторскую заметку.
+          Исходный ракурс с улицы — как в видоискателе. Подсветка зон видна сразу;{' '}
+          <strong>наведите</strong> на область — появится Экспертная заметка с номером. Цифры на фото
+          не дублируются.
         </p>
       )}
 
@@ -498,7 +530,7 @@ export function ArchiviewFacadePanel({
         >
           {variant === 'ar' ? (
             <>
-              Для AR-preview нужен файл <code>modern-source.png</code> (исходное полевое фото) и разметка
+              Для AR-preview нужен файл <code>20260520_185142.jpg</code> (полевое фото) и разметка
               Archiview. Экспортируйте → <code>copy_to_website.bat</code> (CardId: {assets.cardId}) → Push.
             </>
           ) : (
@@ -594,7 +626,7 @@ export function ArchiviewFacadePanel({
                   {regions.map((r) => {
                     const on = hoverIdx === r.idx || selectedIdx === r.idx
                     const color = CLASS_COLORS[r.cls] ?? '#444'
-                    const style = regionPolygonStyle(color, r.areaPct, on)
+                    const style = regionPolygonStyle(color, r.areaPct, on, variant === 'ar')
                     return (
                       <polygon
                         key={r.idx}
@@ -607,19 +639,47 @@ export function ArchiviewFacadePanel({
                   })}
                 </svg>
               )}
-              {regions.length > 0 && (
+              {regions.length > 0 && variant !== 'ar' && (
+                <svg
+                  className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="none"
+                  aria-hidden
+                >
+                  {regionsBadges.map((r) => {
+                    if (!r.badgeLayout.callout) return null
+                    const on = hoverIdx === r.idx || selectedIdx === r.idx
+                    const color = CLASS_COLORS[r.cls] ?? '#444'
+                    return (
+                      <line
+                        key={`callout-${r.idx}`}
+                        x1={r.badgeLayout.anchorX}
+                        y1={r.badgeLayout.anchorY}
+                        x2={r.badgeLayout.badgeX}
+                        y2={r.badgeLayout.badgeY}
+                        stroke={color}
+                        strokeWidth={on ? 0.42 : 0.32}
+                        strokeOpacity={on ? 0.95 : 0.72}
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    )
+                  })}
+                </svg>
+              )}
+              {regions.length > 0 && variant !== 'ar' && (
                 <div className="pointer-events-none absolute inset-0 overflow-visible" aria-hidden>
                   {regionsBadges.map((r) => {
                     const on = hoverIdx === r.idx || selectedIdx === r.idx
                     const color = CLASS_COLORS[r.cls] ?? '#444'
                     const size = on ? 26 : 22
+                    const { badgeX, badgeY } = r.badgeLayout
                     return (
                       <div
                         key={`badge-${r.idx}`}
                         className="absolute flex items-center justify-center rounded-full border border-white font-bold leading-none text-white shadow-sm"
                         style={{
-                          left: `${r.cx}%`,
-                          top: `${r.cy}%`,
+                          left: `${badgeX}%`,
+                          top: `${badgeY}%`,
                           width: size,
                           height: size,
                           marginLeft: -size / 2,
@@ -674,15 +734,23 @@ export function ArchiviewFacadePanel({
                     : null}
                 </svg>
               )}
-              {plateRegion && (
+              {plateRegion && platePlacement && (
                 <div
-                  className={`absolute z-20 max-w-[min(92%,${plateExpanded ? '420px' : '360px'})] rounded-xl border border-arch-gold/70 bg-arch-green-deep/90 px-3 py-2.5 text-left text-xs leading-snug text-arch-surface shadow-xl backdrop-blur-md ${
-                    plateExpanded ? 'pointer-events-auto' : 'pointer-events-none'
+                  className={`absolute z-20 max-w-[min(92%,${
+                    plateExpanded
+                      ? platePlacement.compact
+                        ? '300px'
+                        : '380px'
+                      : platePlacement.compact
+                        ? '260px'
+                        : '320px'
+                  })] rounded-xl border border-arch-gold/70 bg-arch-green-deep/90 px-3 py-2.5 text-left text-xs leading-snug text-arch-surface shadow-xl backdrop-blur-md ${
+                    plateExpanded ? 'pointer-events-auto max-h-[min(50vh,340px)] overflow-y-auto' : 'pointer-events-none'
                   }`}
                   style={{
                     left: `${plateRegion.cx}%`,
                     top: `${plateRegion.cy}%`,
-                    transform: 'translate(-50%, calc(-100% - 8px))',
+                    transform: platePlacement.transform,
                   }}
                   onClick={
                     plateExpanded
@@ -693,7 +761,7 @@ export function ArchiviewFacadePanel({
                       : undefined
                   }
                 >
-                  <CuratorTracePlate
+                  <ExpertTracePlate
                     idx={plateRegion.idx}
                     title={plateRegion.trace?.title ?? plateRegion.label}
                     period={plateRegion.trace?.period}
@@ -701,6 +769,7 @@ export function ArchiviewFacadePanel({
                     comment={plateRegion.comment}
                     verification={building?.verification}
                     expanded={plateExpanded}
+                    compact={platePlacement.compact}
                     onClose={plateExpanded ? () => setSelectedIdx(null) : undefined}
                   />
                 </div>
@@ -745,7 +814,7 @@ export function ArchiviewFacadePanel({
                         </span>
                         {r.trace ? (
                           <span className="mt-0.5 block text-xs text-arch-muted">
-                            {r.trace.period} · кураторская заметка
+                            {r.trace.period} · Экспертная заметка
                           </span>
                         ) : r.comment ? (
                           <span className="mt-0.5 block text-xs text-arch-muted">{r.comment}</span>

@@ -2,19 +2,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getArchiviewAssets } from '../data/explorer/archiviewAssets'
 import type { ArchiviewAnnotation } from '../data/explorer/archiviewAssets'
-import { fetchCuratorAnnotationSources } from '../data/explorer/explorerManifest'
+import { fetchExpertAnnotationSources } from '../data/explorer/explorerManifest'
 import { getBuildingById } from '../data/buildings'
 import type { Building, Confidence, MemoryTrace } from '../types/building'
 import { ConfidenceBadge } from '../components/ConfidenceBadge'
 import { CONFIDENCE_SELECT_OPTIONS } from '../data/confidenceGuide'
 
-type CuratorAnnotation = ArchiviewAnnotation & {
+type ExpertAnnotation = ArchiviewAnnotation & {
   traceId?: string
   image_side?: string
 }
 
 type AnnotationsPayload = {
-  annotations?: CuratorAnnotation[]
+  annotations?: ExpertAnnotation[]
   [key: string]: unknown
 }
 
@@ -34,16 +34,16 @@ type AnnotationBundle = {
   payload: AnnotationsPayload
 }
 
-type CuratorTableRow = {
+type ExpertTableRow = {
   rowKey: string
   comparisonId: string
   comparisonTitle: string
   annotationsRelPath: string
-  ann: CuratorAnnotation
+  ann: ExpertAnnotation
   isNew: boolean
 }
 
-type ConfirmedTableRow = CuratorTableRow & { draft: DraftRow }
+type ConfirmedTableRow = ExpertTableRow & { draft: DraftRow }
 
 function traceDraft(trace?: MemoryTrace): Omit<DraftRow, 'traceId' | 'confirmed'> {
   return {
@@ -60,7 +60,7 @@ function defaultTraceIdForAnnotation(annotationId: number): string {
 }
 
 function buildInitialDraft(
-  ann: CuratorAnnotation,
+  ann: ExpertAnnotation,
   tracesById: Map<string, MemoryTrace>,
 ): DraftRow {
   const traceId = ann.traceId || defaultTraceIdForAnnotation(ann.id)
@@ -85,7 +85,7 @@ function buildExportSnippet(rows: ConfirmedTableRow[]): string {
         `    title: '${draft.title || ann.label_ru}'`,
         `    period: '${draft.period || 'уточняется'}'`,
         `    confidence: '${draft.confidence}'`,
-        `    userMessage: '${draft.userMessage || 'Добавить текст куратора'}'`,
+        `    userMessage: '${draft.userMessage || 'Добавить текст эксперта'}'`,
       ].join('\n')
     })
     .join('\n\n')
@@ -111,7 +111,7 @@ function downloadTextFile(filename: string, content: string, mimeType: string): 
 }
 
 function buildMemoryTraceFromDraft(
-  ann: CuratorAnnotation,
+  ann: ExpertAnnotation,
   draft: DraftRow,
   existing?: MemoryTrace,
 ): MemoryTrace & { type: string } {
@@ -121,7 +121,7 @@ function buildMemoryTraceFromDraft(
     title: draft.title || ann.label_ru,
     period: draft.period || 'уточняется',
     confidence: draft.confidence,
-    userMessage: draft.userMessage || 'Добавить текст куратора',
+    userMessage: draft.userMessage || 'Добавить текст эксперта',
     ...(existing?.overallConfidence !== undefined
       ? { overallConfidence: existing.overallConfidence }
       : {}),
@@ -194,7 +194,7 @@ function buildReadme(
     (rel) => `   — public/explorer/${building.cardId}/${rel}`,
   )
   return [
-    `КУРАТОРСКИЙ ЭКСПОРТ — ${building.cardId}`,
+    `ЭКСПЕРТНЫЙ ЭКСПОРТ — ${building.cardId}`,
     `Здание: ${building.name}`,
     `Подтверждено подсветок: ${confirmedCount}`,
     `Дата: ${new Date().toLocaleString('ru-RU')}`,
@@ -217,7 +217,7 @@ function buildReadme(
   ].join('\n')
 }
 
-function downloadCuratorFiles(
+function downloadExpertFiles(
   building: Building,
   bundles: AnnotationBundle[],
   confirmedRows: ConfirmedTableRow[],
@@ -267,8 +267,8 @@ function downloadCuratorFiles(
 function flattenBundles(
   bundles: AnnotationBundle[],
   tracesById: Map<string, MemoryTrace>,
-): { rows: CuratorTableRow[]; drafts: Record<string, DraftRow> } {
-  const rows: CuratorTableRow[] = []
+): { rows: ExpertTableRow[]; drafts: Record<string, DraftRow> } {
+  const rows: ExpertTableRow[] = []
   const drafts: Record<string, DraftRow> = {}
 
   bundles.forEach((bundle) => {
@@ -298,12 +298,12 @@ function flattenBundles(
   return { rows, drafts }
 }
 
-export function CuratorReviewPage() {
+export function ExpertReviewPage() {
   const { id } = useParams<{ id: string }>()
   const building = id ? getBuildingById(id) : undefined
   const assets = building ? getArchiviewAssets(building.id) : undefined
   const [bundles, setBundles] = useState<AnnotationBundle[]>([])
-  const [tableRows, setTableRows] = useState<CuratorTableRow[]>([])
+  const [tableRows, setTableRows] = useState<ExpertTableRow[]>([])
   const [drafts, setDrafts] = useState<Record<string, DraftRow>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -320,7 +320,7 @@ export function CuratorReviewPage() {
     setLoading(true)
     setError(null)
     try {
-      const sources = await fetchCuratorAnnotationSources(building.cardId, assets.annotationsUrl)
+      const sources = await fetchExpertAnnotationSources(building.cardId, assets.annotationsUrl)
       const loaded: AnnotationBundle[] = []
       for (const source of sources) {
         const response = await fetch(source.annotationsUrl, { cache: 'no-cache' })
@@ -352,7 +352,7 @@ export function CuratorReviewPage() {
     void loadAnnotations()
   }, [loadAnnotations, reloadToken])
 
-  const patchDraft = useCallback((rowKey: string, patch: Partial<DraftRow>, row: CuratorTableRow) => {
+  const patchDraft = useCallback((rowKey: string, patch: Partial<DraftRow>, row: ExpertTableRow) => {
     setDrafts((current) => ({
       ...current,
       [rowKey]: {
@@ -383,7 +383,7 @@ export function CuratorReviewPage() {
         <Link to="/method" className="text-sm font-medium text-arch-green-light hover:text-arch-green-deep">
           ← Метод
         </Link>
-        <p className="arch-kicker mt-3 mb-1">Скрытая кураторская страница</p>
+        <p className="arch-kicker mt-3 mb-1">Скрытая экспертная страница</p>
         <h1 className="text-2xl font-semibold tracking-tight text-arch-green-deep">
           Проверка подсветок: {building.name}
         </h1>
@@ -420,7 +420,7 @@ export function CuratorReviewPage() {
             <p className="font-semibold text-arch-green-deep">
               {readyCount} / {tableRows.length}
             </p>
-            <p className="text-sm text-arch-muted">отмечено куратором</p>
+            <p className="text-sm text-arch-muted">отмечено экспертом</p>
           </div>
         </div>
         {hasMissingLinks && (
@@ -444,7 +444,7 @@ export function CuratorReviewPage() {
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="arch-kicker mb-1">Таблица сверки</p>
-              <h2 className="arch-section-title">Подсветка → текст куратора</h2>
+              <h2 className="arch-section-title">Подсветка → текст эксперта</h2>
             </div>
             <div className="flex flex-wrap gap-2">
               <button
@@ -473,7 +473,7 @@ export function CuratorReviewPage() {
                   ) : null}
                   <th className="border-b border-arch-line px-3 py-2">Archiview</th>
                   <th className="border-b border-arch-line px-3 py-2">Связь</th>
-                  <th className="border-b border-arch-line px-3 py-2">Кураторский текст</th>
+                  <th className="border-b border-arch-line px-3 py-2">Экспертный текст</th>
                   <th className="border-b border-arch-line px-3 py-2">Проверка</th>
                 </tr>
               </thead>
@@ -620,7 +620,7 @@ export function CuratorReviewPage() {
               type="button"
               disabled={readyCount === 0 || bundles.length === 0}
               onClick={() => {
-                downloadCuratorFiles(building, bundles, confirmedRows, tracesById)
+                downloadExpertFiles(building, bundles, confirmedRows, tracesById)
               }}
               className="rounded-full bg-arch-green-deep px-5 py-2.5 text-sm font-semibold text-arch-surface transition hover:bg-arch-green disabled:cursor-not-allowed disabled:opacity-50"
             >

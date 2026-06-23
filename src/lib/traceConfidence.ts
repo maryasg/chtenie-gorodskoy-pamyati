@@ -17,18 +17,18 @@ export function describeConfidenceBasis(
 
   if (traceSource) {
     if (confidence === 'confirmed' && /акт|экспертиз|кгиоп|реестр|mos\.ru/i.test(traceSource)) {
-      return `Статус «${info.label}» — в источнике ниже зафиксирован официальный документ или реестр.`
+      return `Статус «${info.label}» — зафиксирован официальный документ или реестр (см. источник).`
     }
     if (confidence === 'highly_probable') {
-      return `Статус «${info.label}» — сильная аргументация по источникам ниже; прямой строчки в акте по этой зоне нет.`
+      return `Статус «${info.label}» — сильная аргументация по источникам; прямой строчки в акте по этой зоне нет.`
     }
     if (confidence === 'probable') {
-      return `Статус «${info.label}» — вывод по сопоставлению снимков и полевой съёмки (источники ниже).`
+      return `Статус «${info.label}» — вывод по сопоставлению снимков и полевой съёмки.`
     }
     if (confidence === 'needs_verification') {
-      return `Статус «${info.label}» — пока опора на источники ниже; нужна дополнительная сверка.`
+      return `Статус «${info.label}» — пока опора на указанные источники; нужна дополнительная сверка.`
     }
-    return `Статус «${info.label}» выбран с опорой на источники ниже.`
+    return `Статус «${info.label}» выбран с опорой на указанные источники.`
   }
 
   if (confidence === 'confirmed' && verification?.officialExpertise?.length) {

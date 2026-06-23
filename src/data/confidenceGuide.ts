@@ -3,7 +3,7 @@ import type { Confidence } from '../types/building'
 export type ConfidenceLevelInfo = {
   value: Confidence
   label: string
-  /** Короткая подсказка для куратора и зрителя */
+  /** Короткая подсказка для эксперта и зрителя */
   hint: string
   /** Какие уровни источников подходят */
   sourceTiers: string
@@ -43,7 +43,7 @@ export const CONFIDENCE_LEVELS: ConfidenceLevelInfo[] = [
   {
     value: 'needs_verification',
     label: 'Требует проверки',
-    hint: 'Пока опора на слабые или вторичные источники — нужна сверка куратором.',
+    hint: 'Пока опора на слабые или вторичные источники — нужна сверка экспертом.',
     sourceTiers: 'Ниже + Осторожно',
     sourceExamples: 'Статьи СМИ, блоги, форумы, Wikipedia без ссылки на первоисточник',
     badgeClass: 'bg-amber-100 text-amber-900 border-amber-300',

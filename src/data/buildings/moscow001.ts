@@ -251,7 +251,7 @@ export const MOSCOW_001: Building = {
         'Память места — в контексте квартала, не как отдельный след на фасаде; рядом с усадебным домом на Ордынке',
       confidence: 'probable',
       source:
-        'Topos.memo.ru (архив); polishpovmap.ru — карта лагеря; переписка кураторов, 2026',
+        'Topos.memo.ru (архив); polishpovmap.ru — карта лагеря; переписка экспертов, 2026',
     },
     {
       id: 'tl-4',

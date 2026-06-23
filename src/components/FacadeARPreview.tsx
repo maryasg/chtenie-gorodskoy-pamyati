@@ -13,7 +13,7 @@ export function FacadeARPreview({ building, archiview }: Props) {
     <div className="space-y-5">
       <div className="rounded-xl border border-arch-green/25 bg-arch-green-soft p-4 text-sm leading-relaxed text-arch-green-deep">
         <strong>AR-preview (без камеры).</strong> Показано исходное современное фото в том ракурсе,
-        в котором снимали на месте — до выпрямления и обрезки. Поверх него — подсветка кураторских
+        в котором снимали на месте — до выпрямления и обрезки. Поверх него — подсветка экспертных
         заметок Archiview: наведите на номер или зону, кликните — полная карточка с источниками.
         Сравнение «до/после» и режим «слои времени» — в блоке «Сравнение фотоматериалов» на
         карточке здания.
