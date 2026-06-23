@@ -26,6 +26,8 @@ export interface ArchiviewBuildingAssets {
   modernRectifiedUrl: string
   /** 11_modern_source_for_site.png — исходное современное (с обрезкой, если была) */
   modernSourceUrl?: string
+  /** Полевое фото для AR-preview (например 20260520_185142.jpg); разметка через H_rect_to_modern / H_rect_to_ar */
+  arPhotoUrl?: string
   historicalPhotoYear?: string
   modernPhotoYear?: string
   annotationsUrl: string
@@ -71,6 +73,7 @@ export const ARCHIVIEW_ASSETS: Record<string, ArchiviewBuildingAssets> = {
     historicalRectifiedUrl: `${base}explorer/MOSCOW_003/historical-rectified.png`,
     modernRectifiedUrl: `${base}explorer/MOSCOW_003/modern-rectified.png`,
     modernSourceUrl: `${base}explorer/MOSCOW_003/modern-source.png`,
+    arPhotoUrl: `${base}explorer/MOSCOW_003/20260520_185142.jpg`,
     historicalPhotoYear: '1911',
     modernPhotoYear: '2026',
     annotationsUrl: `${base}explorer/MOSCOW_003/annotations.json`,

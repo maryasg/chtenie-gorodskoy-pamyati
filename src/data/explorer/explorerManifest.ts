@@ -52,6 +52,9 @@ export function manifestEntryToAssets(
     modernSourceUrl: entry.modernSourceUrl
       ? resolveExplorerAsset(cardId, entry.modernSourceUrl)
       : defaults.modernSourceUrl,
+    arPhotoUrl: (entry as ExplorerComparisonEntry & { arPhotoUrl?: string }).arPhotoUrl
+      ? resolveExplorerAsset(cardId, (entry as ExplorerComparisonEntry & { arPhotoUrl?: string }).arPhotoUrl!)
+      : defaults.arPhotoUrl,
     historicalPhotoYear: entry.historicalPhotoYear ?? defaults.historicalPhotoYear,
     modernPhotoYear: entry.modernPhotoYear ?? defaults.modernPhotoYear,
     annotationsUrl: resolveExplorerAsset(cardId, entry.annotationsUrl),
