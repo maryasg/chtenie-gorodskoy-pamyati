@@ -4,7 +4,7 @@
     "comparisons":  [
                         {
                             "comparisonId":  "cmp_005",
-                            "title":  "1924 -\u003e 2026",
+                            "title":  "1938 -\u003e 2026",
                             "labelingLayout":  "overlay",
                             "annotationCount":  11,
                             "isLegacy":  false,
@@ -15,7 +15,7 @@
                             "modernSourceUrl":  "comparisons/cmp_005/modern-source.png",
                             "annotationsUrl":  "comparisons/cmp_005/annotations.json",
                             "facadeProjectUrl":  "comparisons/cmp_005/facade-project.json",
-                            "historicalPhotoYear":  "1924",
+                            "historicalPhotoYear":  "1938",
                             "modernPhotoYear":  "2026"
                         },
                         {
@@ -68,7 +68,7 @@
                        {
                            "year":  "1938",
                            "comparisonId":  "cmp_005",
-                           "title":  "1924 -\u003e 2026",
+                           "title":  "1938 -\u003e 2026",
                            "historicalRectifiedUrl":  "comparisons/cmp_005/historical-rectified.png"
                        }
                    ],
