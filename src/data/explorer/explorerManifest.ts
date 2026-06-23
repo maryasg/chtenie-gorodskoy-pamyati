@@ -64,6 +64,36 @@ export function manifestEntryToAssets(
   }
 }
 
+export type FacadeTimeSnapshot = {
+  year: string
+  historicalUrl: string
+  comparisonId: string
+  comparisonTitle: string
+}
+
+/** Уникальные исторические срезы из manifest, по возрастанию года (для «Слоёв времени»). */
+export function buildFacadeTimeSnapshots(
+  manifest: ExplorerManifest,
+  cardId: string,
+): FacadeTimeSnapshot[] {
+  const seen = new Set<string>()
+  const snapshots: FacadeTimeSnapshot[] = []
+
+  for (const entry of manifest.comparisons) {
+    const year = entry.historicalPhotoYear?.trim()
+    if (!year || seen.has(year)) continue
+    seen.add(year)
+    snapshots.push({
+      year,
+      historicalUrl: resolveExplorerAsset(cardId, entry.historicalRectifiedUrl),
+      comparisonId: entry.comparisonId,
+      comparisonTitle: entry.title,
+    })
+  }
+
+  return snapshots.sort((a, b) => Number(a.year) - Number(b.year))
+}
+
 export async function fetchExplorerManifest(cardId: string): Promise<ExplorerManifest | null> {
   const url = `${base}explorer/${cardId}/manifest.json`
   try {

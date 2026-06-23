@@ -3,6 +3,22 @@
     "defaultComparisonId":  "cmp_legacy_001",
     "comparisons":  [
                         {
+                            "comparisonId":  "cmp_009",
+                            "title":  "1840 -\u003e 2026",
+                            "labelingLayout":  "overlay",
+                            "annotationCount":  2,
+                            "isLegacy":  false,
+                            "markedFacadeUrl":  "comparisons/cmp_009/marked-facade.png",
+                            "labeledFacadeUrl":  "comparisons/cmp_009/marked-facade-labeled.png",
+                            "historicalRectifiedUrl":  "comparisons/cmp_009/historical-rectified.png",
+                            "modernRectifiedUrl":  "comparisons/cmp_009/modern-rectified.png",
+                            "modernSourceUrl":  "comparisons/cmp_009/modern-source.png",
+                            "annotationsUrl":  "comparisons/cmp_009/annotations.json",
+                            "facadeProjectUrl":  "comparisons/cmp_009/facade-project.json",
+                            "historicalPhotoYear":  "1840",
+                            "modernPhotoYear":  "2026"
+                        },
+                        {
                             "comparisonId":  "cmp_005",
                             "title":  "1924 -\u003e 2026",
                             "labelingLayout":  "overlay",
@@ -19,19 +35,18 @@
                             "modernPhotoYear":  "2026"
                         },
                         {
-                            "comparisonId":  "cmp_009",
-                            "title":  "1840 -\u003e 2026",
+                            "comparisonId":  "cmp_008",
+                            "title":  "1938 -\u003e 2026",
                             "labelingLayout":  "overlay",
                             "annotationCount":  2,
                             "isLegacy":  false,
-                            "markedFacadeUrl":  "comparisons/cmp_009/marked-facade.png",
-                            "labeledFacadeUrl":  "comparisons/cmp_009/marked-facade-labeled.png",
-                            "historicalRectifiedUrl":  "comparisons/cmp_009/historical-rectified.png",
-                            "modernRectifiedUrl":  "comparisons/cmp_009/modern-rectified.png",
-                            "modernSourceUrl":  "comparisons/cmp_009/modern-source.png",
-                            "annotationsUrl":  "comparisons/cmp_009/annotations.json",
-                            "facadeProjectUrl":  "comparisons/cmp_009/facade-project.json",
-                            "historicalPhotoYear":  "1840",
+                            "markedFacadeUrl":  "comparisons/cmp_008/marked-facade.png",
+                            "labeledFacadeUrl":  "comparisons/cmp_008/marked-facade-labeled.png",
+                            "historicalRectifiedUrl":  "comparisons/cmp_008/historical-rectified.png",
+                            "modernRectifiedUrl":  "comparisons/cmp_008/modern-rectified.png",
+                            "annotationsUrl":  "comparisons/cmp_008/annotations.json",
+                            "facadeProjectUrl":  "comparisons/cmp_008/facade-project.json",
+                            "historicalPhotoYear":  "1938",
                             "modernPhotoYear":  "2026"
                         }
                     ],
