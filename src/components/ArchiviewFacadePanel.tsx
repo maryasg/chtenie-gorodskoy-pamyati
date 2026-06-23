@@ -669,8 +669,8 @@ export function ArchiviewFacadePanel({
       )}
 
       {imageOk && (
-        <div className={`flex flex-col gap-4 ${variant === 'ar' ? '' : 'lg:flex-row lg:items-start'}`}>
-          <div className={`relative min-w-0 flex-1 ${embeddedAr ? '' : ''}`}>
+        <div className={`flex flex-col gap-4`}>
+          <div className="relative min-w-0 w-full">
             <div
               ref={viewportRef}
               className={`relative w-full ${
@@ -952,8 +952,8 @@ export function ArchiviewFacadePanel({
 
           {regions.length > 0 && !embeddedAr && (
             <ol
-              className={`w-full shrink-0 space-y-1.5 text-sm ${
-                variant === 'ar' ? '' : 'lg:w-64 xl:w-72'
+              className={`grid w-full grid-cols-1 gap-1.5 text-sm sm:grid-cols-2 ${
+                variant === 'ar' ? '' : ''
               }`}
             >
               {regions.map((r) => {
