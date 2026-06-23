@@ -18,10 +18,25 @@ export interface ExplorerComparisonEntry {
   facadeProjectUrl: string
 }
 
+export type FacadeTimeLayerOverlayMode = 'rectified' | 'archive'
+
+/** Явная шкала «Слоёв времени» (если нужен порядок/источники не из auto). */
+export interface ExplorerTimeLayerEntry {
+  year: string
+  label?: string
+  title?: string
+  comparisonId?: string
+  historicalRectifiedUrl: string
+  sourceUrl?: string
+  overlayMode?: FacadeTimeLayerOverlayMode
+}
+
 export interface ExplorerManifest {
   cardId: string
   defaultComparisonId: string
   comparisons: ExplorerComparisonEntry[]
+  /** Порядок слоёв на шкале; иначе — уникальные годы из comparisons. */
+  timeLayers?: ExplorerTimeLayerEntry[]
   updatedAt?: string
 }
 
@@ -66,9 +81,29 @@ export function manifestEntryToAssets(
 
 export type FacadeTimeSnapshot = {
   year: string
+  /** Подпись на кнопке шкалы (если отличается от year). */
+  label?: string
   historicalUrl: string
   comparisonId: string
   comparisonTitle: string
+  sourceUrl?: string
+  /** rectified — призрак на выпрямленном modern; archive — отдельный архивный кадр. */
+  overlayMode?: FacadeTimeLayerOverlayMode
+}
+
+function buildFacadeTimeSnapshotsFromConfig(
+  manifest: ExplorerManifest,
+  cardId: string,
+): FacadeTimeSnapshot[] {
+  return (manifest.timeLayers ?? []).map((layer) => ({
+    year: layer.year,
+    label: layer.label,
+    historicalUrl: resolveExplorerAsset(cardId, layer.historicalRectifiedUrl),
+    comparisonId: layer.comparisonId ?? `layer_${layer.year}`,
+    comparisonTitle: layer.title ?? layer.label ?? layer.year,
+    sourceUrl: layer.sourceUrl,
+    overlayMode: layer.overlayMode ?? 'rectified',
+  }))
 }
 
 /** Уникальные исторические срезы из manifest, по возрастанию года (для «Слоёв времени»). */
@@ -76,6 +111,10 @@ export function buildFacadeTimeSnapshots(
   manifest: ExplorerManifest,
   cardId: string,
 ): FacadeTimeSnapshot[] {
+  if (manifest.timeLayers?.length) {
+    return buildFacadeTimeSnapshotsFromConfig(manifest, cardId)
+  }
+
   const seen = new Set<string>()
   const snapshots: FacadeTimeSnapshot[] = []
 
