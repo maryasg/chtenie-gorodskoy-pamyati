@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ArchiviewAnnotation, ArchiviewBuildingAssets } from '../data/explorer/archiviewAssets'
 import type { Building, MemoryTrace } from '../types/building'
 import {
+  homographyRectToFullSource,
   polygonAreaAbs,
   polygonCentroid,
   rectifiedPolygonToComparison,
+  sourceCropOffsetFromProject,
   toPercentPoints,
   transformPolygon,
   type Point,
@@ -165,20 +167,31 @@ async function probeImageMeta(url: string): Promise<ImageProbe | null> {
  */
 async function pickFacadeImage(
   assets: ArchiviewBuildingAssets,
-  options?: { arMode?: boolean },
+  options?: { arMode?: boolean; hasArHomography?: boolean },
 ): Promise<{ url: string; kind: FacadeImageKind; w: number; h: number } | null> {
-  if (options?.arMode && assets.arPhotoUrl) {
-    const arPhoto = await probeImageMeta(assets.arPhotoUrl)
-    if (arPhoto) {
-      return { url: assets.arPhotoUrl, kind: 'source_modern', w: arPhoto.w, h: arPhoto.h }
+  if (options?.arMode) {
+    if (options.hasArHomography && assets.arPhotoUrl) {
+      const arPhoto = await probeImageMeta(assets.arPhotoUrl)
+      if (arPhoto) {
+        return { url: assets.arPhotoUrl, kind: 'source_modern', w: arPhoto.w, h: arPhoto.h }
+      }
     }
-  }
 
-  if (options?.arMode && assets.modernSourceUrl) {
-    const source = await probeImageMeta(assets.modernSourceUrl)
-    if (source) {
-      return { url: assets.modernSourceUrl, kind: 'source_modern', w: source.w, h: source.h }
+    if (assets.modernSourceUrl) {
+      const source = await probeImageMeta(assets.modernSourceUrl)
+      if (source) {
+        return { url: assets.modernSourceUrl, kind: 'source_modern', w: source.w, h: source.h }
+      }
     }
+
+    if (assets.modernRectifiedUrl) {
+      const rectified = await probeImageMeta(assets.modernRectifiedUrl)
+      if (rectified) {
+        return { url: assets.modernRectifiedUrl, kind: 'rectified', w: rectified.w, h: rectified.h }
+      }
+    }
+
+    return null
   }
 
   if (assets.labelingLayout === 'side_by_side' && assets.sideBySideMarkedUrl) {
@@ -207,6 +220,15 @@ async function pickFacadeImage(
     if (marked) return { url: markedUrl, kind: 'marked', w: marked.w, h: marked.h }
   }
   return null
+}
+
+function annotationHasSourcePolygon(ann: ArchiviewAnnotation): boolean {
+  const raw = ann.polygon_source as Point[] | undefined
+  return Boolean(raw && raw.length >= 3)
+}
+
+function annotationsHaveSourcePolygons(annotations: ArchiviewAnnotation[]): boolean {
+  return annotations.some(annotationHasSourcePolygon)
 }
 
 export function ArchiviewFacadePanel({
@@ -348,6 +370,20 @@ export function ArchiviewFacadePanel({
     [makeRegion],
   )
 
+  const buildRegionsFromSourcePolygons = useCallback(
+    (annotations: ArchiviewAnnotation[], width: number, height: number) => {
+      const list: DisplayRegion[] = []
+      annotations.forEach((ann, i) => {
+        const raw = (ann.polygon_source ?? ann.polygon) as Point[] | undefined
+        if (!raw || raw.length < 3) return
+        const pct = toPercentPoints(raw, width, height)
+        list.push(makeRegion(ann, annotationDisplayIndex(ann, i), pct))
+      })
+      setRegions(list)
+    },
+    [makeRegion],
+  )
+
   const buildRegionsOverlay = useCallback(
     (annotations: ArchiviewAnnotation[], H: number[][], width: number, height: number) => {
       const list: DisplayRegion[] = []
@@ -411,12 +447,18 @@ export function ArchiviewFacadePanel({
       const projData = projRes.ok ? await projRes.json() : null
       const H_ar = isHomography(projData?.H_rect_to_ar) ? projData.H_rect_to_ar : undefined
       const H_modern = isHomography(projData?.H_rect_to_modern) ? projData.H_rect_to_modern : undefined
+      const H_modern_full = H_modern
+        ? homographyRectToFullSource(H_modern, sourceCropOffsetFromProject(projData))
+        : undefined
       const annotations = (annData?.annotations ?? []) as ArchiviewAnnotation[]
       const layout = (annData?.labeling_layout ?? assets.labelingLayout) ?? 'legacy_overlay'
       const isSb = layout === 'side_by_side'
       if (!cancelled) setSideBySide(isSb)
 
-      const loaded = await pickFacadeImage(assets, { arMode: variant === 'ar' })
+      const loaded = await pickFacadeImage(assets, {
+        arMode: variant === 'ar',
+        hasArHomography: Boolean(H_ar),
+      })
       if (cancelled) return
 
       if (!loaded) {
@@ -426,7 +468,12 @@ export function ArchiviewFacadePanel({
 
       const useArHomography =
         variant === 'ar' && assets.arPhotoUrl && loaded.url === assets.arPhotoUrl && Boolean(H_ar)
-      const H = useArHomography ? H_ar : H_modern
+      const useSourcePolygons =
+        !isSb &&
+        loaded.kind === 'source_modern' &&
+        !useArHomography &&
+        annotationsHaveSourcePolygons(annotations)
+      const H = useArHomography ? H_ar : H_modern_full
 
       setDisplayImageUrl(loaded.url)
       setImageKind(loaded.kind)
@@ -440,6 +487,8 @@ export function ArchiviewFacadePanel({
 
       if (isSb && annData?.side_by_side) {
         buildRegionsSideBySide(annotations, annData, loaded.w, loaded.h)
+      } else if (useSourcePolygons) {
+        buildRegionsFromSourcePolygons(annotations, loaded.w, loaded.h)
       } else if (!isSb && loaded.kind === 'source_modern' && H) {
         buildRegionsOverlay(annotations, H, loaded.w, loaded.h)
       } else if (
@@ -461,7 +510,15 @@ export function ArchiviewFacadePanel({
     return () => {
       cancelled = true
     }
-  }, [assets, buildRegionsOverlay, buildRegionsRectified, buildRegionsSideBySide, resetView, variant])
+  }, [
+    assets,
+    buildRegionsFromSourcePolygons,
+    buildRegionsOverlay,
+    buildRegionsRectified,
+    buildRegionsSideBySide,
+    resetView,
+    variant,
+  ])
 
   const plateRegion =
     selectedIdx !== null
@@ -530,8 +587,10 @@ export function ArchiviewFacadePanel({
         >
           {variant === 'ar' ? (
             <>
-              Для AR-preview нужен файл <code>20260520_185142.jpg</code> (полевое фото) и разметка
-              Archiview. Экспортируйте → <code>copy_to_website.bat</code> (CardId: {assets.cardId}) → Push.
+              Для AR-preview нужны <code>modern-source.png</code> (или выпрямленное фото) и разметка Archiview
+              с <code>polygon_source</code>. Полевое фото <code>20260520_185142.jpg</code> подключается только
+              вместе с <code>H_rect_to_ar</code> в <code>facade-project.json</code>. Экспорт →{' '}
+              <code>copy_to_website.bat</code> (CardId: {assets.cardId}) → Push.
             </>
           ) : (
             <>

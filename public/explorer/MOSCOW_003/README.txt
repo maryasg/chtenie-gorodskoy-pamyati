@@ -4,8 +4,8 @@
   03_historical_rectified.png  →  historical-rectified.png  (ползунок до/после на сайте)
   04_modern_rectified.png      →  modern-rectified.png
   06_marked_rectified.png      →  marked-facade.png  (overlay; координаты polygon совпадают)
-  11_modern_source_for_site.png  →  modern-source.png  (карточка здания)
-  20260520_185142.jpg          →  20260520_185142.jpg  (AR-preview)
+  11_modern_source_for_site.png  →  modern-source.png  (AR-preview и карточка; координаты polygon_source)
+  20260520_185142.jpg          →  20260520_185142.jpg  (полевое фото только с H_rect_to_ar)
   07_marked_on_original_modern.png  →  архив/проверка, не основной файл сайта для overlay
   08_marked_on_original_modern_labeled.png  →  marked-facade-labeled.png  (по желанию)
   annotations/manual_annotations.json  →  annotations.json

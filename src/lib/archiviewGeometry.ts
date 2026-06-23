@@ -1,5 +1,37 @@
 export type Point = [number, number]
 
+type FacadeProjectCrop = {
+  modern_crop_offset_xy?: [number, number]
+  modern_crop_rect_text?: string
+}
+
+/** Сдвиг обрезки исходника: выпрямление → полный файл modern_image. */
+export function sourceCropOffsetFromProject(project?: FacadeProjectCrop | null): Point {
+  const off = project?.modern_crop_offset_xy
+  if (Array.isArray(off) && off.length >= 2) {
+    return [Number(off[0]) || 0, Number(off[1]) || 0]
+  }
+  const text = String(project?.modern_crop_rect_text ?? '').trim()
+  if (!text) return [0, 0]
+  const parts = text.replace(/\s+/g, '').split(',')
+  if (parts.length !== 4) return [0, 0]
+  const nums = parts.map((part) => Number(part))
+  if (nums.some((n) => !Number.isFinite(n))) return [0, 0]
+  const [x0, y0] = nums
+  return [x0, y0]
+}
+
+/** Разметка в выпрямленном кадре → координаты полного исходного фото. */
+export function homographyRectToFullSource(H_rect_to_cropped: number[][], cropOffset: Point): number[][] {
+  const [dx, dy] = cropOffset
+  if (Math.abs(dx) < 1e-9 && Math.abs(dy) < 1e-9) return H_rect_to_cropped
+  return [
+    [H_rect_to_cropped[0][0], H_rect_to_cropped[0][1], H_rect_to_cropped[0][2] + dx],
+    [H_rect_to_cropped[1][0], H_rect_to_cropped[1][1], H_rect_to_cropped[1][2] + dy],
+    H_rect_to_cropped[2],
+  ]
+}
+
 /** Перенос полигона из координат выпрямленного холста на исходное современное фото. */
 export function transformPolygon(H: number[][], polygon: Point[]): Point[] {
   return polygon.map(([x, y]) => {
