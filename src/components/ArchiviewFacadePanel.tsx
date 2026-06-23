@@ -384,16 +384,19 @@ export function ArchiviewFacadePanel({
         cx,
         cy,
         areaPct,
-        badgeLayout: computeBadgeLayout(polygonPct, areaPct, idx),
+        badgeLayout: computeBadgeLayout(polygonPct, areaPct, idx, assets.cardId),
       }
     },
-    [tracesById],
+    [assets.cardId, tracesById],
   )
 
-  const publishRegions = useCallback((list: DisplayRegion[]) => {
-    assignBadgeLayouts(list)
-    setRegions(list)
-  }, [])
+  const publishRegions = useCallback(
+    (list: DisplayRegion[]) => {
+      assignBadgeLayouts(list, assets.cardId)
+      setRegions(list)
+    },
+    [assets.cardId],
+  )
 
   const buildRegionsRectified = useCallback(
     (annotations: ArchiviewAnnotation[], width: number, height: number) => {
@@ -872,32 +875,16 @@ export function ArchiviewFacadePanel({
                     : null}
                 </svg>
               )}
-              {plateRegion && platePlacement && variant !== 'ar' && (
+              {plateRegion && platePlacement && variant !== 'ar' && !plateExpanded && (
                 <div
-                  className={`absolute z-20 max-w-[min(92%,${
-                    plateExpanded
-                      ? platePlacement.compact
-                        ? '300px'
-                        : '380px'
-                      : platePlacement.compact
-                        ? '260px'
-                        : '320px'
-                  })] rounded-xl border border-arch-gold/70 bg-arch-green-deep/90 px-3 py-2.5 text-left text-xs leading-snug text-arch-surface shadow-xl backdrop-blur-md ${
-                    plateExpanded ? 'pointer-events-auto max-h-[min(50vh,340px)] overflow-y-auto' : 'pointer-events-none'
-                  }`}
+                  className={`pointer-events-none absolute z-20 max-w-[min(92%,${
+                    platePlacement.compact ? '260px' : '320px'
+                  })] rounded-xl border border-arch-gold/70 bg-arch-green-deep/90 px-3 py-2.5 text-left text-xs leading-snug text-arch-surface shadow-xl backdrop-blur-md`}
                   style={{
                     left: `${plateRegion.cx}%`,
                     top: `${plateRegion.cy}%`,
                     transform: platePlacement.transform,
                   }}
-                  onClick={
-                    plateExpanded
-                      ? (event) => {
-                          event.stopPropagation()
-                          setSelectedIdx(null)
-                        }
-                      : undefined
-                  }
                 >
                   <ExpertTracePlate
                     idx={plateRegion.idx}
@@ -906,9 +893,8 @@ export function ArchiviewFacadePanel({
                     trace={plateRegion.trace}
                     comment={plateRegion.comment}
                     verification={building?.verification}
-                    expanded={plateExpanded}
+                    expanded={false}
                     compact={platePlacement.compact}
-                    onClose={plateExpanded ? () => setSelectedIdx(null) : undefined}
                   />
                 </div>
               )}
@@ -932,16 +918,20 @@ export function ArchiviewFacadePanel({
                 </div>
               )}
 
-              {variant === 'ar' && plateExpanded && plateRegion && (
+              {plateExpanded && plateRegion && (
                 <div
-                  className="absolute inset-0 z-40 flex items-center justify-center bg-black/55 p-3 sm:p-5"
+                  className={`absolute inset-0 z-40 flex items-center justify-center bg-black/55 ${
+                    embeddedAr ? 'p-2' : 'p-4 sm:p-6'
+                  }`}
                   role="dialog"
                   aria-modal="true"
                   aria-label={`Экспертная заметка ${plateRegion.idx}`}
                   onClick={() => setSelectedIdx(null)}
                 >
                   <div
-                    className="pointer-events-auto max-h-[min(82%,520px)] w-full max-w-md overflow-y-auto rounded-2xl border border-arch-gold/70 bg-arch-green-deep px-4 py-3.5 text-left text-xs leading-snug text-arch-surface shadow-2xl"
+                    className={`pointer-events-auto max-h-[min(82%,520px)] w-full overflow-y-auto rounded-2xl border border-arch-gold/70 bg-arch-green-deep px-4 py-3.5 text-left text-xs leading-snug text-arch-surface shadow-2xl ${
+                      embeddedAr ? 'max-w-none' : 'max-w-md'
+                    }`}
                     onClick={(event) => event.stopPropagation()}
                   >
                     <ExpertTracePlate
