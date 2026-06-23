@@ -94,6 +94,26 @@ export function buildFacadeTimeSnapshots(
   return snapshots.sort((a, b) => Number(a.year) - Number(b.year))
 }
 
+/**
+ * Основное сравнение для фасада: cmp_legacy_001 в defaultComparisonId часто
+ * отсутствует в списке comparisons — тогда берём cmp_005 или запись с max annotationCount.
+ */
+export function resolveDefaultComparisonId(manifest: ExplorerManifest): string {
+  const { comparisons, defaultComparisonId } = manifest
+  if (!comparisons.length) return defaultComparisonId
+
+  const explicit = comparisons.find((c) => c.comparisonId === defaultComparisonId)
+  if (explicit && !explicit.isLegacy) return explicit.comparisonId
+
+  const preferred = comparisons.find((c) => c.comparisonId === 'cmp_005' && !c.isLegacy)
+  if (preferred) return preferred.comparisonId
+
+  const sorted = [...comparisons]
+    .filter((c) => !c.isLegacy)
+    .sort((a, b) => (b.annotationCount ?? 0) - (a.annotationCount ?? 0))
+  return sorted[0]?.comparisonId ?? comparisons[0].comparisonId
+}
+
 export async function fetchExplorerManifest(cardId: string): Promise<ExplorerManifest | null> {
   const url = `${base}explorer/${cardId}/manifest.json`
   try {
