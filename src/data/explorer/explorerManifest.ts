@@ -54,7 +54,7 @@ const WEBSITE_HIDDEN_TIME_LAYERS: Record<string, Array<{ year: string; compariso
 
 function isHiddenTimeLayer(
   cardId: string,
-  layer: ExplorerTimeLayerEntry,
+  layer: { year: string; comparisonId?: string },
 ): boolean {
   const rules = WEBSITE_HIDDEN_TIME_LAYERS[cardId]
   if (!rules?.length) return false
@@ -65,13 +65,27 @@ function isHiddenTimeLayer(
   )
 }
 
+function filterVisibleComparisons(manifest: ExplorerManifest): ExplorerComparisonEntry[] {
+  const hidden = new Set(WEBSITE_HIDDEN_COMPARISON_IDS[manifest.cardId] ?? [])
+  return manifest.comparisons.filter((c) => !hidden.has(c.comparisonId) && !c.isLegacy)
+}
+
+function filterVisibleTimeSnapshots(
+  cardId: string,
+  snapshots: FacadeTimeSnapshot[],
+): FacadeTimeSnapshot[] {
+  return snapshots.filter((snap) => !isHiddenTimeLayer(cardId, snap))
+}
+
 /** Убирает ошибочные дубликаты из manifest перед показом на сайте. */
 export function sanitizeManifestForWebsite(manifest: ExplorerManifest): ExplorerManifest {
-  const hiddenComparisons = new Set(WEBSITE_HIDDEN_COMPARISON_IDS[manifest.cardId] ?? [])
-  const comparisons = manifest.comparisons.filter((c) => !hiddenComparisons.has(c.comparisonId))
-  const timeLayers = manifest.timeLayers?.filter((layer) => !isHiddenTimeLayer(manifest.cardId, layer))
+  const comparisons = filterVisibleComparisons(manifest)
+  const timeLayers = manifest.timeLayers?.filter(
+    (layer) => !isHiddenTimeLayer(manifest.cardId, layer),
+  )
 
   let defaultComparisonId = manifest.defaultComparisonId
+  const hiddenComparisons = new Set(WEBSITE_HIDDEN_COMPARISON_IDS[manifest.cardId] ?? [])
   if (hiddenComparisons.has(defaultComparisonId)) {
     defaultComparisonId = resolveDefaultComparisonId({ ...manifest, comparisons })
   }
@@ -153,26 +167,30 @@ export function buildFacadeTimeSnapshots(
   manifest: ExplorerManifest,
   cardId: string,
 ): FacadeTimeSnapshot[] {
+  let snapshots: FacadeTimeSnapshot[]
+
   if (manifest.timeLayers?.length) {
-    return buildFacadeTimeSnapshotsFromConfig(manifest, cardId)
+    snapshots = buildFacadeTimeSnapshotsFromConfig(manifest, cardId)
+  } else {
+    const seen = new Set<string>()
+    snapshots = []
+
+    for (const entry of filterVisibleComparisons(manifest)) {
+      const year = entry.historicalPhotoYear?.trim()
+      if (!year || seen.has(year)) continue
+      seen.add(year)
+      snapshots.push({
+        year,
+        historicalUrl: resolveExplorerAsset(cardId, entry.historicalRectifiedUrl),
+        comparisonId: entry.comparisonId,
+        comparisonTitle: entry.title,
+      })
+    }
+
+    snapshots.sort((a, b) => Number(a.year) - Number(b.year))
   }
 
-  const seen = new Set<string>()
-  const snapshots: FacadeTimeSnapshot[] = []
-
-  for (const entry of manifest.comparisons) {
-    const year = entry.historicalPhotoYear?.trim()
-    if (!year || seen.has(year)) continue
-    seen.add(year)
-    snapshots.push({
-      year,
-      historicalUrl: resolveExplorerAsset(cardId, entry.historicalRectifiedUrl),
-      comparisonId: entry.comparisonId,
-      comparisonTitle: entry.title,
-    })
-  }
-
-  return snapshots.sort((a, b) => Number(a.year) - Number(b.year))
+  return filterVisibleTimeSnapshots(cardId, snapshots)
 }
 
 /**
@@ -183,9 +201,7 @@ export function resolveDefaultComparisonId(manifest: ExplorerManifest): string {
   const { comparisons, defaultComparisonId } = manifest
   if (!comparisons.length) return defaultComparisonId
 
-  const visible = comparisons.filter(
-    (c) => !(WEBSITE_HIDDEN_COMPARISON_IDS[manifest.cardId] ?? []).includes(c.comparisonId),
-  )
+  const visible = filterVisibleComparisons(manifest)
   if (!visible.length) return defaultComparisonId
 
   const explicit = visible.find((c) => c.comparisonId === defaultComparisonId)
