@@ -36,7 +36,7 @@
                         },
                         {
                             "comparisonId":  "cmp_008",
-                            "title":  "1936 -\u003e 2026",
+                            "title":  "1938 -\u003e 2026",
                             "labelingLayout":  "overlay",
                             "annotationCount":  2,
                             "isLegacy":  false,
@@ -46,7 +46,7 @@
                             "modernRectifiedUrl":  "comparisons/cmp_008/modern-rectified.png",
                             "annotationsUrl":  "comparisons/cmp_008/annotations.json",
                             "facadeProjectUrl":  "comparisons/cmp_008/facade-project.json",
-                            "historicalPhotoYear":  "1936",
+                            "historicalPhotoYear":  "1938",
                             "modernPhotoYear":  "2026"
                         }
                     ],

@@ -28,8 +28,8 @@ function layerHint(year: string, buildingId: string): string {
     if (year === '1924') {
       return 'Двухэтажное усадебное строение (PastVu, 1924): верхней надстройки ещё нет; в начале 1920-х рядом действовал Ордынский лагерь.'
     }
-    if (year === '1936') {
-      return 'После надстройки трёх верхних ярусов (PastVu, 1936) — облик совпадает с датировкой в акте экспертизы.'
+    if (year === '1938') {
+      return 'После надстройки трёх верхних ярусов (1938, акт экспертизы). Визуальный срез — архивное фото PastVu p/68045; дата на PastVu не является опорным источником.'
     }
   }
   if (year === '1840') return 'Ранний план или архивный срез — максимально далёкий от сегодняшнего облика.'
@@ -111,7 +111,7 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
   if (!hasModern || snapshots.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-arch-line bg-arch-surface-2/60 p-4 text-sm text-arch-muted">
-        Для слоёв времени нужны выпрямленные снимки из Archiview (1840, 1924, 1936 и современный).
+        Для слоёв времени нужны выпрямленные снимки из Archiview (1840, 1924, 1938 и современный).
         Экспортируйте <code>copy_to_website.bat</code> → Push.
       </p>
     )
