@@ -1,6 +1,6 @@
 {
     "version":  "v15 projects + hand cursor + delete any region",
-    "image":  "05_comparison_for_labeling.png",
+    "image":  "04_modern_rectified.png",
     "rectified_size":  {
                            "width":  4200,
                            "height":  2452
@@ -551,6 +551,50 @@
                                                    ]
                                                ],
                             "coordinate_space":  "rectified"
+                        },
+                        {
+                            "id":  11,
+                            "class":  "new_window",
+                            "label_ru":  "Новое окно / новый проём",
+                            "comment":  "Вход, который отсутствовал на плане усадьбы 1840 года, есть на фотографии 1924 года",
+                            "polygon":  [
+                                            [
+                                                2079.6,
+                                                2137.9
+                                            ],
+                                            [
+                                                2079.6,
+                                                1899.0
+                                            ],
+                                            [
+                                                2184.5,
+                                                1899.0
+                                            ],
+                                            [
+                                                2201.9,
+                                                2137.9
+                                            ]
+                                        ],
+                            "coordinate_space":  "rectified",
+                            "image_side":  "modern",
+                            "polygon_source":  [
+                                                   [
+                                                       1314.1973876953125,
+                                                       1513.8984375
+                                                   ],
+                                                   [
+                                                       1317.55712890625,
+                                                       1258.1246337890625
+                                                   ],
+                                                   [
+                                                       1423.730712890625,
+                                                       1260.2332763671875
+                                                   ],
+                                                   [
+                                                       1444.3931884765625,
+                                                       1518.870849609375
+                                                   ]
+                                               ]
                         }
                     ],
     "classes":  {

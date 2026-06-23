@@ -1,0 +1,22 @@
+{
+    "cardId":  "MOSCOW_004",
+    "defaultComparisonId":  "cmp_004",
+    "comparisons":  [
+                        {
+                            "comparisonId":  "cmp_004",
+                            "title":  "manual_old_pastvu_55243_1989_3.jpg + modern_20260520_171307.jpg",
+                            "labelingLayout":  "side_by_side",
+                            "annotationCount":  3,
+                            "isLegacy":  false,
+                            "markedFacadeUrl":  "side-by-side-marked.png",
+                            "labeledFacadeUrl":  "marked-facade-labeled.png",
+                            "historicalRectifiedUrl":  "historical-rectified.png",
+                            "modernRectifiedUrl":  "modern-rectified.png",
+                            "modernSourceUrl":  "modern-source.png",
+                            "annotationsUrl":  "annotations.json",
+                            "facadeProjectUrl":  "facade-project.json",
+                            "sideBySideMarkedUrl":  "side-by-side-marked.png"
+                        }
+                    ],
+    "updatedAt":  "2026-06-23T10:43:54.7385939Z"
+}

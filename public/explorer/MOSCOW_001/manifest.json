@@ -1,6 +1,6 @@
 {
     "cardId":  "MOSCOW_001",
-    "defaultComparisonId":  "cmp_005",
+    "defaultComparisonId":  "cmp_legacy_001",
     "comparisons":  [
                         {
                             "comparisonId":  "cmp_009",
@@ -12,6 +12,7 @@
                             "labeledFacadeUrl":  "comparisons/cmp_009/marked-facade-labeled.png",
                             "historicalRectifiedUrl":  "comparisons/cmp_009/historical-rectified.png",
                             "modernRectifiedUrl":  "comparisons/cmp_009/modern-rectified.png",
+                            "modernSourceUrl":  "comparisons/cmp_009/modern-source.png",
                             "annotationsUrl":  "comparisons/cmp_009/annotations.json",
                             "facadeProjectUrl":  "comparisons/cmp_009/facade-project.json",
                             "historicalPhotoYear":  "1840",
@@ -23,12 +24,13 @@
                             "labelingLayout":  "overlay",
                             "annotationCount":  11,
                             "isLegacy":  false,
-                            "markedFacadeUrl":  "marked-facade.png",
-                            "labeledFacadeUrl":  "marked-facade-labeled.png",
-                            "historicalRectifiedUrl":  "historical-rectified.png",
-                            "modernRectifiedUrl":  "modern-rectified.png",
-                            "annotationsUrl":  "annotations.json",
-                            "facadeProjectUrl":  "facade-project.json",
+                            "markedFacadeUrl":  "comparisons/cmp_005/marked-facade.png",
+                            "labeledFacadeUrl":  "comparisons/cmp_005/marked-facade-labeled.png",
+                            "historicalRectifiedUrl":  "comparisons/cmp_005/historical-rectified.png",
+                            "modernRectifiedUrl":  "comparisons/cmp_005/modern-rectified.png",
+                            "modernSourceUrl":  "comparisons/cmp_005/modern-source.png",
+                            "annotationsUrl":  "comparisons/cmp_005/annotations.json",
+                            "facadeProjectUrl":  "comparisons/cmp_005/facade-project.json",
                             "historicalPhotoYear":  "1924",
                             "modernPhotoYear":  "2026"
                         },
@@ -48,5 +50,5 @@
                             "modernPhotoYear":  "2026"
                         }
                     ],
-    "updatedAt":  "2026-06-18T12:00:00.0000000Z"
+    "updatedAt":  "2026-06-23T10:43:12.4469999Z"
 }
