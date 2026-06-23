@@ -10,6 +10,8 @@ export interface ArchiviewAnnotation {
   /** Optional link to curated building.memoryTraces content. */
   traceId?: string
   polygon?: [number, number][]
+  /** Координаты на исходном modern-фото (экспорт Archiview); приоритетнее H_rect_to_modern. */
+  polygon_source?: [number, number][]
 }
 
 export interface ArchiviewBuildingAssets {
