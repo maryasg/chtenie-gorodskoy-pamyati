@@ -40,8 +40,6 @@ export function ExpertTracePlate({
     : null
   const confidenceSourceLine = traceConfidenceSourceLine(traceSource, verification)
   const showSourceInConfidence = expanded && Boolean(confidenceInfo && confidenceSourceLine)
-  const previewBody =
-    body.length > (compact ? 120 : 220) ? `${body.slice(0, compact ? 120 : 220).trim()}…` : body
 
   return (
     <div className={className}>
@@ -51,7 +49,9 @@ export function ExpertTracePlate({
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <span className="block font-semibold leading-snug">{title}</span>
+            <span className={`block font-semibold leading-snug ${expanded ? '' : 'line-clamp-2'}`}>
+              {title}
+            </span>
             {expanded && onClose ? (
               <button
                 type="button"
@@ -70,9 +70,9 @@ export function ExpertTracePlate({
             <span className="mt-0.5 block text-[11px] text-arch-surface/75">{period}</span>
           ) : null}
 
-          {body ? (
+          {expanded && body ? (
             <p className="mt-1.5 text-[11px] font-normal leading-snug text-arch-surface/90">
-              {expanded ? body : previewBody}
+              {body}
             </p>
           ) : null}
 

@@ -12,13 +12,21 @@ type Props = {
   archiview: ArchiviewBuildingAssets
 }
 
+/** Чем раньше снимок, тем сильнее «призрак» при автоматической настройке. */
+function ghostOpacityForSnapshot(index: number, total: number): number {
+  if (total <= 0) return 0.85
+  if (total === 1) return 0.85
+  const t = index / (total - 1)
+  return Math.max(0.12, 0.9 - t * 0.78)
+}
+
 function layerHint(year: string, buildingId: string, label?: string): string {
   if (buildingId === 'MOSCOW_001_kumaninykh') {
     if (year === '1840') {
       return 'План усадьбы 1840 года — исходная планировка проёмов и входов до поздних переделок.'
     }
     if (year === '1924' && label?.includes('ГИМ')) {
-      return 'Негатив Губарева А.А. (ГИМ, 9 марта 1924): вид на Большую Ордынку. Файл кладётся в public/explorer/MOSCOW_001/time-layers/gim-1924.jpg — без полупрозрачного наложения на современный фасад.'
+      return 'Негатив Губарева А.А. (ГИМ, 9 марта 1924): вид на Большую Ордынку.'
     }
     if (year === '1924') {
       return 'Двухэтажное усадебное строение (PastVu, 1924): верхней надстройки ещё нет; в начале 1920-х рядом действовал Ордынский лагерь.'
@@ -36,11 +44,12 @@ function layerHint(year: string, buildingId: string, label?: string): string {
   return 'Промежуточный архивный снимок: часть деталей уже изменена или утрачена.'
 }
 
-/** Переключение исторических срезов без полупрозрачного наложения. */
+/** Наложение исторических срезов на современный фасад с полупрозрачным переходом. */
 export function FacadeTimeLayers({ building, archiview }: Props) {
   const [snapshots, setSnapshots] = useState<FacadeTimeSnapshot[]>([])
   const [manifestLoaded, setManifestLoaded] = useState(false)
   const [layerIndex, setLayerIndex] = useState(0)
+  const [ghostOverride, setGhostOverride] = useState<number | null>(null)
 
   const modernUrl = archiview.modernRectifiedUrl
   const modernYear = archiview.modernPhotoYear ?? 'сегодня'
@@ -90,17 +99,14 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
 
   const isModernLayer = layerIndex >= snapshots.length
   const activeSnapshot = isModernLayer ? null : snapshots[layerIndex]
+  const autoGhost = isModernLayer ? 0 : ghostOpacityForSnapshot(layerIndex, snapshots.length)
+  const ghostOpacity = ghostOverride ?? autoGhost
 
   const stageHint = useMemo(() => {
     if (isModernLayer) return 'Современный фасад — то, что видно сегодня на месте (полевая съёмка).'
     if (!activeSnapshot) return ''
     return layerHint(activeSnapshot.year, building.id, activeSnapshot.label)
   }, [activeSnapshot, building.id, isModernLayer])
-
-  const displayUrl = isModernLayer ? modernUrl : activeSnapshot?.historicalUrl
-  const displayLabel = isModernLayer
-    ? modernYear
-    : (activeSnapshot?.label ?? activeSnapshot?.year ?? '')
 
   if (!manifestLoaded) {
     return (
@@ -120,33 +126,74 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
   }
 
   const layerButtons = [
-    ...snapshots.map((snap) => ({ key: `${snap.year}-${snap.label ?? ''}`, label: snap.label ?? snap.year })),
+    ...snapshots.map((snap) => ({
+      key: `${snap.year}-${snap.label ?? ''}`,
+      label: snap.label ?? snap.year,
+    })),
     { key: 'modern', label: modernYear },
   ]
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-arch-muted">
-        Каждый год показывается отдельным снимком (без полупрозрачного наложения). Порядок:{' '}
-        {snapshots.map((s) => s.year).join(' → ')} → {modernYear}.
+        Современный фасад ({modernYear}) — основа; поверх — полупрозрачный исторический слой выбранного
+        года. Ползунком можно плавно переходить от одного снимка к другому. Порядок:{' '}
+        {snapshots.map((s) => s.label ?? s.year).join(' → ')} → {modernYear}.
       </p>
 
       <div className="overflow-hidden rounded-2xl border border-arch-line bg-arch-green-deep shadow-md">
         <div className="relative aspect-[4/3] max-h-[min(70vh,640px)] w-full bg-arch-green-deep">
-          {displayUrl ? (
+          <img
+            src={modernUrl}
+            alt="Современный фасад"
+            className="absolute inset-0 h-full w-full object-contain"
+          />
+          {activeSnapshot ? (
             <img
-              src={displayUrl}
-              alt={isModernLayer ? 'Современный фасад' : `Фасад ${displayLabel}`}
-              className="absolute inset-0 h-full w-full object-contain"
+              src={activeSnapshot.historicalUrl}
+              alt={`Фасад ${activeSnapshot.label ?? activeSnapshot.year}`}
+              className="pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity duration-300"
+              style={{ opacity: ghostOpacity }}
             />
           ) : null}
           <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/50 to-transparent" />
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/55 to-transparent" />
           <div className="absolute left-3 top-3 rounded-md bg-black/55 px-2 py-1 text-xs text-white backdrop-blur-sm">
-            {displayLabel}
+            {isModernLayer
+              ? modernYear
+              : `${activeSnapshot!.label ?? activeSnapshot!.year} → ${modernYear}`}
           </div>
+          {!isModernLayer ? (
+            <div className="absolute bottom-3 right-3 rounded-md bg-black/55 px-2 py-1 text-xs tabular-nums text-white backdrop-blur-sm">
+              слой {Math.round(ghostOpacity * 100)}%
+            </div>
+          ) : null}
         </div>
       </div>
+
+      {!isModernLayer && (
+        <label className="block rounded-xl border border-arch-line bg-arch-surface px-3 py-2 text-sm">
+          <span className="flex items-center justify-between text-arch-ink/80">
+            <span>Прозрачность исторического слоя</span>
+            <span className="font-medium tabular-nums">{Math.round(ghostOpacity * 100)}%</span>
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={Math.round(ghostOpacity * 100)}
+            onChange={(e) => setGhostOverride(Number(e.target.value) / 100)}
+            className="mt-2 w-full accent-arch-green"
+          />
+          <button
+            type="button"
+            onClick={() => setGhostOverride(null)}
+            className="mt-1 text-xs text-arch-green underline"
+          >
+            Вернуть автоматически для выбранного года
+          </button>
+        </label>
+      )}
 
       <section>
         <h3 className="mb-2 text-sm font-semibold text-arch-green-deep">Год на шкале</h3>
@@ -155,7 +202,10 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
             <button
               key={btn.key}
               type="button"
-              onClick={() => setLayerIndex(i)}
+              onClick={() => {
+                setLayerIndex(i)
+                setGhostOverride(null)
+              }}
               className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
                 i === layerIndex
                   ? 'border-arch-green-deep bg-arch-green-deep text-arch-surface shadow-sm'
