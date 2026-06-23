@@ -3,7 +3,6 @@ import { getBuildingById } from '../data/buildings'
 import { ConfidenceBadge } from '../components/ConfidenceBadge'
 import { ArchiviewFacadePanel } from '../components/ArchiviewFacadePanel'
 import { BuildingVerificationBanner } from '../components/BuildingVerificationBanner'
-import { FacadeBeforeAfterSlider } from '../components/FacadeBeforeAfterSlider'
 import { FacadeTimeLayers } from '../components/FacadeTimeLayers'
 import { FacadeHotspotViewer } from '../components/FacadeHotspotViewer'
 import { TransformationTimeline } from '../components/TransformationTimeline'
@@ -311,30 +310,7 @@ export function BuildingPage() {
               onSelect={setSelectedComparisonId}
             />
           ) : null}
-          {displayAssets.comparisonId ? (
-            <p className="mb-3 text-xs font-medium text-arch-muted">
-              Сравнение:{' '}
-              {displayAssets.historicalPhotoYear && displayAssets.modernPhotoYear
-                ? `${displayAssets.historicalPhotoYear} → ${displayAssets.modernPhotoYear}`
-                : displayAssets.comparisonTitle || displayAssets.comparisonId}
-            </p>
-          ) : null}
           <ArchiviewFacadePanel assets={displayAssets} building={building} />
-          {!isSideBySide ? (
-            <div className="mt-8 border-t border-arch-line pt-6">
-              <h3 className="mb-2 text-base font-semibold text-arch-green-deep">Ползунок до/после</h3>
-              <p className="mb-4 text-sm leading-relaxed text-arch-muted">
-                Выпрямленные пары из Archiview для выбранного сравнения: исторический снимок и
-                современная съёмка 2026 года.
-              </p>
-              <FacadeBeforeAfterSlider
-                historicalUrl={displayAssets.historicalRectifiedUrl}
-                modernUrl={displayAssets.modernRectifiedUrl}
-                historicalYear={displayAssets.historicalPhotoYear}
-                modernYear={displayAssets.modernPhotoYear}
-              />
-            </div>
-          ) : null}
         </Section>
       ) : (
         <Section title="Фасад и подсветка">
@@ -382,8 +358,8 @@ export function BuildingPage() {
       {displayAssets && !isSideBySide ? (
         <Section title="Слои времени" kicker="Archiview">
           <p className="mb-4 text-sm leading-relaxed text-arch-muted">
-            Отдельные исторические срезы по годам — без полупрозрачного наложения. Снимок 1924 года
-            (ГИМ) — в слое «1924 (ГИМ)»; основное сравнение с разметкой — 1938 → 2026.
+            Исторические срезы накладываются на современный фасад с полупрозрачным переходом.
+            Снимок 1924 года (ГИМ) — в слое «1924 (ГИМ)»; основное сравнение с разметкой — 1938 → 2026.
           </p>
           <FacadeTimeLayers building={building} archiview={archiview ?? displayAssets} />
           <p className="mt-4">
