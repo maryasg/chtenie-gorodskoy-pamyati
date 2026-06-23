@@ -58,7 +58,7 @@ export function ExplorerPage() {
       <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
         <p className="text-sm font-semibold text-amber-950">
           Демо-режим: здесь показан сценарий будущей функции. Реальная разметка и проверка следов
-          выполняются куратором в Archiview.
+          выполняются экспертом в Archiview.
         </p>
       </div>
 

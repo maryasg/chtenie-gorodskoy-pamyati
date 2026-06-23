@@ -74,18 +74,18 @@ export async function fetchExplorerManifest(cardId: string): Promise<ExplorerMan
   }
 }
 
-/** Источники annotations.json для кураторской страницы — по всем сравнениям из manifest. */
-export type CuratorAnnotationSource = {
+/** Источники annotations.json для экспертной страницы — по всем сравнениям из manifest. */
+export type ExpertAnnotationSource = {
   comparisonId: string
   comparisonTitle: string
   annotationsUrl: string
   annotationsRelPath: string
 }
 
-export async function fetchCuratorAnnotationSources(
+export async function fetchExpertAnnotationSources(
   cardId: string,
   fallbackAnnotationsUrl: string,
-): Promise<CuratorAnnotationSource[]> {
+): Promise<ExpertAnnotationSource[]> {
   const manifest = await fetchExplorerManifest(cardId)
   if (!manifest?.comparisons?.length) {
     return [

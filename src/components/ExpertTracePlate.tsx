@@ -2,7 +2,7 @@ import type { BuildingVerification, MemoryTrace } from '../types/building'
 import { getConfidenceInfo } from '../data/confidenceGuide'
 import { describeConfidenceBasis, traceConfidenceSourceLine } from '../lib/traceConfidence'
 import { ConfidenceBadge } from './ConfidenceBadge'
-import { splitTraceMessage, TraceMessageBody } from '../lib/traceMessage'
+import { splitTraceMessage } from '../lib/traceMessage'
 
 type Props = {
   idx: number
@@ -19,7 +19,7 @@ type Props = {
   className?: string
 }
 
-export function CuratorTracePlate({
+export function ExpertTracePlate({
   idx,
   title,
   period,
@@ -34,11 +34,14 @@ export function CuratorTracePlate({
   const confidence = trace?.confidence
   const confidenceInfo = confidence ? getConfidenceInfo(confidence) : null
   const message = trace?.userMessage ?? comment ?? ''
-  const traceSource = splitTraceMessage(message).source
+  const { body, source: traceSource } = splitTraceMessage(message)
   const confidenceBasis = confidence
     ? describeConfidenceBasis(confidence, traceSource, verification)
     : null
   const confidenceSourceLine = traceConfidenceSourceLine(traceSource, verification)
+  const showSourceInConfidence = expanded && Boolean(confidenceInfo && confidenceSourceLine)
+  const previewBody =
+    body.length > (compact ? 120 : 220) ? `${body.slice(0, compact ? 120 : 220).trim()}…` : body
 
   return (
     <div className={className}>
@@ -67,26 +70,10 @@ export function CuratorTracePlate({
             <span className="mt-0.5 block text-[11px] text-arch-surface/75">{period}</span>
           ) : null}
 
-          {message ? (
-            <div className="mt-1.5 text-[11px] font-normal leading-snug">
-              {expanded ? (
-                <TraceMessageBody
-                  text={message}
-                  bodyClassName="text-arch-surface/90"
-                  sourceClassName="text-[10px] leading-snug text-arch-surface/55"
-                />
-              ) : (
-                <TraceMessageBody
-                  text={
-                    message.length > (compact ? 120 : 220)
-                      ? `${message.slice(0, compact ? 120 : 220).trim()}…`
-                      : message
-                  }
-                  bodyClassName="text-arch-surface/90"
-                  sourceClassName="text-[10px] leading-snug text-arch-surface/55"
-                />
-              )}
-            </div>
+          {body ? (
+            <p className="mt-1.5 text-[11px] font-normal leading-snug text-arch-surface/90">
+              {expanded ? body : previewBody}
+            </p>
           ) : null}
 
           {expanded && confidenceInfo ? (
@@ -98,12 +85,14 @@ export function CuratorTracePlate({
                 <ConfidenceBadge level={confidenceInfo.value} />
               </div>
               <p className="mt-1.5 text-[10px] leading-snug text-arch-surface/80">{confidenceBasis}</p>
-              {confidenceSourceLine ? (
+              {showSourceInConfidence ? (
                 <p className="mt-1 text-[10px] leading-snug text-arch-surface/55">
-                  Источник статуса: {confidenceSourceLine}
+                  Источник: {confidenceSourceLine}
                 </p>
               ) : null}
             </div>
+          ) : expanded && traceSource && !confidenceInfo ? (
+            <p className="mt-2 text-[10px] leading-snug text-arch-surface/55">Источник: {traceSource}</p>
           ) : null}
 
           {expanded && !compact ? (

@@ -9,7 +9,7 @@ import {
   transformPolygon,
   type Point,
 } from '../lib/archiviewGeometry'
-import { CuratorTracePlate } from './CuratorTracePlate'
+import { ExpertTracePlate } from './ExpertTracePlate'
 import { tracePlatePlacement } from '../lib/tracePlatePlacement'
 
 const CLASS_COLORS: Record<string, string> = {
@@ -488,7 +488,7 @@ export function ArchiviewFacadePanel({
       ) : (
         <p className="text-sm text-arch-surface/75">
           Исходный ракурс с улицы — как в видоискателе. Номера и зоны Archiview совпадают с разметкой
-          на карточке; <strong>клик</strong> по зоне открывает кураторскую заметку.
+          на карточке; <strong>клик</strong> по зоне открывает экспертную заметку.
         </p>
       )}
 
@@ -705,7 +705,7 @@ export function ArchiviewFacadePanel({
                       : undefined
                   }
                 >
-                  <CuratorTracePlate
+                  <ExpertTracePlate
                     idx={plateRegion.idx}
                     title={plateRegion.trace?.title ?? plateRegion.label}
                     period={plateRegion.trace?.period}
@@ -758,7 +758,7 @@ export function ArchiviewFacadePanel({
                         </span>
                         {r.trace ? (
                           <span className="mt-0.5 block text-xs text-arch-muted">
-                            {r.trace.period} · кураторская заметка
+                            {r.trace.period} · экспертная заметка
                           </span>
                         ) : r.comment ? (
                           <span className="mt-0.5 block text-xs text-arch-muted">{r.comment}</span>

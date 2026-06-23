@@ -13,7 +13,7 @@ import {
   type ExplorerManifest,
 } from '../data/explorer/explorerManifest'
 import { ArchiviewComparisonPicker } from '../components/ArchiviewComparisonPicker'
-import { TraceMessageBody } from '../lib/traceMessage'
+import { splitTraceMessage } from '../lib/traceMessage'
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Building, MemoryTrace } from '../types/building'
@@ -66,7 +66,7 @@ function MemoryTraceImage({ trace }: { trace: MemoryTrace }) {
   )
 }
 
-function hasPendingCuratorCheck(building: Building): boolean {
+function hasPendingExpertCheck(building: Building): boolean {
   return [...building.memoryTraces, ...building.artifacts, ...building.timeline].some(
     (item) => item.confidence === 'needs_verification',
   )
@@ -88,7 +88,7 @@ function BuildingStatusChips({
     Boolean(modernPhotoYear) ||
     Boolean(building.verification?.modernPhotoYear) ||
     building.photos.some((photo) => photo.status?.includes('2026'))
-  const needsCheck = hasPendingCuratorCheck(building)
+  const needsCheck = hasPendingExpertCheck(building)
 
   return (
     <div className="mt-3 flex flex-wrap gap-2">
@@ -104,7 +104,7 @@ function BuildingStatusChips({
       )}
       {needsCheck && (
         <span className="arch-pill border-amber-300 bg-amber-50 text-amber-900">
-          На проверке у куратора
+          На проверке у эксперта
         </span>
       )}
       {building.cardStatus === 'pilot_in_progress' && (
@@ -332,7 +332,9 @@ export function BuildingPage() {
 
       <Section title="Что видно на фасаде">
         <ul className="space-y-3">
-          {building.memoryTraces.map((t) => (
+          {building.memoryTraces.map((t) => {
+            const { body, source } = splitTraceMessage(t.userMessage)
+            return (
             <li
               key={t.id}
               className="rounded-xl border border-arch-line bg-arch-surface-2/50 p-4"
@@ -342,21 +344,19 @@ export function BuildingPage() {
                 <ConfidenceBadge level={t.confidence} />
                 <span className="text-xs text-arch-muted">{t.period}</span>
               </div>
-              <p className="mt-2 text-sm leading-relaxed">
-                <TraceMessageBody
-                  text={t.userMessage}
-                  bodyClassName="text-arch-ink/80"
-                  sourceClassName="text-xs leading-relaxed text-arch-muted"
-                />
-              </p>
+              <p className="mt-2 text-sm leading-relaxed text-arch-ink/80">{body}</p>
+              {source ? (
+                <p className="mt-2 text-xs leading-relaxed text-arch-muted">Источник: {source}</p>
+              ) : null}
               <MemoryTraceImage trace={t} />
             </li>
-          ))}
+            )
+          })}
         </ul>
-        {hasPendingCuratorCheck(building) && (
+        {hasPendingExpertCheck(building) && (
           <p className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
             Версии со статусом «Требует проверки» нужно сверить с архивными фотографиями,
-            источниками и/или натурным осмотром куратора.
+            источниками и/или натурным осмотром эксперта.
           </p>
         )}
       </Section>
