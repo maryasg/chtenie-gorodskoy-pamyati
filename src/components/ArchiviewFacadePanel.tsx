@@ -14,7 +14,7 @@ import {
 } from '../lib/archiviewGeometry'
 import { ExpertTracePlate } from './ExpertTracePlate'
 import { tracePlatePlacement } from '../lib/tracePlatePlacement'
-import { computeBadgeLayout, type BadgeLayout } from '../lib/regionBadgeLayout'
+import { computeBadgeLayout, assignBadgeLayouts, type BadgeLayout } from '../lib/regionBadgeLayout'
 
 const CLASS_COLORS: Record<string, string> = {
   added_floor: '#00aa00',
@@ -371,11 +371,16 @@ export function ArchiviewFacadePanel({
         cx,
         cy,
         areaPct,
-        badgeLayout: computeBadgeLayout(polygonPct, areaPct),
+        badgeLayout: computeBadgeLayout(polygonPct, areaPct, idx),
       }
     },
     [tracesById],
   )
+
+  const publishRegions = useCallback((list: DisplayRegion[]) => {
+    assignBadgeLayouts(list)
+    setRegions(list)
+  }, [])
 
   const buildRegionsRectified = useCallback(
     (annotations: ArchiviewAnnotation[], width: number, height: number) => {
@@ -386,9 +391,9 @@ export function ArchiviewFacadePanel({
         const pct = toPercentPoints(raw, width, height)
         list.push(makeRegion(ann, annotationDisplayIndex(ann, i), pct))
       })
-      setRegions(list)
+      publishRegions(list)
     },
-    [makeRegion],
+    [makeRegion, publishRegions],
   )
 
   const buildRegionsFromSourcePolygons = useCallback(
@@ -406,9 +411,9 @@ export function ArchiviewFacadePanel({
         const pct = toPercentPoints(raw, width, height)
         list.push(makeRegion(ann, annotationDisplayIndex(ann, i), pct))
       })
-      setRegions(list)
+      publishRegions(list)
     },
-    [makeRegion],
+    [makeRegion, publishRegions],
   )
 
   const buildRegionsOverlay = useCallback(
@@ -421,9 +426,9 @@ export function ArchiviewFacadePanel({
         const pct = toPercentPoints(onPhoto, width, height)
         list.push(makeRegion(ann, annotationDisplayIndex(ann, i), pct))
       })
-      setRegions(list)
+      publishRegions(list)
     },
-    [makeRegion],
+    [makeRegion, publishRegions],
   )
 
   const buildRegionsSideBySide = useCallback(
@@ -451,9 +456,9 @@ export function ArchiviewFacadePanel({
         const pct = toPercentPoints(onPanel, width, height)
         list.push(makeRegion(ann, annotationDisplayIndex(ann, i), pct))
       })
-      setRegions(list)
+      publishRegions(list)
     },
-    [makeRegion],
+    [makeRegion, publishRegions],
   )
 
   useEffect(() => {
