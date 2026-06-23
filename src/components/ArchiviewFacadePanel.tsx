@@ -912,6 +912,7 @@ export function ArchiviewFacadePanel({
                   />
                 </div>
               )}
+              </div>
 
               {variant === 'ar' && plateRegion && !plateExpanded && (
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 border-t border-arch-surface/15 bg-arch-green-deep/92 px-3 py-2.5 backdrop-blur-sm">
@@ -956,7 +957,6 @@ export function ArchiviewFacadePanel({
                   </div>
                 </div>
               )}
-              </div>
             </div>
           </div>
 
