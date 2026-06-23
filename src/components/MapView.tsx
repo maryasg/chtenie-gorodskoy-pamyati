@@ -100,16 +100,16 @@ export function MapView() {
       <p className="text-xs text-arch-muted">
         Наведите на карточку здания ниже — на карте подсветится точка и названия следов.
       </p>
-      <ul className="grid gap-2 sm:grid-cols-2">
+      <ul className="grid gap-2 sm:grid-cols-2 sm:items-stretch">
         {BUILDINGS.map((b) => (
-          <li key={b.id}>
+          <li key={b.id} className="flex min-h-0">
             <Link
               to={`/building/${b.id}`}
               onMouseEnter={() => setHoveredId(b.id)}
               onMouseLeave={() => setHoveredId(null)}
               onFocus={() => setHoveredId(b.id)}
               onBlur={() => setHoveredId(null)}
-              className={`block rounded-xl border p-3 transition ${
+              className={`flex h-full w-full flex-col rounded-xl border p-3 transition ${
                 hoveredId === b.id
                   ? 'border-arch-gold bg-arch-green-soft shadow-sm'
                   : 'border-arch-line bg-arch-surface hover:border-arch-green/40 hover:bg-arch-surface-2/60'
@@ -117,7 +117,7 @@ export function MapView() {
             >
               <span className="font-medium text-arch-green-deep">{b.name}</span>
               <span className="mt-1 block text-xs text-arch-muted">{b.address}</span>
-              <span className="mt-2 block text-xs text-arch-ink/70">{traceSummary(b)}</span>
+              <span className="mt-2 block flex-1 text-xs text-arch-ink/70">{traceSummary(b)}</span>
             </Link>
           </li>
         ))}

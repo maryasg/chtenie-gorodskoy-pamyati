@@ -194,7 +194,7 @@ function buildReadme(
     (rel) => `   — public/explorer/${building.cardId}/${rel}`,
   )
   return [
-    `КУРАТОРСКИЙ ЭКСПОРТ — ${building.cardId}`,
+    `ЭКСПЕРТНЫЙ ЭКСПОРТ — ${building.cardId}`,
     `Здание: ${building.name}`,
     `Подтверждено подсветок: ${confirmedCount}`,
     `Дата: ${new Date().toLocaleString('ru-RU')}`,

@@ -515,7 +515,7 @@ export function ArchiviewFacadePanel({
       ) : (
         <p className="text-sm text-arch-surface/75">
           Исходный ракурс с улицы — как в видоискателе. Подсветка зон видна сразу;{' '}
-          <strong>наведите</strong> на область — появится экспертная заметка с номером. Цифры на фото
+          <strong>наведите</strong> на область — появится Экспертная заметка с номером. Цифры на фото
           не дублируются.
         </p>
       )}
@@ -814,7 +814,7 @@ export function ArchiviewFacadePanel({
                         </span>
                         {r.trace ? (
                           <span className="mt-0.5 block text-xs text-arch-muted">
-                            {r.trace.period} · экспертная заметка
+                            {r.trace.period} · Экспертная заметка
                           </span>
                         ) : r.comment ? (
                           <span className="mt-0.5 block text-xs text-arch-muted">{r.comment}</span>
