@@ -66,8 +66,8 @@ function regionPolygonStyle(
   }
   if (area < COMPACT_REGION_AREA) {
     return {
-      fill: on ? `${color}33` : 'none',
-      strokeWidth: on ? 0.7 : 0.55,
+      fill: 'none',
+      strokeWidth: on ? 0.8 : 0.58,
     }
   }
   return {
@@ -168,13 +168,26 @@ async function probeImageMeta(url: string): Promise<ImageProbe | null> {
  */
 async function pickFacadeImage(
   assets: ArchiviewBuildingAssets,
-  options?: { arMode?: boolean; hasArHomography?: boolean; preferRectified?: boolean },
+  options?: {
+    arMode?: boolean
+    hasArHomography?: boolean
+    preferRectified?: boolean
+    /** AR: modern-source + polygon_source, если полевое фото ещё без crop/H_ar */
+    preferAlignedSource?: boolean
+  },
 ): Promise<{ url: string; kind: FacadeImageKind; w: number; h: number } | null> {
   if (options?.arMode) {
     if (options.hasArHomography && assets.arPhotoUrl) {
       const arPhoto = await probeImageMeta(assets.arPhotoUrl)
       if (arPhoto) {
         return { url: assets.arPhotoUrl, kind: 'source_modern', w: arPhoto.w, h: arPhoto.h }
+      }
+    }
+
+    if (options.preferAlignedSource && assets.modernSourceUrl) {
+      const source = await probeImageMeta(assets.modernSourceUrl)
+      if (source) {
+        return { url: assets.modernSourceUrl, kind: 'source_modern', w: source.w, h: source.h }
       }
     }
 
@@ -488,10 +501,14 @@ export function ArchiviewFacadePanel({
       const isSb = layout === 'side_by_side'
       if (!cancelled) setSideBySide(isSb)
 
+      const hasArAlignment =
+        Boolean(H_ar) || Math.abs(cropOffset[0]) > 0.5 || Math.abs(cropOffset[1]) > 0.5
+
       const loaded = await pickFacadeImage(assets, {
         arMode: variant === 'ar',
         hasArHomography: Boolean(H_ar),
         preferRectified: variant === 'default' && !isSb,
+        preferAlignedSource: variant === 'ar' && !hasArAlignment,
       })
       if (cancelled) return
 
@@ -658,16 +675,16 @@ export function ArchiviewFacadePanel({
               } ${
                 variant === 'ar'
                   ? embeddedAr
-                    ? 'bg-arch-green-deep'
+                    ? 'h-full bg-arch-green-deep'
                     : 'rounded-lg border border-arch-surface/15 bg-arch-green-deep/80'
                   : 'rounded-xl border border-arch-line bg-arch-surface-2/20'
               } ${
                 zoom > ZOOM_MIN
                   ? embeddedAr
-                    ? 'max-h-[min(62vh,560px)] overflow-hidden'
+                    ? 'h-full max-h-none overflow-hidden'
                     : 'max-h-[min(78vh,820px)] overflow-hidden'
                   : embeddedAr
-                    ? 'overflow-hidden'
+                    ? 'h-full overflow-y-auto overflow-x-hidden'
                     : 'overflow-visible'
               } ${zoom > ZOOM_MIN ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
               onMouseLeave={() => setHoverIdx(null)}
@@ -712,7 +729,9 @@ export function ArchiviewFacadePanel({
               </div>
 
               <div
-                className="relative inline-block max-w-full origin-top-left p-1 will-change-transform"
+                className={`relative w-full origin-top-left will-change-transform ${
+                  embeddedAr ? 'inline-block max-w-full' : 'inline-block max-w-full p-1'
+                }`}
                 style={{
                   transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
                   transition: isPanning ? undefined : 'transform 160ms ease-out',
@@ -728,9 +747,9 @@ export function ArchiviewFacadePanel({
                   width={imgSize.w}
                   height={imgSize.h}
                   draggable={false}
-                  className={`block h-auto w-auto select-none ${
+                  className={`block h-auto w-full select-none ${
                     embeddedAr
-                      ? 'max-h-[min(62vh,560px)] w-full object-contain'
+                      ? 'max-w-full rounded-none'
                       : 'max-h-[min(78vh,820px)] max-w-full rounded-xl'
                   }`}
                 />
@@ -785,7 +804,7 @@ export function ArchiviewFacadePanel({
                 </svg>
               )}
               {regions.length > 0 && variant !== 'ar' && (
-                <div className="pointer-events-none absolute inset-0 overflow-visible" aria-hidden>
+                <div className="pointer-events-none absolute inset-0 z-20 overflow-visible" aria-hidden>
                   {regionsBadges.map((r) => {
                     const on = hoverIdx === r.idx || selectedIdx === r.idx
                     const color = CLASS_COLORS[r.cls] ?? '#444'
@@ -794,7 +813,7 @@ export function ArchiviewFacadePanel({
                     return (
                       <div
                         key={`badge-${r.idx}`}
-                        className="absolute flex items-center justify-center rounded-full border border-white font-bold leading-none text-white shadow-sm"
+                        className="absolute z-20 flex items-center justify-center rounded-full border-2 border-white font-bold leading-none text-white shadow-md"
                         style={{
                           left: `${badgeX}%`,
                           top: `${badgeY}%`,
@@ -804,6 +823,7 @@ export function ArchiviewFacadePanel({
                           marginTop: -size / 2,
                           backgroundColor: color,
                           fontSize: r.idx >= 10 ? 10 : 11,
+                          boxShadow: '0 0 0 1px rgba(0,0,0,0.2)',
                         }}
                       >
                         {r.idx}
