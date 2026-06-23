@@ -18,6 +18,9 @@ type PlacementSide = 'below' | 'above' | 'left' | 'right' | 'topLeft' | 'topRigh
 type BBox = { minX: number; minY: number; maxX: number; maxY: number }
 
 type CardBadgePrefs = {
+  /** Все номера — выносные кружки у края зоны, не по центру (даже у крупной надстройки). */
+  alwaysCallout?: boolean
+  collisionRadius?: number
   side?: Record<number, PlacementSide>
   nudge?: Record<number, { dx: number; dy: number }>
 }
@@ -54,31 +57,35 @@ const MOSCOW_003_PREFS: CardBadgePrefs = {
   },
 }
 
-/** Дом Куманиных: кружки над мелкими проёмами, не на подсветке. */
+/** Дом Ардовых / Куманиных: кружки с номерами рядом с зоной, не на подсветке. */
 const MOSCOW_001_PREFS: CardBadgePrefs = {
+  alwaysCallout: true,
+  collisionRadius: 2.65,
   side: {
-    2: 'above',
+    1: 'above',
+    2: 'left',
     3: 'above',
-    4: 'above',
-    5: 'above',
-    6: 'above',
-    7: 'above',
-    8: 'above',
-    9: 'above',
-    10: 'above',
-    11: 'above',
+    4: 'right',
+    5: 'right',
+    6: 'below',
+    7: 'left',
+    8: 'below',
+    9: 'left',
+    10: 'right',
+    11: 'below',
   },
   nudge: {
-    2: { dx: 0, dy: -0.9 },
-    3: { dx: -1.0, dy: -1.2 },
-    4: { dx: 0, dy: -1.1 },
-    5: { dx: -1.1, dy: -1.0 },
-    6: { dx: 0, dy: -1.3 },
-    7: { dx: 0, dy: -1.1 },
-    8: { dx: -0.8, dy: -1.0 },
-    9: { dx: -0.6, dy: -1.0 },
-    10: { dx: 1.4, dy: -1.5 },
-    11: { dx: 0, dy: -0.8 },
+    1: { dx: 0, dy: -1.4 },
+    2: { dx: -1.6, dy: 0 },
+    3: { dx: 0, dy: -1.5 },
+    4: { dx: 1.5, dy: -0.4 },
+    5: { dx: 1.6, dy: -0.6 },
+    6: { dx: 0.8, dy: 1.2 },
+    7: { dx: -1.4, dy: 0.6 },
+    8: { dx: 0, dy: 1.1 },
+    9: { dx: -2.0, dy: -0.5 },
+    10: { dx: 1.8, dy: -1.0 },
+    11: { dx: 0, dy: 1.3 },
   },
 }
 
@@ -207,10 +214,12 @@ function candidateLayouts(
   return layouts
 }
 
-function badgesOverlap(a: BadgeLayout, b: BadgeLayout): boolean {
+function badgesOverlap(a: BadgeLayout, b: BadgeLayout, cardId?: string): boolean {
+  const { collisionRadius } = prefsForCard(cardId)
+  const radius = collisionRadius ?? BADGE_COLLISION_RADIUS
   const dx = a.badgeX - b.badgeX
   const dy = a.badgeY - b.badgeY
-  const minDist = BADGE_COLLISION_RADIUS * 2
+  const minDist = radius * 2
   return dx * dx + dy * dy < minDist * minDist
 }
 
@@ -281,8 +290,9 @@ export function computeBadgeLayout(
 ): BadgeLayout {
   const area = areaPct ?? polygonAreaAbs(polygonPct)
   const [cx, cy] = polygonCentroid(polygonPct)
+  const { alwaysCallout } = prefsForCard(cardId)
 
-  if (area >= BADGE_ON_REGION_AREA) {
+  if (area >= BADGE_ON_REGION_AREA && !alwaysCallout) {
     return { anchorX: cx, anchorY: cy, badgeX: cx, badgeY: cy, callout: false }
   }
 
@@ -302,8 +312,10 @@ export function assignBadgeLayouts(regions: RegionForBadgeLayout[], cardId?: str
   const placed: BadgeLayout[] = []
   const sorted = [...regions].sort((a, b) => a.areaPct - b.areaPct)
 
+  const { alwaysCallout } = prefsForCard(cardId)
+
   for (const region of sorted) {
-    if (region.areaPct >= BADGE_ON_REGION_AREA) {
+    if (region.areaPct >= BADGE_ON_REGION_AREA && !alwaysCallout) {
       const centered: BadgeLayout = {
         anchorX: region.badgeLayout.anchorX,
         anchorY: region.badgeLayout.anchorY,
@@ -321,7 +333,7 @@ export function assignBadgeLayouts(regions: RegionForBadgeLayout[], cardId?: str
     let bestScore = Number.POSITIVE_INFINITY
 
     candidates.forEach((candidate, order) => {
-      if (placed.some((other) => badgesOverlap(candidate, other))) return
+      if (placed.some((other) => badgesOverlap(candidate, other, cardId))) return
       const score = layoutScore(candidate, region.idx, order, cardId)
       if (score < bestScore) {
         bestScore = score
@@ -334,16 +346,16 @@ export function assignBadgeLayouts(regions: RegionForBadgeLayout[], cardId?: str
         candidates[0] ??
         computeBadgeLayout(region.polygonPct, region.areaPct, region.idx, cardId)
       chosen = seed
-      for (let attempt = 0; attempt < 16; attempt += 1) {
+      for (let attempt = 0; attempt < 24; attempt += 1) {
         const nudged = nudgeLayout(seed, attempt, region.idx, cardId)
-        if (!placed.some((other) => badgesOverlap(nudged, other))) {
+        if (!placed.some((other) => badgesOverlap(nudged, other, cardId))) {
           chosen = nudged
           break
         }
       }
     }
 
-    region.badgeLayout = chosen
+    region.badgeLayout = { ...chosen, callout: true }
     placed.push(chosen)
   }
 }
