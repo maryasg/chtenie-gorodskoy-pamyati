@@ -1,7 +1,4 @@
 ﻿{
-    "side_by_side":  {
-
-                     },
     "H_rect_to_modern":  [
                              [
                                  0.8676620656702576,
@@ -19,9 +16,17 @@
                                  1.1073121968164052
                              ]
                          ],
+    "labeling_layout":  "overlay",
+    "side_by_side":  {
+
+                     },
     "rectified_size":  {
                            "width":  4200,
                            "height":  2494
                        },
-    "labeling_layout":  "overlay"
+    "modern_crop_offset_xy":  [
+                                  650.0,
+                                  600.0
+                              ],
+    "modern_crop_rect_text":  "650.0,600.0,3743.8,2581.2"
 }

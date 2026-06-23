@@ -1,5 +1,4 @@
 ﻿{
-    "side_by_side":  null,
     "H_rect_to_modern":  [
                              [
                                  0.7949731371568862,
@@ -17,9 +16,12 @@
                                  1.1393820085613937
                              ]
                          ],
+    "labeling_layout":  null,
+    "side_by_side":  null,
     "rectified_size":  {
                            "width":  2064,
                            "height":  1781
                        },
-    "labeling_layout":  null
+    "modern_crop_offset_xy":  null,
+    "modern_crop_rect_text":  null
 }
