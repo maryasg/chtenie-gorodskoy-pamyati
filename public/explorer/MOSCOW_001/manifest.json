@@ -50,5 +50,27 @@
                             "modernPhotoYear":  "2026"
                         }
                     ],
+    "timeLayers":  [
+                       {
+                           "year":  "1840",
+                           "comparisonId":  "cmp_009",
+                           "title":  "1840 -\u003e 2026",
+                           "historicalRectifiedUrl":  "comparisons/cmp_009/historical-rectified.png"
+                       },
+                       {
+                           "year":  "1924",
+                           "label":  "1924 (ГИМ)",
+                           "title":  "Губарев А.А., 9 марта 1924",
+                           "historicalRectifiedUrl":  "time-layers/shm-gubarev-1924.jpg",
+                           "sourceUrl":  "https://catalog.shm.ru/entity/OBJECT/3106660",
+                           "overlayMode":  "archive"
+                       },
+                       {
+                           "year":  "1938",
+                           "comparisonId":  "cmp_005",
+                           "title":  "1924 -\u003e 2026",
+                           "historicalRectifiedUrl":  "comparisons/cmp_005/historical-rectified.png"
+                       }
+                   ],
     "updatedAt":  "2026-06-23T10:43:12.4469999Z"
 }
