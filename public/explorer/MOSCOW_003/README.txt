@@ -4,13 +4,13 @@
   03_historical_rectified.png  →  historical-rectified.png  (ползунок до/после на сайте)
   04_modern_rectified.png      →  modern-rectified.png
   06_marked_rectified.png      →  marked-facade.png  (overlay; координаты polygon совпадают)
-  11_modern_source_for_site.png  →  modern-source.png  (AR-preview и карточка; координаты polygon_source)
-  20260520_185142.jpg          →  20260520_185142.jpg  (полевое фото только с H_rect_to_ar)
+  11_modern_source_for_site.png  →  modern-source.png  (архив; на карточке — выпрямленное фото)
+  20260520_185142.jpg          →  20260520_185142.jpg  (AR-preview: полевое фото)
   07_marked_on_original_modern.png  →  архив/проверка, не основной файл сайта для overlay
   08_marked_on_original_modern_labeled.png  →  marked-facade-labeled.png  (по желанию)
   annotations/manual_annotations.json  →  annotations.json
   project_v8.json  →  facade-project.json (через copy_to_website.bat)
-    — H_rect_to_modern для modern-source; при другом кадре AR-фото добавьте H_rect_to_ar
+    — H_rect_to_modern + modern_crop_offset_xy для полевого AR-фото; при другом кадре — H_rect_to_ar
 
 После копирования: GitHub Desktop → Commit → Push.
 

@@ -7,50 +7,49 @@ type Props = {
   archiview: ArchiviewBuildingAssets
 }
 
-/** Симуляция AR без камеры: исходное полевое фото + подсветка Archiview. */
+/** Симуляция AR без камеры: полевое фото в «экране телефона» + подсветка Archiview. */
 export function FacadeARPreview({ building, archiview }: Props) {
   return (
     <div className="space-y-5">
       <div className="rounded-xl border border-arch-green/25 bg-arch-green-soft p-4 text-sm leading-relaxed text-arch-green-deep">
-        <strong>AR-preview (без камеры).</strong> Показано исходное современное фото в том ракурсе,
-        в котором снимали на месте — до выпрямления и обрезки. Поверх него — подсветка экспертных
-        заметок Archiview: наведите на номер или зону, кликните — полная карточка с источниками.
-        Сравнение «до/после» и режим «слои времени» — в блоке «Сравнение фотоматериалов» на
-        карточке здания.
+        <strong>AR-preview (без камеры).</strong> Полевое фото в том ракурсе, в котором снимали на
+        месте. Подсветка экспертных заметок Archiview: наведите на зону — краткая подсказка внизу
+        экрана, <strong>клик</strong> — полная карточка по центру. Сравнение «до/после» и слои
+        времени — в блоке «Сравнение фотоматериалов» на карточке здания.
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-arch-line bg-arch-green-deep shadow-lg">
-        <div className="flex items-center justify-between border-b border-arch-green/60 bg-arch-green-deep px-4 py-2 text-xs text-arch-surface/75">
-          <span>Режим: дополненная реальность · симуляция</span>
-          {archiview.modernPhotoYear && (
-            <span className="tabular-nums">полевое фото · {archiview.modernPhotoYear}</span>
-          )}
-        </div>
+      <div className="mx-auto w-full max-w-md">
+        <div
+          className="rounded-[2.75rem] border-[11px] border-neutral-800 bg-neutral-900 px-2 pb-3 pt-2 shadow-2xl"
+          role="img"
+          aria-label="Симуляция экрана телефона с полевым фото и подсветкой зон"
+        >
+          <div className="mx-auto mb-2 h-5 w-28 rounded-full bg-neutral-950/90" aria-hidden />
 
-        <div className="bg-arch-green-deep p-3 sm:p-4">
-          <div className="relative mx-auto max-w-4xl">
-            <div
-              className="pointer-events-none absolute inset-3 z-10 rounded-lg border-2 border-white/25"
-              aria-hidden
+          <div className="overflow-hidden rounded-[2rem] bg-arch-green-deep ring-1 ring-arch-surface/10">
+            <div className="flex items-center justify-between border-b border-arch-surface/10 bg-arch-green-deep px-3.5 py-2 text-[10px] text-arch-surface/70">
+              <span>AR · симуляция</span>
+              {archiview.modernPhotoYear ? (
+                <span className="tabular-nums">полевое фото · {archiview.modernPhotoYear}</span>
+              ) : null}
+            </div>
+
+            <div className="border-b border-arch-surface/10 px-3.5 py-2.5 text-[11px] leading-snug text-arch-surface/80">
+              Исходный ракурс с улицы — как в видоискателе. Подсветка зон видна сразу;{' '}
+              <strong>наведите</strong> на область — краткая подсказка. <strong>Клик</strong> — полная
+              карточка по центру экрана.
+            </div>
+
+            <ArchiviewFacadePanel
+              assets={archiview}
+              building={building}
+              variant="ar"
+              embeddedAr
+              hideIntro
             />
-            <div
-              className="pointer-events-none absolute left-5 top-5 z-10 h-6 w-6 border-l-2 border-t-2 border-arch-gold/80"
-              aria-hidden
-            />
-            <div
-              className="pointer-events-none absolute right-5 top-5 z-10 h-6 w-6 border-r-2 border-t-2 border-arch-gold/80"
-              aria-hidden
-            />
-            <div
-              className="pointer-events-none absolute bottom-5 left-5 z-10 h-6 w-6 border-b-2 border-l-2 border-arch-gold/80"
-              aria-hidden
-            />
-            <div
-              className="pointer-events-none absolute bottom-5 right-5 z-10 h-6 w-6 border-b-2 border-r-2 border-arch-gold/80"
-              aria-hidden
-            />
-            <ArchiviewFacadePanel assets={archiview} building={building} variant="ar" />
           </div>
+
+          <div className="mx-auto mt-2.5 h-1 w-24 rounded-full bg-neutral-600" aria-hidden />
         </div>
       </div>
     </div>

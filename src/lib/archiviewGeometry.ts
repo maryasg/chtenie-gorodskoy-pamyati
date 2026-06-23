@@ -67,6 +67,13 @@ export function toPercentPoints(points: Point[], width: number, height: number):
   return points.map(([x, y]) => [(x / width) * 100, (y / height) * 100])
 }
 
+/** Сдвиг полигона на обрезку исходника (modern_crop_offset_xy). */
+export function shiftPolygon(polygon: Point[], offset: Point): Point[] {
+  const [dx, dy] = offset
+  if (Math.abs(dx) < 1e-9 && Math.abs(dy) < 1e-9) return polygon
+  return polygon.map(([x, y]) => [x + dx, y + dy])
+}
+
 type SideBySideMeta = {
   label_bar_height?: number
   panel_height?: number

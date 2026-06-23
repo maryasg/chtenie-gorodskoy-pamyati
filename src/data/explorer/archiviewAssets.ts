@@ -28,7 +28,7 @@ export interface ArchiviewBuildingAssets {
   modernRectifiedUrl: string
   /** 11_modern_source_for_site.png — исходное современное (с обрезкой, если была) */
   modernSourceUrl?: string
-  /** Полевое фото для AR-preview (например 20260520_185142.jpg); разметка через H_rect_to_modern / H_rect_to_ar */
+  /** Полевое фото для AR-preview; разметка через H_rect_to_modern + modern_crop_offset_xy или H_rect_to_ar */
   arPhotoUrl?: string
   historicalPhotoYear?: string
   modernPhotoYear?: string
