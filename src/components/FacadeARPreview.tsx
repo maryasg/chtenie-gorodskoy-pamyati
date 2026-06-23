@@ -18,7 +18,7 @@ export function FacadeARPreview({ building, archiview }: Props) {
         времени — в блоке «Сравнение фотоматериалов» на карточке здания.
       </div>
 
-      <div className="mx-auto w-full max-w-md">
+      <div className="mx-auto w-full max-w-[272px]">
         <div
           className="rounded-[2.75rem] border-[11px] border-neutral-800 bg-neutral-900 px-2 pb-3 pt-2 shadow-2xl"
           role="img"
@@ -40,13 +40,15 @@ export function FacadeARPreview({ building, archiview }: Props) {
               карточка по центру экрана.
             </div>
 
-            <ArchiviewFacadePanel
-              assets={archiview}
-              building={building}
-              variant="ar"
-              embeddedAr
-              hideIntro
-            />
+            <div className="relative overflow-hidden" style={{ aspectRatio: '9 / 17.5' }}>
+              <ArchiviewFacadePanel
+                assets={archiview}
+                building={building}
+                variant="ar"
+                embeddedAr
+                hideIntro
+              />
+            </div>
           </div>
 
           <div className="mx-auto mt-2.5 h-1 w-24 rounded-full bg-neutral-600" aria-hidden />

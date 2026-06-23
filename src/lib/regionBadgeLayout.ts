@@ -3,7 +3,7 @@ import { polygonAreaAbs, polygonCentroid, type Point } from './archiviewGeometry
 /** Площадь в %²: крупная зона — номер по центру; мелкие и средние — выноска у края. */
 const BADGE_ON_REGION_AREA = 12
 
-const BADGE_COLLISION_RADIUS = 2.85
+const BADGE_COLLISION_RADIUS = 2.15
 
 export type BadgeLayout = {
   anchorX: number
@@ -17,30 +17,35 @@ type PlacementSide = 'below' | 'above' | 'left' | 'right' | 'topLeft' | 'topRigh
 
 type BBox = { minX: number; minY: number; maxX: number; maxY: number }
 
-/** Доп. сдвиг кружка после базовой позиции у края (дом со зверями). */
+/** Дом со зверями: тонкая подстройка у края зоны (без «отлёта»). */
 const MOSCOW_003_BADGE_NUDGE: Record<number, { dx: number; dy: number }> = {
-  5: { dx: -2.2, dy: 3.4 },
-  13: { dx: -0.8, dy: 5.2 },
-  14: { dx: 0.6, dy: 7.8 },
-  9: { dx: -2.4, dy: -0.6 },
-  7: { dx: -1.4, dy: 1.0 },
-  8: { dx: 1.0, dy: 1.6 },
-  1: { dx: -0.6, dy: -0.5 },
-  2: { dx: 1.2, dy: 0 },
+  1: { dx: -0.8, dy: -0.4 },
+  2: { dx: 0.8, dy: 0 },
+  3: { dx: -0.4, dy: 0.2 },
+  4: { dx: 0.3, dy: 0.2 },
+  5: { dx: -0.6, dy: 0.4 },
+  7: { dx: -1.0, dy: 0 },
+  8: { dx: -0.8, dy: 0.2 },
+  9: { dx: -1.2, dy: 0.5 },
+  10: { dx: 0, dy: -0.4 },
+  11: { dx: 0.2, dy: -0.4 },
+  13: { dx: 0.2, dy: 0.6 },
+  14: { dx: -1.0, dy: 0.2 },
 }
 
-/** Дом со зверями: предпочтительная сторона кружка относительно зоны. */
 const MOSCOW_003_BADGE_SIDE: Record<number, PlacementSide> = {
   1: 'topLeft',
   2: 'right',
   3: 'below',
   4: 'below',
   5: 'below',
-  7: 'below',
-  8: 'below',
+  7: 'left',
+  8: 'left',
   9: 'below',
+  10: 'below',
+  11: 'below',
   13: 'below',
-  14: 'below',
+  14: 'left',
 }
 
 function clampPct(value: number): number {
@@ -60,7 +65,7 @@ function polygonBBox(points: Point[]): BBox {
 
 function badgeMargin(bbox: BBox): number {
   const span = Math.max(bbox.maxX - bbox.minX, bbox.maxY - bbox.minY)
-  return Math.max(2.4, Math.min(4.2, span * 0.55 + 1.8))
+  return Math.max(0.85, Math.min(1.7, span * 0.18 + 0.55))
 }
 
 function layoutOnSide(
@@ -94,12 +99,12 @@ function layoutOnSide(
       badgeY = midY
       break
     case 'topLeft':
-      badgeX = bbox.minX - margin * 0.55
-      badgeY = bbox.minY - margin * 0.55
+      badgeX = bbox.minX - margin * 0.45
+      badgeY = bbox.minY - margin * 0.45
       break
     case 'topRight':
-      badgeX = bbox.maxX + margin * 0.55
-      badgeY = bbox.minY - margin * 0.55
+      badgeX = bbox.maxX + margin * 0.45
+      badgeY = bbox.minY - margin * 0.45
       break
   }
 
@@ -124,8 +129,8 @@ function defaultSideOrder(polygon: Point[]): PlacementSide[] {
   const midX = (bbox.minX + bbox.maxX) / 2
 
   if (midY < 54) {
-    if (midX < 30) return ['below', 'left', 'right', 'above', 'topLeft', 'topRight']
-    if (midX > 68) return ['below', 'right', 'left', 'above', 'topRight', 'topLeft']
+    if (midX < 30) return ['left', 'below', 'above', 'right', 'topLeft', 'topRight']
+    if (midX > 68) return ['left', 'below', 'right', 'above', 'topRight', 'topLeft']
     return ['below', 'left', 'right', 'above', 'topLeft', 'topRight']
   }
   if (midY > 62) return ['above', 'left', 'right', 'below', 'topLeft', 'topRight']
@@ -164,15 +169,17 @@ function layoutScore(layout: BadgeLayout, idx: number, order: number): number {
   const preferred = MOSCOW_003_BADGE_SIDE[idx]
   const preferredBonus =
     preferred === 'below' && layout.badgeY > layout.anchorY
-      ? -8
-      : preferred === 'topLeft' &&
-          layout.badgeX < layout.anchorX &&
-          layout.badgeY < layout.anchorY
-        ? -8
-        : preferred === 'right' && layout.badgeX > layout.anchorX
-          ? -8
-          : 0
-  return lineLen + edgePenalty + preferredBonus + order * 0.15
+      ? -12
+      : preferred === 'left' && layout.badgeX < layout.anchorX
+        ? -12
+        : preferred === 'topLeft' &&
+            layout.badgeX < layout.anchorX &&
+            layout.badgeY < layout.anchorY
+          ? -12
+          : preferred === 'right' && layout.badgeX > layout.anchorX
+            ? -12
+            : 0
+  return lineLen * 14 + edgePenalty + preferredBonus + order * 0.2
 }
 
 function nudgeLayout(layout: BadgeLayout, attempt: number, idx: number): BadgeLayout {
@@ -180,19 +187,26 @@ function nudgeLayout(layout: BadgeLayout, attempt: number, idx: number): BadgeLa
   if (preferred === 'below') {
     return {
       ...layout,
-      badgeX: clampPct(layout.badgeX + (attempt % 2 === 1 ? (idx % 2 ? 2.2 : -2.2) : 0)),
-      badgeY: clampPct(layout.badgeY + 2.2 + attempt * 1.6),
+      badgeX: clampPct(layout.badgeX + (attempt % 2 === 1 ? 1.2 : -1.2)),
+      badgeY: clampPct(layout.badgeY + attempt * 0.65),
+    }
+  }
+  if (preferred === 'left') {
+    return {
+      ...layout,
+      badgeX: clampPct(layout.badgeX - attempt * 0.55),
+      badgeY: clampPct(layout.badgeY + (attempt % 2 === 1 ? 0.9 : -0.9)),
     }
   }
   if (preferred === 'above') {
     return {
       ...layout,
-      badgeX: clampPct(layout.badgeX + (attempt % 2 === 1 ? (idx % 2 ? 2.2 : -2.2) : 0)),
-      badgeY: clampPct(layout.badgeY - 2.2 - attempt * 1.6),
+      badgeX: clampPct(layout.badgeX + (attempt % 2 === 1 ? 1.2 : -1.2)),
+      badgeY: clampPct(layout.badgeY - attempt * 0.65),
     }
   }
   const angle = ((idx * 47 + attempt * 53) % 360) * (Math.PI / 180)
-  const radius = 2.4 + attempt * 1.6
+  const radius = 0.9 + attempt * 0.55
   return {
     ...layout,
     badgeX: clampPct(layout.badgeX + Math.cos(angle) * radius),
@@ -257,7 +271,7 @@ export function assignBadgeLayouts(regions: RegionForBadgeLayout[]): void {
     if (!chosen) {
       const seed = candidates[0] ?? computeBadgeLayout(region.polygonPct, region.areaPct, region.idx)
       chosen = seed
-      for (let attempt = 0; attempt < 24; attempt += 1) {
+      for (let attempt = 0; attempt < 16; attempt += 1) {
         const nudged = nudgeLayout(seed, attempt, region.idx)
         if (!placed.some((other) => badgesOverlap(nudged, other))) {
           chosen = nudged
