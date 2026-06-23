@@ -3,22 +3,6 @@
     "defaultComparisonId":  "cmp_005",
     "comparisons":  [
                         {
-                            "comparisonId":  "cmp_005",
-                            "title":  "1924 -\u003e 2026",
-                            "labelingLayout":  "overlay",
-                            "annotationCount":  11,
-                            "isLegacy":  false,
-                            "markedFacadeUrl":  "marked-facade.png",
-                            "labeledFacadeUrl":  "marked-facade-labeled.png",
-                            "historicalRectifiedUrl":  "historical-rectified.png",
-                            "modernRectifiedUrl":  "modern-rectified.png",
-                            "modernSourceUrl":  "modern-source.png",
-                            "annotationsUrl":  "annotations.json",
-                            "facadeProjectUrl":  "facade-project.json",
-                            "historicalPhotoYear":  "1924",
-                            "modernPhotoYear":  "2026"
-                        },
-                        {
                             "comparisonId":  "cmp_009",
                             "title":  "1840 -\u003e 2026",
                             "labelingLayout":  "overlay",
@@ -28,12 +12,41 @@
                             "labeledFacadeUrl":  "comparisons/cmp_009/marked-facade-labeled.png",
                             "historicalRectifiedUrl":  "comparisons/cmp_009/historical-rectified.png",
                             "modernRectifiedUrl":  "comparisons/cmp_009/modern-rectified.png",
-                            "modernSourceUrl":  "comparisons/cmp_009/modern-source.png",
                             "annotationsUrl":  "comparisons/cmp_009/annotations.json",
                             "facadeProjectUrl":  "comparisons/cmp_009/facade-project.json",
                             "historicalPhotoYear":  "1840",
                             "modernPhotoYear":  "2026"
+                        },
+                        {
+                            "comparisonId":  "cmp_005",
+                            "title":  "1924 -\u003e 2026",
+                            "labelingLayout":  "overlay",
+                            "annotationCount":  11,
+                            "isLegacy":  false,
+                            "markedFacadeUrl":  "marked-facade.png",
+                            "labeledFacadeUrl":  "marked-facade-labeled.png",
+                            "historicalRectifiedUrl":  "historical-rectified.png",
+                            "modernRectifiedUrl":  "modern-rectified.png",
+                            "annotationsUrl":  "annotations.json",
+                            "facadeProjectUrl":  "facade-project.json",
+                            "historicalPhotoYear":  "1924",
+                            "modernPhotoYear":  "2026"
+                        },
+                        {
+                            "comparisonId":  "cmp_008",
+                            "title":  "1936 -\u003e 2026",
+                            "labelingLayout":  "overlay",
+                            "annotationCount":  2,
+                            "isLegacy":  false,
+                            "markedFacadeUrl":  "comparisons/cmp_008/marked-facade.png",
+                            "labeledFacadeUrl":  "comparisons/cmp_008/marked-facade-labeled.png",
+                            "historicalRectifiedUrl":  "comparisons/cmp_008/historical-rectified.png",
+                            "modernRectifiedUrl":  "comparisons/cmp_008/modern-rectified.png",
+                            "annotationsUrl":  "comparisons/cmp_008/annotations.json",
+                            "facadeProjectUrl":  "comparisons/cmp_008/facade-project.json",
+                            "historicalPhotoYear":  "1936",
+                            "modernPhotoYear":  "2026"
                         }
                     ],
-    "updatedAt":  "2026-06-22T13:49:57.1045318Z"
+    "updatedAt":  "2026-06-18T12:00:00.0000000Z"
 }

@@ -61,9 +61,9 @@ export function FacadePhotoComparison({ building, assets }: Props) {
       )}
 
       <p className="text-xs leading-relaxed text-arch-muted">
-        Сейчас сравнивается основная пара выпрямленных снимков из Archiview. Позже здесь можно
-        добавить переключатели между другими парами (другой ракурс, промежуточная дата) — когда
-        появятся в manifest сравнений.
+        Основная пара для ползунка — {assets.historicalPhotoYear ?? 'архив'} →{' '}
+        {assets.modernPhotoYear ?? 'сегодня'}. В режиме «Слои времени» доступны все исторические
+        срезы из manifest (если экспортированы в Archiview).
       </p>
     </div>
   )
