@@ -42,6 +42,48 @@ export interface ExplorerManifest {
 
 const base = import.meta.env.BASE_URL
 
+/** Скрыто на сайте, но остаётся в manifest.json для Archiview-экспорта. */
+const WEBSITE_HIDDEN_COMPARISON_IDS: Record<string, string[]> = {
+  MOSCOW_001: ['cmp_008'],
+}
+
+/** Слои времени, дублирующие основное сравнение (год + comparisonId). */
+const WEBSITE_HIDDEN_TIME_LAYERS: Record<string, Array<{ year: string; comparisonId?: string }>> = {
+  MOSCOW_001: [{ year: '1938', comparisonId: 'cmp_005' }],
+}
+
+function isHiddenTimeLayer(
+  cardId: string,
+  layer: ExplorerTimeLayerEntry,
+): boolean {
+  const rules = WEBSITE_HIDDEN_TIME_LAYERS[cardId]
+  if (!rules?.length) return false
+  return rules.some(
+    (rule) =>
+      rule.year === layer.year &&
+      (rule.comparisonId == null || rule.comparisonId === layer.comparisonId),
+  )
+}
+
+/** Убирает ошибочные дубликаты из manifest перед показом на сайте. */
+export function sanitizeManifestForWebsite(manifest: ExplorerManifest): ExplorerManifest {
+  const hiddenComparisons = new Set(WEBSITE_HIDDEN_COMPARISON_IDS[manifest.cardId] ?? [])
+  const comparisons = manifest.comparisons.filter((c) => !hiddenComparisons.has(c.comparisonId))
+  const timeLayers = manifest.timeLayers?.filter((layer) => !isHiddenTimeLayer(manifest.cardId, layer))
+
+  let defaultComparisonId = manifest.defaultComparisonId
+  if (hiddenComparisons.has(defaultComparisonId)) {
+    defaultComparisonId = resolveDefaultComparisonId({ ...manifest, comparisons })
+  }
+
+  return {
+    ...manifest,
+    defaultComparisonId,
+    comparisons,
+    timeLayers,
+  }
+}
+
 function resolveExplorerAsset(cardId: string, relPath: string): string {
   const clean = relPath.replace(/^\.\//, '').replace(/^\//, '')
   return `${base}explorer/${cardId}/${clean}`
@@ -141,16 +183,21 @@ export function resolveDefaultComparisonId(manifest: ExplorerManifest): string {
   const { comparisons, defaultComparisonId } = manifest
   if (!comparisons.length) return defaultComparisonId
 
-  const explicit = comparisons.find((c) => c.comparisonId === defaultComparisonId)
+  const visible = comparisons.filter(
+    (c) => !(WEBSITE_HIDDEN_COMPARISON_IDS[manifest.cardId] ?? []).includes(c.comparisonId),
+  )
+  if (!visible.length) return defaultComparisonId
+
+  const explicit = visible.find((c) => c.comparisonId === defaultComparisonId)
   if (explicit && !explicit.isLegacy) return explicit.comparisonId
 
-  const preferred = comparisons.find((c) => c.comparisonId === 'cmp_005' && !c.isLegacy)
+  const preferred = visible.find((c) => c.comparisonId === 'cmp_005' && !c.isLegacy)
   if (preferred) return preferred.comparisonId
 
-  const sorted = [...comparisons]
+  const sorted = [...visible]
     .filter((c) => !c.isLegacy)
     .sort((a, b) => (b.annotationCount ?? 0) - (a.annotationCount ?? 0))
-  return sorted[0]?.comparisonId ?? comparisons[0].comparisonId
+  return sorted[0]?.comparisonId ?? visible[0].comparisonId
 }
 
 export async function fetchExplorerManifest(cardId: string): Promise<ExplorerManifest | null> {
@@ -160,7 +207,7 @@ export async function fetchExplorerManifest(cardId: string): Promise<ExplorerMan
     if (!res.ok) return null
     const data = (await res.json()) as ExplorerManifest
     if (!data?.comparisons?.length) return null
-    return data
+    return sanitizeManifestForWebsite(data)
   } catch {
     return null
   }
