@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Building } from '../types/building'
 import type { ArchiviewBuildingAssets } from '../data/explorer/archiviewAssets'
 import {
-  buildFacadeTimeSnapshots,
+  buildFacadeTimeLayerStack,
   fetchExplorerManifest,
+  type FacadeTimeLayerStack,
   type FacadeTimeSnapshot,
 } from '../data/explorer/explorerManifest'
 
@@ -12,27 +13,60 @@ type Props = {
   archiview: ArchiviewBuildingAssets
 }
 
-/** Чем раньше снимок, тем сильнее «призрак» при автоматической настройке. */
-function ghostOpacityForSnapshot(index: number, total: number): number {
-  if (total <= 0) return 0.85
-  if (total === 1) return 0.85
-  const t = index / (total - 1)
-  return Math.max(0.12, 0.9 - t * 0.78)
+type CrossfadeFrame = {
+  from: FacadeTimeSnapshot
+  to: FacadeTimeSnapshot
+  /** 0 = только from, 1 = только to */
+  blend: number
+}
+
+function crossfadeAtPosition(layers: FacadeTimeSnapshot[], positionPct: number): CrossfadeFrame {
+  if (layers.length === 0) {
+    throw new Error('crossfadeAtPosition: empty layers')
+  }
+  if (layers.length === 1) {
+    return { from: layers[0], to: layers[0], blend: 0 }
+  }
+
+  const t = Math.max(0, Math.min(100, positionPct)) / 100
+  const scaled = t * (layers.length - 1)
+  const fromIndex = Math.floor(scaled)
+  const toIndex = Math.min(fromIndex + 1, layers.length - 1)
+  const blend = scaled - fromIndex
+
+  return {
+    from: layers[fromIndex],
+    to: layers[toIndex],
+    blend: fromIndex === toIndex ? 0 : blend,
+  }
+}
+
+function displayYearLabel(frame: CrossfadeFrame): string {
+  if (frame.blend < 0.08 || frame.from.year === frame.to.year) {
+    return frame.from.label ?? frame.from.year
+  }
+  if (frame.blend > 0.92) {
+    return frame.to.label ?? frame.to.year
+  }
+  return `${frame.from.label ?? frame.from.year} → ${frame.to.label ?? frame.to.year}`
 }
 
 function layerHint(year: string, buildingId: string, label?: string): string {
   if (buildingId === 'MOSCOW_001_kumaninykh') {
     if (year === '1840') {
-      return 'План усадьбы 1840 года — исходная планировка проёмов и входов до поздних переделок.'
+      return 'План усадьбы 1840 года — все снимки выровнены по этому холсту (4200×2452).'
     }
     if (year === '1924' && label?.includes('ГИМ')) {
-      return 'Негатив Губарева А.А. (ГИМ, 9 марта 1924): вид на Большую Ордынку.'
+      return 'Негатив Губарева А.А. (ГИМ, 9 марта 1924): двухэтажный усадебный облик, верхней надстройки ещё нет.'
     }
     if (year === '1924') {
-      return 'Двухэтажное усадебное строение (PastVu, 1924): верхней надстройки ещё нет; в начале 1920-х рядом действовал Ордынский лагерь.'
+      return 'Двухэтажное усадебное строение (1924): верхней надстройки ещё нет.'
     }
-    if (year === '1938') {
-      return 'Выпрямленный исторический снимок из основного сравнения Archiview (11 зон, cmp_005). Год надстройки по акту экспертизы — 1938.'
+    if (year === '1930') {
+      return 'Фасад в период строительства надстройки (около 1930 г.; на PastVu встречается подпись 1930–1936). По акту историко-культурной экспертизы (mos.ru, 2019) надстройку завершили в 1938 году — на снимке виден процесс, а не финальный облик.'
+    }
+    if (year === '2026') {
+      return 'Современный фасад — полевая съёмка Archiview, 2026 год.'
     }
   }
   if (buildingId === 'MOSCOW_002_turgenev_library') {
@@ -44,70 +78,44 @@ function layerHint(year: string, buildingId: string, label?: string): string {
   return 'Промежуточный архивный снимок: часть деталей уже изменена или утрачена.'
 }
 
-/** Наложение исторических срезов на современный фасад с полупрозрачным переходом. */
+/** Шкала лет: плавный переход между снимками через затемнение (crossfade). */
 export function FacadeTimeLayers({ building, archiview }: Props) {
-  const [snapshots, setSnapshots] = useState<FacadeTimeSnapshot[]>([])
+  const [stack, setStack] = useState<FacadeTimeLayerStack | null>(null)
   const [manifestLoaded, setManifestLoaded] = useState(false)
-  const [layerIndex, setLayerIndex] = useState(0)
-  const [ghostOverride, setGhostOverride] = useState<number | null>(null)
-
-  const modernUrl = archiview.modernRectifiedUrl
-  const modernYear = archiview.modernPhotoYear ?? 'сегодня'
-  const hasModern = Boolean(modernUrl)
+  const [positionPct, setPositionPct] = useState(100)
 
   useEffect(() => {
     let cancelled = false
     setManifestLoaded(false)
 
     if (!archiview.cardId) {
-      setSnapshots([])
+      setStack(null)
       setManifestLoaded(true)
       return
     }
 
     fetchExplorerManifest(archiview.cardId).then((manifest) => {
       if (cancelled) return
-      if (manifest?.comparisons?.length) {
-        const built = buildFacadeTimeSnapshots(manifest, archiview.cardId)
-        setSnapshots(built)
-        setLayerIndex(built.length)
-      } else if (archiview.historicalRectifiedUrl && archiview.historicalPhotoYear) {
-        setSnapshots([
-          {
-            year: archiview.historicalPhotoYear,
-            historicalUrl: archiview.historicalRectifiedUrl,
-            comparisonId: 'default',
-            comparisonTitle: `${archiview.historicalPhotoYear} → ${modernYear}`,
-          },
-        ])
-        setLayerIndex(1)
-      } else {
-        setSnapshots([])
-      }
+      const built = manifest ? buildFacadeTimeLayerStack(manifest, archiview.cardId) : null
+      setStack(built)
+      setPositionPct(100)
       setManifestLoaded(true)
     })
 
     return () => {
       cancelled = true
     }
-  }, [
-    archiview.cardId,
-    archiview.historicalPhotoYear,
-    archiview.historicalRectifiedUrl,
-    modernYear,
-  ])
+  }, [archiview.cardId])
 
-  const isModernLayer = layerIndex >= snapshots.length
-  const activeSnapshot = isModernLayer ? null : snapshots[layerIndex]
-  const isArchiveLayer = activeSnapshot?.overlayMode === 'archive'
-  const autoGhost = isModernLayer ? 0 : ghostOpacityForSnapshot(layerIndex, snapshots.length)
-  const ghostOpacity = ghostOverride ?? autoGhost
+  const layers = stack?.layers ?? []
+  const frame = layers.length ? crossfadeAtPosition(layers, positionPct) : null
 
   const stageHint = useMemo(() => {
-    if (isModernLayer) return 'Современный фасад — то, что видно сегодня на месте (полевая съёмка).'
-    if (!activeSnapshot) return ''
-    return layerHint(activeSnapshot.year, building.id, activeSnapshot.label)
-  }, [activeSnapshot, building.id, isModernLayer])
+    if (!frame) return ''
+    const year = frame.blend >= 0.5 ? frame.to.year : frame.from.year
+    const label = frame.blend >= 0.5 ? frame.to.label : frame.from.label
+    return layerHint(year, building.id, label)
+  }, [frame, building.id])
 
   if (!manifestLoaded) {
     return (
@@ -117,148 +125,112 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
     )
   }
 
-  if (!hasModern || snapshots.length === 0) {
+  if (!stack || layers.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-arch-line bg-arch-surface-2/60 p-4 text-sm text-arch-muted">
-        Для слоёв времени нужны выпрямленные снимки из Archiview (1840, 1924 и современный).
-        Экспортируйте <code>copy_to_website.bat</code> → Push.
+        Для слоёв времени нужны файлы в <code>time-layers/</code> (1840, 1924, 1930, 2026) — все
+        4200×2452, выровнены по одному холсту.
       </p>
     )
   }
 
-  const layerButtons = [
-    ...snapshots.map((snap) => ({
-      key: `${snap.year}-${snap.label ?? ''}`,
-      label: snap.label ?? snap.year,
-    })),
-    { key: 'modern', label: modernYear },
-  ]
+  const firstYear = layers[0].label ?? layers[0].year
+  const lastYear = layers[layers.length - 1].label ?? layers[layers.length - 1].year
+  const fromOpacity = frame ? 1 - frame.blend : 1
+  const toOpacity = frame ? frame.blend : 0
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-arch-muted">
-        {isArchiveLayer
-          ? 'Архивный кадр (не выпрямлен под современный фасад) — плавный переход к съёмке 2026 года ползунком.'
-          : `Современный фасад (${modernYear}) — основа; поверх — полупрозрачный исторический слой выбранного года. Ползунком можно плавно переходить от одного снимка к другому.`}{' '}
-        Порядок: {snapshots.map((s) => s.label ?? s.year).join(' → ')} → {modernYear}.
+        Двигайте ползунок по годам — снимки сменяют друг друга через плавное затемнение. Порядок:{' '}
+        {layers.map((layer) => layer.label ?? layer.year).join(' → ')}.
       </p>
 
       <div className="overflow-hidden rounded-2xl border border-arch-line bg-arch-green-deep shadow-md">
         <div className="relative aspect-[4/3] max-h-[min(70vh,640px)] w-full bg-arch-green-deep">
-          {isArchiveLayer && activeSnapshot ? (
+          {frame ? (
             <>
               <img
-                src={modernUrl}
-                alt="Современный фасад"
-                className="absolute inset-0 h-full w-full object-contain transition-opacity duration-300"
-                style={{ opacity: 1 - ghostOpacity }}
+                src={frame.from.historicalUrl}
+                alt={`Фасад ${frame.from.label ?? frame.from.year}`}
+                className="absolute inset-0 h-full w-full object-contain transition-opacity duration-200"
+                style={{ opacity: fromOpacity }}
               />
               <img
-                src={activeSnapshot.historicalUrl}
-                alt={`Фасад ${activeSnapshot.label ?? activeSnapshot.year}`}
-                className="pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity duration-300"
-                style={{ opacity: ghostOpacity }}
+                src={frame.to.historicalUrl}
+                alt={`Фасад ${frame.to.label ?? frame.to.year}`}
+                className="pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity duration-200"
+                style={{ opacity: toOpacity }}
               />
             </>
-          ) : (
-            <>
-              <img
-                src={modernUrl}
-                alt="Современный фасад"
-                className="absolute inset-0 h-full w-full object-contain"
-              />
-              {activeSnapshot ? (
-                <img
-                  src={activeSnapshot.historicalUrl}
-                  alt={`Фасад ${activeSnapshot.label ?? activeSnapshot.year}`}
-                  className="pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity duration-300"
-                  style={{ opacity: ghostOpacity }}
-                />
-              ) : null}
-            </>
-          )}
+          ) : null}
           <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/50 to-transparent" />
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/55 to-transparent" />
           <div className="absolute left-3 top-3 rounded-md bg-black/55 px-2 py-1 text-xs text-white backdrop-blur-sm">
-            {isModernLayer
-              ? modernYear
-              : `${activeSnapshot!.label ?? activeSnapshot!.year} → ${modernYear}`}
+            {frame ? displayYearLabel(frame) : ''}
           </div>
-          {!isModernLayer ? (
-            <div className="absolute bottom-3 right-3 rounded-md bg-black/55 px-2 py-1 text-xs tabular-nums text-white backdrop-blur-sm">
-              слой {Math.round(ghostOpacity * 100)}%
-            </div>
-          ) : null}
         </div>
       </div>
 
-      {!isModernLayer && (
-        <label className="block rounded-xl border border-arch-line bg-arch-surface px-3 py-2 text-sm">
-          <span className="flex items-center justify-between text-arch-ink/80">
-            <span>Прозрачность исторического слоя</span>
-            <span className="font-medium tabular-nums">{Math.round(ghostOpacity * 100)}%</span>
+      <label className="block rounded-xl border border-arch-line bg-arch-surface px-3 py-3 text-sm">
+        <span className="mb-2 flex items-center justify-between text-arch-ink/80">
+          <span>Год на шкале</span>
+          <span className="font-semibold tabular-nums text-arch-green-deep">
+            {frame ? displayYearLabel(frame) : ''}
           </span>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={Math.round(ghostOpacity * 100)}
-            onChange={(e) => setGhostOverride(Number(e.target.value) / 100)}
-            className="mt-2 w-full accent-arch-green"
-          />
-          <button
-            type="button"
-            onClick={() => setGhostOverride(null)}
-            className="mt-1 text-xs text-arch-green underline"
-          >
-            Вернуть автоматически для выбранного года
-          </button>
-        </label>
-      )}
-
-      <section>
-        <h3 className="mb-2 text-sm font-semibold text-arch-green-deep">Год на шкале</h3>
-        <div className="flex flex-wrap gap-2">
-          {layerButtons.map((btn, i) => (
-            <button
-              key={btn.key}
-              type="button"
-              onClick={() => {
-                setLayerIndex(i)
-                setGhostOverride(null)
-              }}
-              className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                i === layerIndex
-                  ? 'border-arch-green-deep bg-arch-green-deep text-arch-surface shadow-sm'
-                  : 'border-arch-line bg-arch-surface text-arch-muted hover:border-arch-green/40 hover:bg-arch-green-soft hover:text-arch-green-deep'
-              }`}
-            >
-              {btn.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-3 rounded-xl border border-arch-line bg-arch-surface p-4 shadow-sm">
-          <p className="text-sm text-arch-ink/80">{stageHint}</p>
-          {!isModernLayer && activeSnapshot?.sourceUrl ? (
-            <p className="mt-2 text-xs text-arch-muted">
-              Источник:{' '}
-              <a
-                href={activeSnapshot.sourceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-arch-green underline"
+        </span>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={0.5}
+          value={positionPct}
+          onChange={(e) => setPositionPct(Number(e.target.value))}
+          className="w-full accent-arch-green"
+          aria-valuetext={frame ? displayYearLabel(frame) : ''}
+        />
+        <div className="mt-2 flex justify-between gap-1 text-[11px] text-arch-muted">
+          {layers.map((layer, index) => {
+            const tickPct = layers.length > 1 ? (index / (layers.length - 1)) * 100 : 0
+            const isActive =
+              Math.abs(positionPct - tickPct) < (layers.length > 1 ? 50 / (layers.length - 1) : 100)
+            return (
+              <button
+                key={`${layer.year}-${layer.label ?? ''}`}
+                type="button"
+                onClick={() => setPositionPct(tickPct)}
+                className={`shrink-0 rounded px-1 py-0.5 transition ${
+                  isActive
+                    ? 'font-semibold text-arch-green-deep'
+                    : 'hover:text-arch-green-deep'
+                }`}
               >
-                каталог ГИМ
-              </a>
-            </p>
-          ) : !isModernLayer && activeSnapshot ? (
-            <p className="mt-2 text-xs text-arch-muted">
-              Сравнение Archiview: {activeSnapshot.comparisonTitle}
-            </p>
-          ) : null}
+                {layer.label ?? layer.year}
+              </button>
+            )
+          })}
         </div>
-      </section>
+        <p className="mt-2 text-xs text-arch-muted">
+          {firstYear} ← ползунок → {lastYear}
+        </p>
+      </label>
+
+      <div className="rounded-xl border border-arch-line bg-arch-surface p-4 shadow-sm">
+        <p className="text-sm text-arch-ink/80">{stageHint}</p>
+        {frame && (frame.blend >= 0.5 ? frame.to.sourceUrl : frame.from.sourceUrl) ? (
+          <p className="mt-2 text-xs text-arch-muted">
+            Источник:{' '}
+            <a
+              href={(frame.blend >= 0.5 ? frame.to.sourceUrl : frame.from.sourceUrl)!}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-arch-green underline"
+            >
+              каталог ГИМ
+            </a>
+          </p>
+        ) : null}
+      </div>
     </div>
   )
 }
