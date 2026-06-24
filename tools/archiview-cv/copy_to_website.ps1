@@ -75,7 +75,7 @@ function Sanitize-WebsiteAnnotations([string]$Path) {
     }
 }
 
-function Get-TraceIdMapFromAnnotations([string]$Path) {
+function Get-CuratorFieldsMapFromAnnotations([string]$Path) {
     $map = @{}
     if (-not (Test-Path -LiteralPath $Path)) { return $map }
     try {
@@ -87,20 +87,36 @@ function Get-TraceIdMapFromAnnotations([string]$Path) {
             } catch {
                 continue
             }
+            if ($id -le 0) { continue }
             $traceId = [string]$ann.traceId
-            if ($id -gt 0 -and $traceId) {
-                $map[$id] = $traceId
+            $labelRu = [string]$ann.label_ru
+            $comment = [string]$ann.comment
+            if (-not $traceId -and -not $labelRu -and -not $comment) { continue }
+            $map[$id] = @{
+                traceId = $traceId
+                label_ru = $labelRu
+                comment = $comment
             }
         }
     } catch {
-        Write-Host "WARN: could not read traceId map from $Path : $_"
+        Write-Host "WARN: could not read curator fields from $Path : $_"
     }
     return $map
 }
 
-function Merge-WebsiteTraceIds([string]$Path, [hashtable]$TraceIdByAnnotationId) {
+function Get-TraceIdMapFromAnnotations([string]$Path) {
+    $map = @{}
+    foreach ($entry in (Get-CuratorFieldsMapFromAnnotations $Path).GetEnumerator()) {
+        if ($entry.Value.traceId) {
+            $map[$entry.Key] = $entry.Value.traceId
+        }
+    }
+    return $map
+}
+
+function Merge-WebsiteCuratorFields([string]$Path, [hashtable]$CuratorByAnnotationId) {
     if (-not (Test-Path -LiteralPath $Path)) { return }
-    if ($TraceIdByAnnotationId.Count -eq 0) { return }
+    if ($CuratorByAnnotationId.Count -eq 0) { return }
     try {
         $data = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
         $merged = 0
@@ -112,22 +128,45 @@ function Merge-WebsiteTraceIds([string]$Path, [hashtable]$TraceIdByAnnotationId)
             } catch {
                 continue
             }
-            if (-not $TraceIdByAnnotationId.ContainsKey($id)) { continue }
-            $fromSite = [string]$TraceIdByAnnotationId[$id]
-            if (-not $fromSite) { continue }
-            $existing = [string]$ann.traceId
-            if ($existing -eq $fromSite) {
-                $kept++
-                continue
+            if (-not $CuratorByAnnotationId.ContainsKey($id)) { continue }
+            $fromSite = $CuratorByAnnotationId[$id]
+            $changed = $false
+
+            $traceId = [string]$fromSite.traceId
+            if ($traceId -and [string]$ann.traceId -ne $traceId) {
+                $ann | Add-Member -NotePropertyName traceId -NotePropertyValue $traceId -Force
+                $changed = $true
             }
-            $ann | Add-Member -NotePropertyName traceId -NotePropertyValue $fromSite -Force
-            $merged++
+
+            $labelRu = [string]$fromSite.label_ru
+            if ($labelRu -and [string]$ann.label_ru -ne $labelRu) {
+                $ann | Add-Member -NotePropertyName label_ru -NotePropertyValue $labelRu -Force
+                $changed = $true
+            }
+
+            $comment = [string]$fromSite.comment
+            if ($comment -and [string]$ann.comment -ne $comment) {
+                $ann | Add-Member -NotePropertyName comment -NotePropertyValue $comment -Force
+                $changed = $true
+            }
+
+            if ($changed) { $merged++ } else { $kept++ }
         }
         Write-JsonUtf8NoBom $Path $data
-        Write-Host "OK: traceId links kept for annotations.json (merged=$merged, unchanged=$kept)"
+        Write-Host "OK: curator fields kept for annotations.json (merged=$merged, unchanged=$kept)"
     } catch {
-        Write-Host "WARN: traceId merge failed for ${Path}: $_"
+        Write-Host "WARN: curator field merge failed for ${Path}: $_"
     }
+}
+
+function Merge-WebsiteTraceIds([string]$Path, [hashtable]$TraceIdByAnnotationId) {
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    if ($TraceIdByAnnotationId.Count -eq 0) { return }
+    $curatorMap = @{}
+    foreach ($entry in $TraceIdByAnnotationId.GetEnumerator()) {
+        $curatorMap[$entry.Key] = @{ traceId = [string]$entry.Value; label_ru = ''; comment = '' }
+    }
+    Merge-WebsiteCuratorFields $Path $curatorMap
 }
 
 function Get-ProjectDirFromResult([string]$Dir) {
@@ -277,7 +316,7 @@ function Export-ComparisonBundle {
     param(
         [Parameter(Mandatory = $true)][string]$Result,
         [Parameter(Mandatory = $true)][string]$WebDest,
-        [hashtable]$TraceIdMap = @{}
+        [hashtable]$CuratorFieldsMap = @{}
     )
     if (-not (Test-Path -LiteralPath $WebDest)) {
         New-Item -ItemType Directory -Path $WebDest -Force | Out-Null
@@ -314,9 +353,9 @@ function Export-ComparisonBundle {
         Write-Host "OK: $WebDest\$($pair[1])"
         if ($pair[1] -eq 'annotations.json') {
             Sanitize-WebsiteAnnotations $dst
-            Merge-WebsiteTraceIds $dst $TraceIdMap
-            if ($TraceIdMap.Count -gt 0) {
-                Merge-WebsiteTraceIds $src $TraceIdMap
+            Merge-WebsiteCuratorFields $dst $CuratorFieldsMap
+            if ($CuratorFieldsMap.Count -gt 0) {
+                Merge-WebsiteCuratorFields $src $CuratorFieldsMap
             }
         }
     }
@@ -425,16 +464,24 @@ function New-ManifestEntry {
     return $entry
 }
 
+function Get-DefaultCuratorFieldsMap([string]$Web, [string]$DefaultCmpId) {
+    if ($DefaultCmpId) {
+        $cmpAnn = Join-Path $Web ("comparisons\{0}\annotations.json" -f $DefaultCmpId)
+        $cmpMap = Get-CuratorFieldsMapFromAnnotations $cmpAnn
+        if ($cmpMap.Count -gt 0) { return $cmpMap }
+    }
+    return Get-CuratorFieldsMapFromAnnotations (Join-Path $Web 'annotations.json')
+}
+
 $activeCmpId = Get-ComparisonIdFromResultDir $Result
 $defaultCmpId = if ($activeCmpId) { $activeCmpId } else { '' }
 
-$existingAnnPath = Join-Path $Web 'annotations.json'
-$traceIdMap = Get-TraceIdMapFromAnnotations $existingAnnPath
-if ($traceIdMap.Count -gt 0) {
-    Write-Host "INFO: will preserve traceId for $($traceIdMap.Count) annotation id(s) from website"
+$curatorMap = Get-DefaultCuratorFieldsMap -Web $Web -DefaultCmpId $defaultCmpId
+if ($curatorMap.Count -gt 0) {
+    Write-Host "INFO: will preserve curator fields (traceId, label_ru, comment) for $($curatorMap.Count) annotation id(s) from website"
 }
 
-$rootBundle = Export-ComparisonBundle -Result $Result -WebDest $Web -TraceIdMap $traceIdMap
+$rootBundle = Export-ComparisonBundle -Result $Result -WebDest $Web -CuratorFieldsMap $curatorMap
 $manifestItems = @()
 $cmpTitleById = @{}
 $cmpStatusById = @{}
@@ -513,8 +560,8 @@ if ($projDir) {
                 if (-not (Test-HasExportFiles $cmpDir)) { continue }
                 if ($cmpId -eq $defaultCmpId) { continue }
                 $destSub = Join-Path $Web ("comparisons\{0}" -f $cmpId)
-                $subTraceMap = Get-TraceIdMapFromAnnotations (Join-Path $destSub 'annotations.json')
-                $bundle = Export-ComparisonBundle -Result $cmpDir -WebDest $destSub -TraceIdMap $subTraceMap
+                $subCuratorMap = Get-CuratorFieldsMapFromAnnotations (Join-Path $destSub 'annotations.json')
+                $bundle = Export-ComparisonBundle -Result $cmpDir -WebDest $destSub -CuratorFieldsMap $subCuratorMap
                 $title = [string]$cmpMeta.title
                 if (-not $title) { $title = $cmpId }
                 $years = Get-PhotoYearsFromCmpDir -CmpDir $cmpDir -Title $title
