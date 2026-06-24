@@ -358,8 +358,8 @@ export function BuildingPage() {
       {displayAssets && !isSideBySide ? (
         <Section title="Слои времени" kicker="Archiview">
           <p className="mb-4 text-sm leading-relaxed text-arch-muted">
-            Исторические срезы накладываются на современный фасад с полупрозрачным переходом.
-            Снимок 1924 года (ГИМ) — в слое «1924 (ГИМ)»; сравнение 1938 → 2026 — в блоке «Фасад и подсветка».
+            Исторические срезы накладываются на современный фасад (2026) с полупрозрачным переходом.
+            Файлы слоёв — в <code>public/explorer/MOSCOW_001/time-layers/</code> (см. инструкцию ниже на странице).
           </p>
           <FacadeTimeLayers building={building} archiview={archiview ?? displayAssets} />
           <p className="mt-4">

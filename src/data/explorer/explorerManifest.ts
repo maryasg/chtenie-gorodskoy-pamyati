@@ -49,7 +49,7 @@ const WEBSITE_HIDDEN_COMPARISON_IDS: Record<string, string[]> = {
 
 /** Слои времени, дублирующие основное сравнение (год + comparisonId). */
 const WEBSITE_HIDDEN_TIME_LAYERS: Record<string, Array<{ year: string; comparisonId?: string }>> = {
-  MOSCOW_001: [{ year: '1938', comparisonId: 'cmp_005' }],
+  MOSCOW_001: [],
 }
 
 function isHiddenTimeLayer(

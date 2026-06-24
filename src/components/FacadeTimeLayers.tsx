@@ -26,7 +26,7 @@ function layerHint(year: string, buildingId: string, label?: string): string {
       return 'План усадьбы 1840 года — исходная планировка проёмов и входов до поздних переделок.'
     }
     if (year === '1924' && label?.includes('ГИМ')) {
-      return 'Негатив Губарева А.А. (ГИМ, 9 марта 1924): вид на Большую Ордынку.'
+      return 'Негатив Губарева А.А. (ГИМ, 9 марта 1924): вид на Большую Ордынку. Для наложения — файл time-layers/1924.png (4200×2452, выпрямлен под современный фасад).'
     }
     if (year === '1924') {
       return 'Двухэтажное усадебное строение (PastVu, 1924): верхней надстройки ещё нет; в начале 1920-х рядом действовал Ордынский лагерь.'
@@ -120,7 +120,7 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
   if (!hasModern || snapshots.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-arch-line bg-arch-surface-2/60 p-4 text-sm text-arch-muted">
-        Для слоёв времени нужны выпрямленные снимки из Archiview (1840, 1924 и современный).
+        Для слоёв времени нужны выпрямленные снимки в папке time-layers/ (1840, 1924, 1938) и современный фасад из cmp_005.
         Экспортируйте <code>copy_to_website.bat</code> → Push.
       </p>
     )

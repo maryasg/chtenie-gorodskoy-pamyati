@@ -159,21 +159,21 @@ export function FacadeBeforeAfterSlider({
         </div>
 
         {(historicalYear || modernYear) && (
-          <div className="flex shrink-0 flex-row justify-center gap-6 sm:w-28 sm:flex-col sm:justify-center sm:gap-8 sm:py-4">
+          <div className="flex shrink-0 flex-col justify-center gap-8 sm:w-[7.25rem] sm:py-4">
             {historicalYear && (
-              <div className="text-center sm:text-left">
+              <div className="w-full text-left">
                 <p className="text-3xl font-semibold tabular-nums leading-none text-arch-green-deep">
                   {historicalYear}
                 </p>
-                <p className="mt-1 text-xs uppercase tracking-wide text-arch-muted">история</p>
+                <p className="mt-1 text-left text-xs uppercase tracking-wide text-arch-muted">история</p>
               </div>
             )}
             {modernYear && (
-              <div className="text-center sm:text-left">
+              <div className="w-full text-left">
                 <p className="text-3xl font-semibold tabular-nums leading-none text-arch-green-deep">
                   {modernYear}
                 </p>
-                <p className="mt-1 text-xs uppercase tracking-wide text-arch-muted">сегодня</p>
+                <p className="mt-1 text-left text-xs uppercase tracking-wide text-arch-muted">сегодня</p>
               </div>
             )}
           </div>

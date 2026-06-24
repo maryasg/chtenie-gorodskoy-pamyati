@@ -53,23 +53,25 @@
     "timeLayers":  [
                        {
                            "year":  "1840",
-                           "comparisonId":  "cmp_009",
-                           "title":  "1840 -\u003e 2026",
-                           "historicalRectifiedUrl":  "comparisons/cmp_009/historical-rectified.png"
+                           "label":  "1840",
+                           "title":  "План усадьбы 1840",
+                           "historicalRectifiedUrl":  "time-layers/1840.png",
+                           "overlayMode":  "rectified"
                        },
                        {
                            "year":  "1924",
                            "label":  "1924 (ГИМ)",
                            "title":  "Губарев А.А., 9 марта 1924",
-                           "historicalRectifiedUrl":  "time-layers/gim-1924.jpg",
+                           "historicalRectifiedUrl":  "time-layers/1924.png",
                            "sourceUrl":  "https://catalog.shm.ru/entity/OBJECT/3106660",
-                           "overlayMode":  "archive"
+                           "overlayMode":  "rectified"
                        },
                        {
                            "year":  "1938",
-                           "comparisonId":  "cmp_005",
+                           "label":  "1938",
                            "title":  "1938 -\u003e 2026",
-                           "historicalRectifiedUrl":  "comparisons/cmp_005/historical-rectified.png"
+                           "historicalRectifiedUrl":  "time-layers/1938.png",
+                           "overlayMode":  "rectified"
                        }
                    ],
     "updatedAt":  "2026-06-23T10:43:12.4469999Z"
