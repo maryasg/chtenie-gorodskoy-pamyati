@@ -611,6 +611,72 @@ export function ArchiviewFacadePanel({
     [regions],
   )
 
+  /** Overlay на карточке: слева фасад + слайдер, справа список следов сверху. */
+  const useSidebarLayout = !embeddedAr && !sideBySide && variant === 'default'
+  const showOnImageBadges = variant !== 'ar' && !useSidebarLayout
+
+  const comparisonBlock =
+    !sideBySide && variant === 'default' ? (
+      <div className="min-w-0">
+        <h3 className="mb-2 text-base font-semibold text-arch-green-deep">
+          Сравнение фотоматериалов
+          {assets.historicalPhotoYear && assets.modernPhotoYear
+            ? ` (${assets.historicalPhotoYear} → ${assets.modernPhotoYear})`
+            : ''}
+        </h3>
+        <FacadeBeforeAfterSlider
+          historicalUrl={assets.historicalRectifiedUrl}
+          modernUrl={assets.modernRectifiedUrl}
+          historicalYear={assets.historicalPhotoYear}
+          modernYear={assets.modernPhotoYear}
+        />
+      </div>
+    ) : null
+
+  const regionList =
+    regions.length > 0 ? (
+      <ol className="w-full space-y-1.5 text-sm">
+        {regions.map((r) => {
+          const on = hoverIdx === r.idx
+          const color = CLASS_COLORS[r.cls] ?? '#444'
+          return (
+            <li key={r.idx}>
+              <button
+                type="button"
+                onMouseEnter={() => setHoverIdx(r.idx)}
+                onMouseLeave={() => setHoverIdx(null)}
+                onFocus={() => setHoverIdx(r.idx)}
+                onBlur={() => setHoverIdx(null)}
+                onClick={() => setSelectedIdx((current) => (current === r.idx ? null : r.idx))}
+                className={`flex w-full gap-2 rounded-lg border px-2.5 py-2 text-left transition ${
+                  on || selectedIdx === r.idx
+                    ? 'border-arch-green/50 bg-arch-green-soft shadow-sm'
+                    : 'border-arch-line bg-arch-surface hover:border-arch-green/30'
+                }`}
+              >
+                <span
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+                  style={{ background: color }}
+                >
+                  {r.idx}
+                </span>
+                <span className="min-w-0">
+                  <span className="block font-medium leading-tight text-arch-ink">
+                    {r.trace?.title ?? r.label}
+                  </span>
+                  {r.trace ? (
+                    <span className="mt-0.5 block text-xs text-arch-muted">{r.trace.period}</span>
+                  ) : r.comment ? (
+                    <span className="mt-0.5 block text-xs text-arch-muted">{r.comment}</span>
+                  ) : null}
+                </span>
+              </button>
+            </li>
+          )
+        })}
+      </ol>
+    ) : null
+
   return (
     <div className={embeddedAr ? 'h-full space-y-0' : 'space-y-3'}>
       {!hideIntro && variant === 'default' ? (
@@ -624,10 +690,10 @@ export function ArchiviewFacadePanel({
             </>
           ) : imageKind === 'rectified' ? (
             <>
-              Выпрямленное фото с подсветкой областей. Номера и цветные зоны видны сразу; при
-              наведении — краткая плашка, <strong>клик</strong> по зоне или заметке в списке — полная карточка
-              с источниками и достоверностью. Кнопки <strong>+</strong> / <strong>−</strong> приближают фото;
-              при увеличении можно сдвигать картинку мышью.
+              Выпрямленное фото с подсветкой областей. Список следов — справа; при наведении на
+              заметку или зону — краткая плашка, <strong>клик</strong> — полная карточка с источниками
+              и достоверностью. Ниже — сравнение архив / современность. Кнопки <strong>+</strong> /{' '}
+              <strong>−</strong> приближают фото; при увеличении можно сдвигать картинку мышью.
             </>
           ) : (
             <>
@@ -670,8 +736,20 @@ export function ArchiviewFacadePanel({
       )}
 
       {imageOk && (
-        <div className={`flex flex-col gap-4`}>
-          <div className="relative min-w-0 w-full">
+        <div
+          className={
+            useSidebarLayout
+              ? 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_17rem] xl:grid-cols-[minmax(0,1fr)_20rem] lg:items-start'
+              : 'flex flex-col gap-4'
+          }
+        >
+          <div
+            className={
+              useSidebarLayout
+                ? 'relative min-w-0 lg:col-start-1 lg:row-start-1'
+                : 'relative min-w-0 w-full'
+            }
+          >
             <div
               ref={viewportRef}
               className={`relative w-full ${
@@ -780,7 +858,7 @@ export function ArchiviewFacadePanel({
                   })}
                 </svg>
               )}
-              {regions.length > 0 && variant !== 'ar' && (
+              {regions.length > 0 && showOnImageBadges && (
                 <svg
                   className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
                   viewBox="0 0 100 100"
@@ -807,7 +885,7 @@ export function ArchiviewFacadePanel({
                   })}
                 </svg>
               )}
-              {regions.length > 0 && variant !== 'ar' && (
+              {regions.length > 0 && showOnImageBadges && (
                 <div className="pointer-events-none absolute inset-0 z-20 overflow-visible" aria-hidden>
                   {regionsBadges.map((r) => {
                     const on = hoverIdx === r.idx || selectedIdx === r.idx
@@ -949,70 +1027,22 @@ export function ArchiviewFacadePanel({
             </div>
           </div>
 
-          {!embeddedAr && (regions.length > 0 || (!sideBySide && variant === 'default')) ? (
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-              {!sideBySide && variant === 'default' ? (
-                <div className="min-w-0 flex-1">
-                  <h3 className="mb-2 text-base font-semibold text-arch-green-deep">
-                    Сравнение фотоматериалов
-                    {assets.historicalPhotoYear && assets.modernPhotoYear
-                      ? ` (${assets.historicalPhotoYear} → ${assets.modernPhotoYear})`
-                      : ''}
-                  </h3>
-                  <FacadeBeforeAfterSlider
-                    historicalUrl={assets.historicalRectifiedUrl}
-                    modernUrl={assets.modernRectifiedUrl}
-                    historicalYear={assets.historicalPhotoYear}
-                    modernYear={assets.modernPhotoYear}
-                  />
+          {useSidebarLayout ? (
+            <>
+              {regionList ? (
+                <div className="order-2 min-w-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:self-start">
+                  {regionList}
                 </div>
               ) : null}
-
-              {regions.length > 0 ? (
-                <ol className="w-full shrink-0 space-y-1.5 text-sm lg:w-72 xl:w-80">
-                  {regions.map((r) => {
-                    const on = hoverIdx === r.idx
-                    const color = CLASS_COLORS[r.cls] ?? '#444'
-                    return (
-                      <li key={r.idx}>
-                        <button
-                          type="button"
-                          onMouseEnter={() => setHoverIdx(r.idx)}
-                          onMouseLeave={() => setHoverIdx(null)}
-                          onFocus={() => setHoverIdx(r.idx)}
-                          onBlur={() => setHoverIdx(null)}
-                          onClick={() => setSelectedIdx((current) => (current === r.idx ? null : r.idx))}
-                          className={`flex w-full gap-2 rounded-lg border px-2.5 py-2 text-left transition ${
-                            on || selectedIdx === r.idx
-                              ? 'border-arch-green/50 bg-arch-green-soft shadow-sm'
-                              : 'border-arch-line bg-arch-surface hover:border-arch-green/30'
-                          }`}
-                        >
-                          <span
-                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-                            style={{ background: color }}
-                          >
-                            {r.idx}
-                          </span>
-                          <span className="min-w-0">
-                            <span className="block truncate font-medium leading-tight text-arch-ink">
-                              {r.trace?.title ?? r.label}
-                            </span>
-                            {r.trace ? (
-                              <span className="mt-0.5 block truncate text-xs text-arch-muted">
-                                {r.trace.period}
-                              </span>
-                            ) : r.comment ? (
-                              <span className="mt-0.5 block truncate text-xs text-arch-muted">
-                                {r.comment}
-                              </span>
-                            ) : null}
-                          </span>
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ol>
+              {comparisonBlock ? (
+                <div className="order-3 min-w-0 lg:col-start-1 lg:row-start-2">{comparisonBlock}</div>
+              ) : null}
+            </>
+          ) : !embeddedAr && (regionList || comparisonBlock) ? (
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+              {comparisonBlock}
+              {regionList ? (
+                <div className="w-full shrink-0 lg:w-72 xl:w-80">{regionList}</div>
               ) : null}
             </div>
           ) : null}
