@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Building } from '../types/building'
 import type { ArchiviewBuildingAssets } from '../data/explorer/archiviewAssets'
 import {
-  buildFacadeTimeSnapshots,
+  buildFacadeTimeLayerStack,
   fetchExplorerManifest,
+  type FacadeTimeLayerStack,
   type FacadeTimeSnapshot,
 } from '../data/explorer/explorerManifest'
 
@@ -12,27 +13,30 @@ type Props = {
   archiview: ArchiviewBuildingAssets
 }
 
-/** Чем раньше снимок, тем сильнее «призрак» при автоматической настройке. */
-function ghostOpacityForSnapshot(index: number, total: number): number {
-  if (total <= 0) return 0.85
-  if (total === 1) return 0.85
+/** Прозрачность верхнего слоя: крайние годы — полностью, середина — полупрозрачно. */
+function ghostOpacityForLayer(index: number, total: number): number {
+  if (total <= 1) return 1
+  if (index === 0 || index === total - 1) return 1
   const t = index / (total - 1)
-  return Math.max(0.12, 0.9 - t * 0.78)
+  return Math.max(0.22, 0.92 - t * 0.55)
 }
 
 function layerHint(year: string, buildingId: string, label?: string): string {
   if (buildingId === 'MOSCOW_001_kumaninykh') {
     if (year === '1840') {
-      return 'План усадьбы 1840 года — исходная планировка проёмов и входов до поздних переделок.'
+      return 'План усадьбы 1840 года — нижний слой шкалы; все снимки выровнены по этому холсту (4200×2452).'
     }
     if (year === '1924' && label?.includes('ГИМ')) {
-      return 'Негатив Губарева А.А. (ГИМ, 9 марта 1924): вид на Большую Ордынку. Для наложения — файл time-layers/1924.png (4200×2452, выпрямлен под современный фасад).'
+      return 'Негатив Губарева А.А. (ГИМ, 9 марта 1924): двухэтажный усадебный облик, верхней надстройки ещё нет.'
     }
     if (year === '1924') {
-      return 'Двухэтажное усадебное строение (PastVu, 1924): верхней надстройки ещё нет; в начале 1920-х рядом действовал Ордынский лагерь.'
+      return 'Двухэтажное усадебное строение (1924): верхней надстройки ещё нет.'
     }
-    if (year === '1938') {
-      return 'Выпрямленный исторический снимок из основного сравнения Archiview (11 зон, cmp_005). Год надстройки по акту экспертизы — 1938.'
+    if (year === '1930') {
+      return 'Фасад в период строительства надстройки (около 1930 г.; на PastVu встречается подпись 1930–1936). По акту историко-культурной экспертизы (mos.ru, 2019) надстройку завершили в 1938 году — на снимке виден процесс, а не финальный облик.'
+    }
+    if (year === '2026') {
+      return 'Современный фасад — полевая съёмка Archiview, 2026 год. Файл time-layers/2026.jpg выровнен по плану 1840.'
     }
   }
   if (buildingId === 'MOSCOW_002_turgenev_library') {
@@ -44,70 +48,46 @@ function layerHint(year: string, buildingId: string, label?: string): string {
   return 'Промежуточный архивный снимок: часть деталей уже изменена или утрачена.'
 }
 
-/** Наложение исторических срезов на современный фасад с полупрозрачным переходом. */
+/** Наложение срезов на план 1840 с полупрозрачным переходом. */
 export function FacadeTimeLayers({ building, archiview }: Props) {
-  const [snapshots, setSnapshots] = useState<FacadeTimeSnapshot[]>([])
+  const [stack, setStack] = useState<FacadeTimeLayerStack | null>(null)
   const [manifestLoaded, setManifestLoaded] = useState(false)
   const [layerIndex, setLayerIndex] = useState(0)
   const [ghostOverride, setGhostOverride] = useState<number | null>(null)
-
-  const modernUrl = archiview.modernRectifiedUrl
-  const modernYear = archiview.modernPhotoYear ?? 'сегодня'
-  const hasModern = Boolean(modernUrl)
 
   useEffect(() => {
     let cancelled = false
     setManifestLoaded(false)
 
     if (!archiview.cardId) {
-      setSnapshots([])
+      setStack(null)
       setManifestLoaded(true)
       return
     }
 
     fetchExplorerManifest(archiview.cardId).then((manifest) => {
       if (cancelled) return
-      if (manifest?.comparisons?.length) {
-        const built = buildFacadeTimeSnapshots(manifest, archiview.cardId)
-        setSnapshots(built)
-        setLayerIndex(built.length)
-      } else if (archiview.historicalRectifiedUrl && archiview.historicalPhotoYear) {
-        setSnapshots([
-          {
-            year: archiview.historicalPhotoYear,
-            historicalUrl: archiview.historicalRectifiedUrl,
-            comparisonId: 'default',
-            comparisonTitle: `${archiview.historicalPhotoYear} → ${modernYear}`,
-          },
-        ])
-        setLayerIndex(1)
-      } else {
-        setSnapshots([])
-      }
+      const built = manifest ? buildFacadeTimeLayerStack(manifest, archiview.cardId) : null
+      setStack(built)
+      setLayerIndex(built ? built.layers.length - 1 : 0)
       setManifestLoaded(true)
     })
 
     return () => {
       cancelled = true
     }
-  }, [
-    archiview.cardId,
-    archiview.historicalPhotoYear,
-    archiview.historicalRectifiedUrl,
-    modernYear,
-  ])
+  }, [archiview.cardId])
 
-  const isModernLayer = layerIndex >= snapshots.length
-  const activeSnapshot = isModernLayer ? null : snapshots[layerIndex]
-  const isArchiveLayer = activeSnapshot?.overlayMode === 'archive'
-  const autoGhost = isModernLayer ? 0 : ghostOpacityForSnapshot(layerIndex, snapshots.length)
+  const layers = stack?.layers ?? []
+  const activeSnapshot: FacadeTimeSnapshot | null = layers[layerIndex] ?? null
+  const isBaseLayer = layerIndex === 0
+  const autoGhost = isBaseLayer ? 1 : ghostOpacityForLayer(layerIndex, layers.length)
   const ghostOpacity = ghostOverride ?? autoGhost
 
   const stageHint = useMemo(() => {
-    if (isModernLayer) return 'Современный фасад — то, что видно сегодня на месте (полевая съёмка).'
     if (!activeSnapshot) return ''
     return layerHint(activeSnapshot.year, building.id, activeSnapshot.label)
-  }, [activeSnapshot, building.id, isModernLayer])
+  }, [activeSnapshot, building.id])
 
   if (!manifestLoaded) {
     return (
@@ -117,74 +97,49 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
     )
   }
 
-  if (!hasModern || snapshots.length === 0) {
+  if (!stack || layers.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-arch-line bg-arch-surface-2/60 p-4 text-sm text-arch-muted">
-        Для слоёв времени нужны выпрямленные снимки в папке time-layers/ (1840, 1924, 1938) и современный фасад из cmp_005.
-        Экспортируйте <code>copy_to_website.bat</code> → Push.
+        Для слоёв времени нужны файлы в <code>time-layers/</code> (1840, 1924, 1930, 2026) — все
+        4200×2452, выровнены по плану 1840.
       </p>
     )
   }
 
-  const layerButtons = [
-    ...snapshots.map((snap) => ({
-      key: `${snap.year}-${snap.label ?? ''}`,
-      label: snap.label ?? snap.year,
-    })),
-    { key: 'modern', label: modernYear },
-  ]
+  const layerButtons = layers.map((snap) => ({
+    key: `${snap.year}-${snap.label ?? ''}`,
+    label: snap.label ?? snap.year,
+  }))
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-arch-muted">
-        {isArchiveLayer
-          ? 'Архивный кадр (не выпрямлен под современный фасад) — плавный переход к съёмке 2026 года ползунком.'
-          : `Современный фасад (${modernYear}) — основа; поверх — полупрозрачный исторический слой выбранного года. Ползунком можно плавно переходить от одного снимка к другому.`}{' '}
-        Порядок: {snapshots.map((s) => s.label ?? s.year).join(' → ')} → {modernYear}.
+        Нижний слой — план <strong>{stack.baseLabel}</strong>; поверх полупрозрачно накладывается
+        выбранный год. Ползунок плавно показывает переход. Порядок:{' '}
+        {layers.map((layer) => layer.label ?? layer.year).join(' → ')}.
       </p>
 
       <div className="overflow-hidden rounded-2xl border border-arch-line bg-arch-green-deep shadow-md">
         <div className="relative aspect-[4/3] max-h-[min(70vh,640px)] w-full bg-arch-green-deep">
-          {isArchiveLayer && activeSnapshot ? (
-            <>
-              <img
-                src={modernUrl}
-                alt="Современный фасад"
-                className="absolute inset-0 h-full w-full object-contain transition-opacity duration-300"
-                style={{ opacity: 1 - ghostOpacity }}
-              />
-              <img
-                src={activeSnapshot.historicalUrl}
-                alt={`Фасад ${activeSnapshot.label ?? activeSnapshot.year}`}
-                className="pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity duration-300"
-                style={{ opacity: ghostOpacity }}
-              />
-            </>
-          ) : (
-            <>
-              <img
-                src={modernUrl}
-                alt="Современный фасад"
-                className="absolute inset-0 h-full w-full object-contain"
-              />
-              {activeSnapshot ? (
-                <img
-                  src={activeSnapshot.historicalUrl}
-                  alt={`Фасад ${activeSnapshot.label ?? activeSnapshot.year}`}
-                  className="pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity duration-300"
-                  style={{ opacity: ghostOpacity }}
-                />
-              ) : null}
-            </>
-          )}
+          <img
+            src={stack.baseUrl}
+            alt={`Фасад ${stack.baseLabel}`}
+            className="absolute inset-0 h-full w-full object-contain"
+          />
+          {activeSnapshot && !isBaseLayer ? (
+            <img
+              src={activeSnapshot.historicalUrl}
+              alt={`Фасад ${activeSnapshot.label ?? activeSnapshot.year}`}
+              className="pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity duration-300"
+              style={{ opacity: ghostOpacity }}
+            />
+          ) : null}
           <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/50 to-transparent" />
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/55 to-transparent" />
           <div className="absolute left-3 top-3 rounded-md bg-black/55 px-2 py-1 text-xs text-white backdrop-blur-sm">
-            {isModernLayer
-              ? modernYear
-              : `${activeSnapshot!.label ?? activeSnapshot!.year} → ${modernYear}`}
+            {activeSnapshot?.label ?? activeSnapshot?.year ?? stack.baseLabel}
           </div>
-          {!isModernLayer ? (
+          {!isBaseLayer ? (
             <div className="absolute bottom-3 right-3 rounded-md bg-black/55 px-2 py-1 text-xs tabular-nums text-white backdrop-blur-sm">
               слой {Math.round(ghostOpacity * 100)}%
             </div>
@@ -192,10 +147,10 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
         </div>
       </div>
 
-      {!isModernLayer && (
+      {!isBaseLayer && (
         <label className="block rounded-xl border border-arch-line bg-arch-surface px-3 py-2 text-sm">
           <span className="flex items-center justify-between text-arch-ink/80">
-            <span>Прозрачность исторического слоя</span>
+            <span>Прозрачность слоя {activeSnapshot?.label ?? activeSnapshot?.year}</span>
             <span className="font-medium tabular-nums">{Math.round(ghostOpacity * 100)}%</span>
           </span>
           <input
@@ -240,7 +195,7 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
 
         <div className="mt-3 rounded-xl border border-arch-line bg-arch-surface p-4 shadow-sm">
           <p className="text-sm text-arch-ink/80">{stageHint}</p>
-          {!isModernLayer && activeSnapshot?.sourceUrl ? (
+          {activeSnapshot?.sourceUrl ? (
             <p className="mt-2 text-xs text-arch-muted">
               Источник:{' '}
               <a
@@ -251,10 +206,6 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
               >
                 каталог ГИМ
               </a>
-            </p>
-          ) : !isModernLayer && activeSnapshot ? (
-            <p className="mt-2 text-xs text-arch-muted">
-              Сравнение Archiview: {activeSnapshot.comparisonTitle}
             </p>
           ) : null}
         </div>

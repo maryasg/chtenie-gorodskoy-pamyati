@@ -20,6 +20,8 @@ export interface ExplorerComparisonEntry {
 
 export type FacadeTimeLayerOverlayMode = 'rectified' | 'archive'
 
+export type FacadeTimeLayerRole = 'base' | 'overlay' | 'modern'
+
 /** Явная шкала «Слоёв времени» (если нужен порядок/источники не из auto). */
 export interface ExplorerTimeLayerEntry {
   year: string
@@ -29,6 +31,8 @@ export interface ExplorerTimeLayerEntry {
   historicalRectifiedUrl: string
   sourceUrl?: string
   overlayMode?: FacadeTimeLayerOverlayMode
+  /** base — нижний слой (1840); modern — верхний срез (2026). */
+  layerRole?: FacadeTimeLayerRole
 }
 
 export interface ExplorerManifest {
@@ -143,8 +147,15 @@ export type FacadeTimeSnapshot = {
   comparisonId: string
   comparisonTitle: string
   sourceUrl?: string
-  /** rectified — призрак на выпрямленном modern; archive — отдельный архивный кадр. */
   overlayMode?: FacadeTimeLayerOverlayMode
+  layerRole?: FacadeTimeLayerRole
+}
+
+export type FacadeTimeLayerStack = {
+  baseUrl: string
+  baseYear: string
+  baseLabel: string
+  layers: FacadeTimeSnapshot[]
 }
 
 function buildFacadeTimeSnapshotsFromConfig(
@@ -159,7 +170,28 @@ function buildFacadeTimeSnapshotsFromConfig(
     comparisonTitle: layer.title ?? layer.label ?? layer.year,
     sourceUrl: layer.sourceUrl,
     overlayMode: layer.overlayMode ?? 'rectified',
+    layerRole: layer.layerRole,
   }))
+}
+
+/** Стек слоёв: 1840 — основа, остальные годы накладываются сверху. */
+export function buildFacadeTimeLayerStack(
+  manifest: ExplorerManifest,
+  cardId: string,
+): FacadeTimeLayerStack | null {
+  const layers = buildFacadeTimeSnapshots(manifest, cardId)
+  if (!layers.length) return null
+
+  const baseLayer =
+    layers.find((layer) => layer.layerRole === 'base') ?? layers[0]
+  const overlayLayers = layers.filter((layer) => layer !== baseLayer)
+
+  return {
+    baseUrl: baseLayer.historicalUrl,
+    baseYear: baseLayer.year,
+    baseLabel: baseLayer.label ?? baseLayer.year,
+    layers: [baseLayer, ...overlayLayers],
+  }
 }
 
 /** Уникальные исторические срезы из manifest, по возрастанию года (для «Слоёв времени»). */

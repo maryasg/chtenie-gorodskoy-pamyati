@@ -358,8 +358,8 @@ export function BuildingPage() {
       {displayAssets && !isSideBySide ? (
         <Section title="Слои времени" kicker="Archiview">
           <p className="mb-4 text-sm leading-relaxed text-arch-muted">
-            Исторические срезы накладываются на современный фасад (2026) с полупрозрачным переходом.
-            Файлы слоёв — в <code>public/explorer/MOSCOW_001/time-layers/</code> (см. инструкцию ниже на странице).
+            Нижний слой шкалы — план 1840; все снимки выровнены по нему (файлы в time-layers/).
+            Надстройку по акту экспертизы завершили в 1938 г.; снимок ~1930 фиксирует строительство.
           </p>
           <FacadeTimeLayers building={building} archiview={archiview ?? displayAssets} />
           <p className="mt-4">
