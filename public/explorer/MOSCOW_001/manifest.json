@@ -1,10 +1,26 @@
 {
     "cardId":  "MOSCOW_001",
-    "defaultComparisonId":  "cmp_005",
+    "defaultComparisonId":  "cmp_009",
     "comparisons":  [
                         {
+                            "comparisonId":  "cmp_009",
+                            "title":  "1840 -\u003e 2026",
+                            "labelingLayout":  "overlay",
+                            "annotationCount":  3,
+                            "isLegacy":  false,
+                            "markedFacadeUrl":  "marked-facade.png",
+                            "labeledFacadeUrl":  "marked-facade-labeled.png",
+                            "historicalRectifiedUrl":  "historical-rectified.png",
+                            "modernRectifiedUrl":  "modern-rectified.png",
+                            "modernSourceUrl":  "modern-source.png",
+                            "annotationsUrl":  "annotations.json",
+                            "facadeProjectUrl":  "facade-project.json",
+                            "historicalPhotoYear":  "1840",
+                            "modernPhotoYear":  "2026"
+                        },
+                        {
                             "comparisonId":  "cmp_005",
-                            "title":  "1938 -\u003e 2026",
+                            "title":  "1936 -\u003e 2026",
                             "labelingLayout":  "overlay",
                             "annotationCount":  11,
                             "isLegacy":  false,
@@ -15,62 +31,9 @@
                             "modernSourceUrl":  "comparisons/cmp_005/modern-source.png",
                             "annotationsUrl":  "comparisons/cmp_005/annotations.json",
                             "facadeProjectUrl":  "comparisons/cmp_005/facade-project.json",
-                            "historicalPhotoYear":  "1938",
-                            "modernPhotoYear":  "2026"
-                        },
-                        {
-                            "comparisonId":  "cmp_009",
-                            "title":  "1840 -\u003e 2026",
-                            "labelingLayout":  "overlay",
-                            "annotationCount":  2,
-                            "isLegacy":  false,
-                            "markedFacadeUrl":  "comparisons/cmp_009/marked-facade.png",
-                            "labeledFacadeUrl":  "comparisons/cmp_009/marked-facade-labeled.png",
-                            "historicalRectifiedUrl":  "comparisons/cmp_009/historical-rectified.png",
-                            "modernRectifiedUrl":  "comparisons/cmp_009/modern-rectified.png",
-                            "modernSourceUrl":  "comparisons/cmp_009/modern-source.png",
-                            "annotationsUrl":  "comparisons/cmp_009/annotations.json",
-                            "facadeProjectUrl":  "comparisons/cmp_009/facade-project.json",
-                            "historicalPhotoYear":  "1840",
-                            "modernPhotoYear":  "2026"
-                        },
-                        {
-                            "comparisonId":  "cmp_008",
-                            "title":  "1938 -\u003e 2026",
-                            "labelingLayout":  "overlay",
-                            "annotationCount":  2,
-                            "isLegacy":  true,
-                            "markedFacadeUrl":  "comparisons/cmp_008/marked-facade.png",
-                            "labeledFacadeUrl":  "comparisons/cmp_008/marked-facade-labeled.png",
-                            "historicalRectifiedUrl":  "comparisons/cmp_008/historical-rectified.png",
-                            "modernRectifiedUrl":  "comparisons/cmp_008/modern-rectified.png",
-                            "annotationsUrl":  "comparisons/cmp_008/annotations.json",
-                            "facadeProjectUrl":  "comparisons/cmp_008/facade-project.json",
-                            "historicalPhotoYear":  "1938",
+                            "historicalPhotoYear":  "1936",
                             "modernPhotoYear":  "2026"
                         }
                     ],
-    "timeLayers":  [
-                       {
-                           "year":  "1840",
-                           "comparisonId":  "cmp_009",
-                           "title":  "1840 -\u003e 2026",
-                           "historicalRectifiedUrl":  "comparisons/cmp_009/historical-rectified.png"
-                       },
-                       {
-                           "year":  "1924",
-                           "label":  "1924 (ГИМ)",
-                           "title":  "Губарев А.А., 9 марта 1924",
-                           "historicalRectifiedUrl":  "time-layers/gim-1924.jpg",
-                           "sourceUrl":  "https://catalog.shm.ru/entity/OBJECT/3106660",
-                           "overlayMode":  "archive"
-                       },
-                       {
-                           "year":  "1938",
-                           "comparisonId":  "cmp_005",
-                           "title":  "1938 -\u003e 2026",
-                           "historicalRectifiedUrl":  "comparisons/cmp_005/historical-rectified.png"
-                       }
-                   ],
-    "updatedAt":  "2026-06-23T10:43:12.4469999Z"
+    "updatedAt":  "2026-06-24T09:12:28.9966075Z"
 }
