@@ -3,13 +3,14 @@ import { getBuildingById } from '../data/buildings'
 import { ConfidenceBadge } from '../components/ConfidenceBadge'
 import { ArchiviewFacadePanel } from '../components/ArchiviewFacadePanel'
 import { BuildingVerificationBanner } from '../components/BuildingVerificationBanner'
-import { FacadePhotoComparison } from '../components/FacadePhotoComparison'
+import { FacadeTimeLayers } from '../components/FacadeTimeLayers'
 import { FacadeHotspotViewer } from '../components/FacadeHotspotViewer'
 import { TransformationTimeline } from '../components/TransformationTimeline'
 import { getArchiviewAssets } from '../data/explorer/archiviewAssets'
 import {
   fetchExplorerManifest,
   manifestEntryToAssets,
+  resolveDefaultComparisonId,
   type ExplorerManifest,
 } from '../data/explorer/explorerManifest'
 import { ArchiviewComparisonPicker } from '../components/ArchiviewComparisonPicker'
@@ -238,7 +239,7 @@ export function BuildingPage() {
       if (cancelled) return
       setManifest(data)
       if (data?.comparisons?.length) {
-        setSelectedComparisonId(data.defaultComparisonId || data.comparisons[0].comparisonId)
+        setSelectedComparisonId(resolveDefaultComparisonId(data))
       }
     })
     return () => {
@@ -251,6 +252,7 @@ export function BuildingPage() {
     if (!manifest || manifest.comparisons.length <= 1) return archiview
     const entry =
       manifest.comparisons.find((c) => c.comparisonId === selectedComparisonId) ??
+      manifest.comparisons.find((c) => c.comparisonId === resolveDefaultComparisonId(manifest)) ??
       manifest.comparisons[0]
     return manifestEntryToAssets(archiview.cardId, archiview.buildingId, entry, archiview)
   }, [archiview, manifest, selectedComparisonId])
@@ -308,14 +310,6 @@ export function BuildingPage() {
               onSelect={setSelectedComparisonId}
             />
           ) : null}
-          {displayAssets.comparisonId ? (
-            <p className="mb-3 text-xs font-medium text-arch-muted">
-              Сравнение:{' '}
-              {displayAssets.historicalPhotoYear && displayAssets.modernPhotoYear
-                ? `${displayAssets.historicalPhotoYear} → ${displayAssets.modernPhotoYear}`
-                : displayAssets.comparisonTitle || displayAssets.comparisonId}
-            </p>
-          ) : null}
           <ArchiviewFacadePanel assets={displayAssets} building={building} />
         </Section>
       ) : (
@@ -361,33 +355,45 @@ export function BuildingPage() {
         )}
       </Section>
 
-      {displayAssets ? (
-        <>
-          <Section title="Сравнение фотоматериалов" kicker="Archiview">
-            {(displayAssets.historicalPhotoYear || displayAssets.modernPhotoYear) && (
-              <p className="mb-3 text-sm leading-relaxed text-arch-muted">
-                Фотоматериалы: {displayAssets.historicalPhotoYear ?? 'архив'} →{' '}
-                {displayAssets.modernPhotoYear ?? 'сегодня'}. Годы обозначают датировку снимков или
-                материалов; выводы о событиях опираются на подписи, экспертизы и источники карточки.
-              </p>
-            )}
-            {isSideBySide ? (
-              <SideBySidePhotoComparison assets={displayAssets} />
-            ) : (
-              <FacadePhotoComparison building={building} assets={displayAssets} />
-            )}
-          </Section>
-          {!isSideBySide && (
-            <p>
-              <Link
-                to={`/building/${building.id}/ar`}
-                className="inline-flex items-center gap-1 rounded-full border border-arch-line bg-arch-surface px-4 py-2 text-sm font-medium text-arch-green-deep hover:border-arch-green/40 hover:bg-arch-green-soft"
-              >
-                AR-preview: подсветка на полевом фото →
-              </Link>
+      {displayAssets && !isSideBySide ? (
+        <Section title="Слои времени" kicker="Archiview">
+          <p className="mb-4 text-sm leading-relaxed text-arch-muted">
+            Исторические срезы накладываются на современный фасад с полупрозрачным переходом.
+            Снимок 1924 года (ГИМ) — в слое «1924 (ГИМ)»; сравнение 1938 → 2026 — в блоке «Фасад и подсветка».
+          </p>
+          <FacadeTimeLayers building={building} archiview={archiview ?? displayAssets} />
+          <p className="mt-4">
+            <Link
+              to={`/building/${building.id}/ar`}
+              className="inline-flex items-center gap-1 rounded-full border border-arch-line bg-arch-surface px-4 py-2 text-sm font-medium text-arch-green-deep hover:border-arch-green/40 hover:bg-arch-green-soft"
+            >
+              AR-preview: подсветка на полевом фото →
+            </Link>
+          </p>
+        </Section>
+      ) : null}
+
+      {displayAssets && isSideBySide ? (
+        <Section title="Сравнение фотоматериалов" kicker="Archiview">
+          {(displayAssets.historicalPhotoYear || displayAssets.modernPhotoYear) && (
+            <p className="mb-3 text-sm leading-relaxed text-arch-muted">
+              Фотоматериалы: {displayAssets.historicalPhotoYear ?? 'архив'} →{' '}
+              {displayAssets.modernPhotoYear ?? 'сегодня'}.
             </p>
           )}
-        </>
+          <SideBySidePhotoComparison assets={displayAssets} />
+        </Section>
+      ) : null}
+
+      {displayAssets && isSideBySide ? (
+        <p>
+          <Link
+            to={`/building/${building.id}/ar`}
+            className="inline-flex items-center gap-1 rounded-full border border-arch-line bg-arch-surface px-4 py-2 text-sm font-medium text-arch-green-deep hover:border-arch-green/40 hover:bg-arch-green-soft"
+          >
+            AR-preview: подсветка на полевом фото →
+          </Link>
+        </p>
       ) : null}
 
       <Section title="Исторические слои">

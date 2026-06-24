@@ -13,6 +13,7 @@ import {
   type Point,
 } from '../lib/archiviewGeometry'
 import { ExpertTracePlate } from './ExpertTracePlate'
+import { FacadeBeforeAfterSlider } from './FacadeBeforeAfterSlider'
 import { tracePlatePlacement } from '../lib/tracePlatePlacement'
 import { computeBadgeLayout, assignBadgeLayouts, type BadgeLayout } from '../lib/regionBadgeLayout'
 
@@ -384,16 +385,19 @@ export function ArchiviewFacadePanel({
         cx,
         cy,
         areaPct,
-        badgeLayout: computeBadgeLayout(polygonPct, areaPct, idx),
+        badgeLayout: computeBadgeLayout(polygonPct, areaPct, idx, assets.cardId),
       }
     },
-    [tracesById],
+    [assets.cardId, tracesById],
   )
 
-  const publishRegions = useCallback((list: DisplayRegion[]) => {
-    assignBadgeLayouts(list)
-    setRegions(list)
-  }, [])
+  const publishRegions = useCallback(
+    (list: DisplayRegion[]) => {
+      assignBadgeLayouts(list, assets.cardId)
+      setRegions(list)
+    },
+    [assets.cardId],
+  )
 
   const buildRegionsRectified = useCallback(
     (annotations: ArchiviewAnnotation[], width: number, height: number) => {
@@ -593,7 +597,7 @@ export function ArchiviewFacadePanel({
         : null
   const plateExpanded = selectedIdx !== null && plateRegion?.idx === selectedIdx
   const platePlacement = plateRegion
-    ? tracePlatePlacement(plateRegion.cy, plateExpanded)
+    ? tracePlatePlacement(plateRegion.cx, plateRegion.cy, plateExpanded)
     : null
 
   /** Small regions (e.g. #6, #9) must paint above large overlaps (#12) for clicks — render largest first, smallest last in SVG. */
@@ -666,8 +670,8 @@ export function ArchiviewFacadePanel({
       )}
 
       {imageOk && (
-        <div className={`flex flex-col gap-4 ${variant === 'ar' ? '' : 'lg:flex-row lg:items-start'}`}>
-          <div className={`relative min-w-0 flex-1 ${embeddedAr ? '' : ''}`}>
+        <div className={`flex flex-col gap-4`}>
+          <div className="relative min-w-0 w-full">
             <div
               ref={viewportRef}
               className={`relative w-full ${
@@ -685,7 +689,7 @@ export function ArchiviewFacadePanel({
                     : 'max-h-[min(78vh,820px)] overflow-hidden'
                   : embeddedAr
                     ? 'h-full overflow-y-auto overflow-x-hidden'
-                    : 'overflow-visible'
+                    : 'overflow-hidden'
               } ${zoom > ZOOM_MIN ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
               onMouseLeave={() => setHoverIdx(null)}
               onPointerDown={handleViewportPointerDown}
@@ -872,32 +876,14 @@ export function ArchiviewFacadePanel({
                     : null}
                 </svg>
               )}
-              {plateRegion && platePlacement && variant !== 'ar' && (
+              {plateRegion && platePlacement && variant !== 'ar' && !plateExpanded && (
                 <div
-                  className={`absolute z-20 max-w-[min(92%,${
-                    plateExpanded
-                      ? platePlacement.compact
-                        ? '300px'
-                        : '380px'
-                      : platePlacement.compact
-                        ? '260px'
-                        : '320px'
-                  })] rounded-xl border border-arch-gold/70 bg-arch-green-deep/90 px-3 py-2.5 text-left text-xs leading-snug text-arch-surface shadow-xl backdrop-blur-md ${
-                    plateExpanded ? 'pointer-events-auto max-h-[min(50vh,340px)] overflow-y-auto' : 'pointer-events-none'
-                  }`}
+                  className="pointer-events-none absolute z-20 max-w-[min(88%,200px)] rounded-lg border border-arch-gold/70 bg-arch-green-deep/92 px-2.5 py-2 text-left text-xs leading-snug text-arch-surface shadow-xl backdrop-blur-md"
                   style={{
-                    left: `${plateRegion.cx}%`,
-                    top: `${plateRegion.cy}%`,
+                    left: `${platePlacement.leftPct}%`,
+                    top: `${platePlacement.topPct}%`,
                     transform: platePlacement.transform,
                   }}
-                  onClick={
-                    plateExpanded
-                      ? (event) => {
-                          event.stopPropagation()
-                          setSelectedIdx(null)
-                        }
-                      : undefined
-                  }
                 >
                   <ExpertTracePlate
                     idx={plateRegion.idx}
@@ -906,9 +892,8 @@ export function ArchiviewFacadePanel({
                     trace={plateRegion.trace}
                     comment={plateRegion.comment}
                     verification={building?.verification}
-                    expanded={plateExpanded}
+                    expanded={false}
                     compact={platePlacement.compact}
-                    onClose={plateExpanded ? () => setSelectedIdx(null) : undefined}
                   />
                 </div>
               )}
@@ -932,16 +917,20 @@ export function ArchiviewFacadePanel({
                 </div>
               )}
 
-              {variant === 'ar' && plateExpanded && plateRegion && (
+              {plateExpanded && plateRegion && (
                 <div
-                  className="absolute inset-0 z-40 flex items-center justify-center bg-black/55 p-3 sm:p-5"
+                  className={`absolute inset-0 z-40 flex items-center justify-center bg-black/55 ${
+                    embeddedAr ? 'p-2' : 'p-4 sm:p-6'
+                  }`}
                   role="dialog"
                   aria-modal="true"
                   aria-label={`Экспертная заметка ${plateRegion.idx}`}
                   onClick={() => setSelectedIdx(null)}
                 >
                   <div
-                    className="pointer-events-auto max-h-[min(82%,520px)] w-full max-w-md overflow-y-auto rounded-2xl border border-arch-gold/70 bg-arch-green-deep px-4 py-3.5 text-left text-xs leading-snug text-arch-surface shadow-2xl"
+                    className={`pointer-events-auto max-h-[min(82%,520px)] w-full overflow-y-auto rounded-2xl border border-arch-gold/70 bg-arch-green-deep px-4 py-3.5 text-left text-xs leading-snug text-arch-surface shadow-2xl ${
+                      embeddedAr ? 'max-w-none' : 'max-w-md'
+                    }`}
                     onClick={(event) => event.stopPropagation()}
                   >
                     <ExpertTracePlate
@@ -960,54 +949,73 @@ export function ArchiviewFacadePanel({
             </div>
           </div>
 
-          {regions.length > 0 && !embeddedAr && (
-            <ol
-              className={`w-full shrink-0 space-y-1.5 text-sm ${
-                variant === 'ar' ? '' : 'lg:w-64 xl:w-72'
-              }`}
-            >
-              {regions.map((r) => {
-                const on = hoverIdx === r.idx
-                const color = CLASS_COLORS[r.cls] ?? '#444'
-                return (
-                  <li key={r.idx}>
-                    <button
-                      type="button"
-                      onMouseEnter={() => setHoverIdx(r.idx)}
-                      onMouseLeave={() => setHoverIdx(null)}
-                      onFocus={() => setHoverIdx(r.idx)}
-                      onBlur={() => setHoverIdx(null)}
-                      onClick={() => setSelectedIdx((current) => (current === r.idx ? null : r.idx))}
-                      className={`flex w-full gap-2 rounded-lg border px-2.5 py-2 text-left transition ${
-                        on || selectedIdx === r.idx
-                          ? 'border-arch-green/50 bg-arch-green-soft shadow-sm'
-                          : 'border-arch-line bg-arch-surface hover:border-arch-green/30'
-                      }`}
-                    >
-                      <span
-                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-                        style={{ background: color }}
-                      >
-                        {r.idx}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block font-medium leading-tight text-arch-ink">
-                          {r.trace?.title ?? r.label}
-                        </span>
-                        {r.trace ? (
-                          <span className="mt-0.5 block text-xs text-arch-muted">
-                            {r.trace.period} · Экспертная заметка
+          {!embeddedAr && (regions.length > 0 || (!sideBySide && variant === 'default')) ? (
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+              {!sideBySide && variant === 'default' ? (
+                <div className="min-w-0 flex-1">
+                  <h3 className="mb-2 text-base font-semibold text-arch-green-deep">
+                    Сравнение фотоматериалов
+                    {assets.historicalPhotoYear && assets.modernPhotoYear
+                      ? ` (${assets.historicalPhotoYear} → ${assets.modernPhotoYear})`
+                      : ''}
+                  </h3>
+                  <FacadeBeforeAfterSlider
+                    historicalUrl={assets.historicalRectifiedUrl}
+                    modernUrl={assets.modernRectifiedUrl}
+                    historicalYear={assets.historicalPhotoYear}
+                    modernYear={assets.modernPhotoYear}
+                  />
+                </div>
+              ) : null}
+
+              {regions.length > 0 ? (
+                <ol className="w-full shrink-0 space-y-1.5 text-sm lg:w-72 xl:w-80">
+                  {regions.map((r) => {
+                    const on = hoverIdx === r.idx
+                    const color = CLASS_COLORS[r.cls] ?? '#444'
+                    return (
+                      <li key={r.idx}>
+                        <button
+                          type="button"
+                          onMouseEnter={() => setHoverIdx(r.idx)}
+                          onMouseLeave={() => setHoverIdx(null)}
+                          onFocus={() => setHoverIdx(r.idx)}
+                          onBlur={() => setHoverIdx(null)}
+                          onClick={() => setSelectedIdx((current) => (current === r.idx ? null : r.idx))}
+                          className={`flex w-full gap-2 rounded-lg border px-2.5 py-2 text-left transition ${
+                            on || selectedIdx === r.idx
+                              ? 'border-arch-green/50 bg-arch-green-soft shadow-sm'
+                              : 'border-arch-line bg-arch-surface hover:border-arch-green/30'
+                          }`}
+                        >
+                          <span
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+                            style={{ background: color }}
+                          >
+                            {r.idx}
                           </span>
-                        ) : r.comment ? (
-                          <span className="mt-0.5 block text-xs text-arch-muted">{r.comment}</span>
-                        ) : null}
-                      </span>
-                    </button>
-                  </li>
-                )
-              })}
-            </ol>
-          )}
+                          <span className="min-w-0">
+                            <span className="block truncate font-medium leading-tight text-arch-ink">
+                              {r.trace?.title ?? r.label}
+                            </span>
+                            {r.trace ? (
+                              <span className="mt-0.5 block truncate text-xs text-arch-muted">
+                                {r.trace.period}
+                              </span>
+                            ) : r.comment ? (
+                              <span className="mt-0.5 block truncate text-xs text-arch-muted">
+                                {r.comment}
+                              </span>
+                            ) : null}
+                          </span>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ol>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       )}
     </div>
