@@ -302,26 +302,6 @@ export const MOSCOW_001: Building = {
       url: 'http://polishpovmap.ru/karta/ordynskij-konclager/',
     },
     {
-      id: 'S007',
-      name: 'PastVu: усадебный облик, 1924',
-      url: 'https://pastvu.com/p/2517403',
-    },
-    {
-      id: 'S008',
-      name: 'PastVu p/68045: после надстройки (визуальный материал)',
-      url: 'https://pastvu.com/p/68045',
-    },
-    {
-      id: 'S009',
-      name: 'PastVu p/68053: строительство в лесах (Архив ЦИГИ, 1930–1936)',
-      url: 'https://pastvu.com/p/68053',
-    },
-    {
-      id: 'S010',
-      name: 'Госкаталог: Большая Ордынка, 17, 1934 (другой ракурс, для просмотра)',
-      url: 'https://goskatalog.ru/portal/#/collections?id=38043885',
-    },
-    {
       id: 'smi-vesti',
       name: 'Вести: Материал о Большой Ордынке',
       url: 'https://www.vesti.ru/article/2042653',
