@@ -99,6 +99,7 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
 
   const isModernLayer = layerIndex >= snapshots.length
   const activeSnapshot = isModernLayer ? null : snapshots[layerIndex]
+  const isArchiveLayer = activeSnapshot?.overlayMode === 'archive'
   const autoGhost = isModernLayer ? 0 : ghostOpacityForSnapshot(layerIndex, snapshots.length)
   const ghostOpacity = ghostOverride ?? autoGhost
 
@@ -119,7 +120,7 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
   if (!hasModern || snapshots.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-arch-line bg-arch-surface-2/60 p-4 text-sm text-arch-muted">
-        Для слоёв времени нужны выпрямленные снимки из Archiview (1840, 1924, 1938 и современный).
+        Для слоёв времени нужны выпрямленные снимки из Archiview (1840, 1924 и современный).
         Экспортируйте <code>copy_to_website.bat</code> → Push.
       </p>
     )
@@ -136,26 +137,46 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-arch-muted">
-        Современный фасад ({modernYear}) — основа; поверх — полупрозрачный исторический слой выбранного
-        года. Ползунком можно плавно переходить от одного снимка к другому. Порядок:{' '}
-        {snapshots.map((s) => s.label ?? s.year).join(' → ')} → {modernYear}.
+        {isArchiveLayer
+          ? 'Архивный кадр (не выпрямлен под современный фасад) — плавный переход к съёмке 2026 года ползунком.'
+          : `Современный фасад (${modernYear}) — основа; поверх — полупрозрачный исторический слой выбранного года. Ползунком можно плавно переходить от одного снимка к другому.`}{' '}
+        Порядок: {snapshots.map((s) => s.label ?? s.year).join(' → ')} → {modernYear}.
       </p>
 
       <div className="overflow-hidden rounded-2xl border border-arch-line bg-arch-green-deep shadow-md">
         <div className="relative aspect-[4/3] max-h-[min(70vh,640px)] w-full bg-arch-green-deep">
-          <img
-            src={modernUrl}
-            alt="Современный фасад"
-            className="absolute inset-0 h-full w-full object-contain"
-          />
-          {activeSnapshot ? (
-            <img
-              src={activeSnapshot.historicalUrl}
-              alt={`Фасад ${activeSnapshot.label ?? activeSnapshot.year}`}
-              className="pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity duration-300"
-              style={{ opacity: ghostOpacity }}
-            />
-          ) : null}
+          {isArchiveLayer && activeSnapshot ? (
+            <>
+              <img
+                src={modernUrl}
+                alt="Современный фасад"
+                className="absolute inset-0 h-full w-full object-contain transition-opacity duration-300"
+                style={{ opacity: 1 - ghostOpacity }}
+              />
+              <img
+                src={activeSnapshot.historicalUrl}
+                alt={`Фасад ${activeSnapshot.label ?? activeSnapshot.year}`}
+                className="pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity duration-300"
+                style={{ opacity: ghostOpacity }}
+              />
+            </>
+          ) : (
+            <>
+              <img
+                src={modernUrl}
+                alt="Современный фасад"
+                className="absolute inset-0 h-full w-full object-contain"
+              />
+              {activeSnapshot ? (
+                <img
+                  src={activeSnapshot.historicalUrl}
+                  alt={`Фасад ${activeSnapshot.label ?? activeSnapshot.year}`}
+                  className="pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity duration-300"
+                  style={{ opacity: ghostOpacity }}
+                />
+              ) : null}
+            </>
+          )}
           <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/50 to-transparent" />
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/55 to-transparent" />
           <div className="absolute left-3 top-3 rounded-md bg-black/55 px-2 py-1 text-xs text-white backdrop-blur-sm">

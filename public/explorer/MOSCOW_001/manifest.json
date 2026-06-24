@@ -39,7 +39,7 @@
                             "title":  "1938 -\u003e 2026",
                             "labelingLayout":  "overlay",
                             "annotationCount":  2,
-                            "isLegacy":  false,
+                            "isLegacy":  true,
                             "markedFacadeUrl":  "comparisons/cmp_008/marked-facade.png",
                             "labeledFacadeUrl":  "comparisons/cmp_008/marked-facade-labeled.png",
                             "historicalRectifiedUrl":  "comparisons/cmp_008/historical-rectified.png",
