@@ -18,29 +18,29 @@ export function FacadeARPreview({ building, archiview }: Props) {
         времени — в блоке «Сравнение фотоматериалов» на карточке здания.
       </div>
 
-      <div className="mx-auto w-full max-w-[272px]">
+      <div className="mx-auto w-full max-w-[min(720px,95vw)]">
         <div
-          className="rounded-[2.75rem] border-[11px] border-neutral-800 bg-neutral-900 px-2 pb-3 pt-2 shadow-2xl"
+          className="rounded-[3rem] border-[12px] border-neutral-800 bg-neutral-900 px-2.5 pb-4 pt-2.5 shadow-2xl"
           role="img"
           aria-label="Симуляция экрана телефона с полевым фото и подсветкой зон"
         >
-          <div className="mx-auto mb-2 h-5 w-28 rounded-full bg-neutral-950/90" aria-hidden />
+          <div className="mx-auto mb-2.5 h-6 w-36 rounded-full bg-neutral-950/90" aria-hidden />
 
-          <div className="overflow-hidden rounded-[2rem] bg-arch-green-deep ring-1 ring-arch-surface/10">
-            <div className="flex items-center justify-between border-b border-arch-surface/10 bg-arch-green-deep px-3.5 py-2 text-[10px] text-arch-surface/70">
+          <div className="overflow-hidden rounded-[2.25rem] bg-arch-green-deep ring-1 ring-arch-surface/10">
+            <div className="flex items-center justify-between border-b border-arch-surface/10 bg-arch-green-deep px-4 py-2.5 text-xs text-arch-surface/70">
               <span>AR · симуляция</span>
               {archiview.modernPhotoYear ? (
                 <span className="tabular-nums">полевое фото · {archiview.modernPhotoYear}</span>
               ) : null}
             </div>
 
-            <div className="border-b border-arch-surface/10 px-3.5 py-2.5 text-[11px] leading-snug text-arch-surface/80">
+            <div className="border-b border-arch-surface/10 px-4 py-3 text-sm leading-snug text-arch-surface/80">
               Исходный ракурс с улицы — как в видоискателе. Подсветка зон видна сразу;{' '}
               <strong>наведите</strong> на область — краткая подсказка. <strong>Клик</strong> — полная
               карточка по центру экрана.
             </div>
 
-            <div className="relative overflow-hidden" style={{ aspectRatio: '9 / 17.5' }}>
+            <div className="relative overflow-hidden" style={{ aspectRatio: '9 / 16' }}>
               <ArchiviewFacadePanel
                 assets={archiview}
                 building={building}
@@ -51,7 +51,7 @@ export function FacadeARPreview({ building, archiview }: Props) {
             </div>
           </div>
 
-          <div className="mx-auto mt-2.5 h-1 w-24 rounded-full bg-neutral-600" aria-hidden />
+          <div className="mx-auto mt-3 h-1.5 w-32 rounded-full bg-neutral-600" aria-hidden />
         </div>
       </div>
     </div>
