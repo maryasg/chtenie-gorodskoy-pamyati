@@ -12,6 +12,11 @@
   project_v8.json  →  facade-project.json (через copy_to_website.bat)
     — H_rect_to_modern + modern_crop_offset_xy для полевого AR-фото; при другом кадре — H_rect_to_ar
 
+Слои времени (time-layers/, 4200×2452, один холст):
+  1911.jpg  — архив ~1911 (PastVu), до надстройки 1945 г. (пока заглушка из historical-rectified)
+  2026.jpg  — современный фасад Archiview (пока заглушка из modern-rectified)
+  manifest.json  — cmp_001 (1911 → 2026) и шкала timeLayers
+
 После копирования: GitHub Desktop → Commit → Push.
 
 Или запустите в папке Archiview v15: copy_to_website.bat
