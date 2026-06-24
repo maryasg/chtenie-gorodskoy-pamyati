@@ -41,6 +41,13 @@ function crossfadeAtPosition(layers: FacadeTimeSnapshot[], positionPct: number):
   }
 }
 
+function sourceLinkLabel(url: string): string {
+  if (url.includes('catalog.shm.ru') || url.includes('shm.ru')) return 'каталог ГИМ'
+  if (url.includes('pastvu.com')) return 'PastVu (источник: Архив ЦИГИ)'
+  if (url.includes('goskatalog.ru')) return 'Госкаталог'
+  return 'источник'
+}
+
 function displayYearLabel(frame: CrossfadeFrame): string {
   if (frame.blend < 0.08 || frame.from.year === frame.to.year) {
     return frame.from.label ?? frame.from.year
@@ -63,7 +70,7 @@ function layerHint(year: string, buildingId: string, label?: string): string {
       return 'Двухэтажное усадебное строение (1924): верхней надстройки ещё нет.'
     }
     if (year === '1930') {
-      return 'Фасад в период строительства надстройки (около 1930 г.; на PastVu встречается подпись 1930–1936). По акту историко-культурной экспертизы (mos.ru, 2019) надстройку завершили в 1938 году — на снимке виден процесс, а не финальный облик.'
+      return 'Строительство надстройки (1930–1936): снимок из Архива ЦИГИ (PastVu p/68053) — дом в лесах, три верхних яруса без отделки. По сравнению с другим архивным кадром 1934 г. (Госкаталог) и акту экспертизы снимок, вероятно, сделан около 1930 г. или чуть позже — до 1934. По акту историко-культурной экспертизы (mos.ru, 2019) надстройку завершили в 1938 году — на шкале этот слой фиксирует процесс, а не финальный облик.'
     }
     if (year === '2026') {
       return 'Современный фасад — полевая съёмка Archiview, 2026 год.'
@@ -128,7 +135,7 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
   if (!stack || layers.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-arch-line bg-arch-surface-2/60 p-4 text-sm text-arch-muted">
-        Для слоёв времени нужны файлы в <code>time-layers/</code> (1840, 1924, 1930, 2026) — все
+        Для слоёв времени нужны файлы в <code>time-layers/</code> (1840, 1924, 1930–1936, 2026) — все
         4200×2452, выровнены по одному холсту.
       </p>
     )
@@ -226,7 +233,7 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
               rel="noopener noreferrer"
               className="text-arch-green underline"
             >
-              каталог ГИМ
+              {sourceLinkLabel((frame.blend >= 0.5 ? frame.to.sourceUrl : frame.from.sourceUrl)!)}
             </a>
           </p>
         ) : null}
