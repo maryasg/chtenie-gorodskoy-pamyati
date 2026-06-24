@@ -733,8 +733,8 @@ export function ArchiviewFacadePanel({
               </div>
 
               <div
-                className={`relative w-full origin-top-left will-change-transform ${
-                  embeddedAr ? 'inline-block max-w-full' : 'inline-block max-w-full p-1'
+                className={`relative origin-top-left will-change-transform ${
+                  embeddedAr ? 'inline-block max-w-full' : 'mx-auto inline-block max-w-full p-1'
                 }`}
                 style={{
                   transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
@@ -751,10 +751,10 @@ export function ArchiviewFacadePanel({
                   width={imgSize.w}
                   height={imgSize.h}
                   draggable={false}
-                  className={`block h-auto w-full select-none ${
+                  className={`block h-auto w-auto max-w-full select-none ${
                     embeddedAr
-                      ? 'max-w-full rounded-none'
-                      : 'max-h-[min(78vh,820px)] max-w-full rounded-xl'
+                      ? 'max-h-full rounded-none'
+                      : 'max-h-[min(78vh,820px)] rounded-xl'
                   }`}
                 />
                 {regions.length > 0 && (
