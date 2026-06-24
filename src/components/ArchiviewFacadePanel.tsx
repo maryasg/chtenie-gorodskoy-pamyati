@@ -612,7 +612,7 @@ export function ArchiviewFacadePanel({
   )
 
   return (
-    <div className={embeddedAr ? 'space-y-0' : 'space-y-3'}>
+    <div className={embeddedAr ? 'h-full space-y-0' : 'space-y-3'}>
       {!hideIntro && variant === 'default' ? (
         <p className="text-sm text-arch-muted">
           {sideBySide ? (
