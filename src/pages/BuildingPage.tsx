@@ -360,7 +360,7 @@ export function BuildingPage() {
           <p className="mb-4 text-sm leading-relaxed text-arch-muted">
             Двигайте ползунок по годам — снимки сменяют друг друга через плавное затемнение.
             Надстройку по акту экспертизы завершили в 1938 г.; на шкале 1930–1936 — строительство
-            в лесах (Архив ЦИГИ, Госкаталог).
+            в лесах (Архив ЦИГИ, PastVu p/68053).
           </p>
           <FacadeTimeLayers building={building} archiview={archiview ?? displayAssets} />
           <p className="mt-4">
