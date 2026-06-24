@@ -58,6 +58,16 @@ function displayYearLabel(frame: CrossfadeFrame): string {
   return `${frame.from.label ?? frame.from.year} → ${frame.to.label ?? frame.to.year}`
 }
 
+function emptyTimeLayersMessage(cardId?: string): string {
+  if (cardId === 'MOSCOW_001') {
+    return 'Для слоёв времени нужны файлы в time-layers/ (1840, 1924, 1930–1936, 2026) — все 4200×2452, выровнены по одному холсту.'
+  }
+  if (cardId === 'MOSCOW_003') {
+    return 'Для слоёв времени нужны файлы в time-layers/ (1911, 2026 и др.) — все 4200×2452, выровнены по одному холсту.'
+  }
+  return 'Для слоёв времени нужен manifest.json с разделом timeLayers и файлы в time-layers/ — все 4200×2452, выровнены по одному холсту.'
+}
+
 function layerHint(year: string, buildingId: string, label?: string): string {
   if (buildingId === 'MOSCOW_001_kumaninykh') {
     if (year === '1840') {
@@ -79,6 +89,14 @@ function layerHint(year: string, buildingId: string, label?: string): string {
   if (buildingId === 'MOSCOW_002_turgenev_library') {
     if (year === '1934') {
       return 'Фасад до реконструкции под библиотеку (PastVu, 1934) — до раскрытия палат XVII–XVIII вв. при работах 1998–2003 (um.mos.ru).'
+    }
+  }
+  if (buildingId === 'MOSCOW_003_dom_so_zveryami') {
+    if (year === '1911') {
+      return 'Фото ~1911 г. (PastVu): доходный дом Л. Кравецкого до советской надстройки 1945 г. — шатровая башня, балконы, декор северного модерна. Слой-заглушка до финального выравнивания на холсте 4200×2452.'
+    }
+    if (year === '2026') {
+      return 'Современный фасад — полевая съёмка Archiview, 2026 год. Слой-заглушка до финального выравнивания на холсте 4200×2452.'
     }
   }
   if (year === '1840') return 'Ранний план или архивный срез — максимально далёкий от сегодняшнего облика.'
@@ -135,8 +153,7 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
   if (!stack || layers.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-arch-line bg-arch-surface-2/60 p-4 text-sm text-arch-muted">
-        Для слоёв времени нужны файлы в <code>time-layers/</code> (1840, 1924, 1930–1936, 2026) — все
-        4200×2452, выровнены по одному холсту.
+        {emptyTimeLayersMessage(archiview.cardId)}
       </p>
     )
   }

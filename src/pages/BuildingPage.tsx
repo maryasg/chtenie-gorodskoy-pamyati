@@ -20,6 +20,16 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Building, MemoryTrace } from '../types/building'
 import type { ArchiviewBuildingAssets } from '../data/explorer/archiviewAssets'
 
+function timeLayersIntro(cardId?: string): string {
+  if (cardId === 'MOSCOW_003') {
+    return 'Пока два слоя — фото ~1911 г. (PastVu, до надстройки 1945 г.) и съёмка 2026 (Archiview). JPG в time-layers/ — временные заглушки на общем холсте 4200×2452; позже добавим промежуточные срезы.'
+  }
+  if (cardId === 'MOSCOW_001') {
+    return 'Надстройку по акту экспертизы завершили в 1938 г.; на шкале 1930–1936 — строительство в лесах (Архив ЦИГИ, PastVu p/68053).'
+  }
+  return ''
+}
+
 function Section({
   title,
   kicker,
@@ -266,6 +276,7 @@ export function BuildingPage() {
   }
 
   const isSideBySide = displayAssets?.labelingLayout === 'side_by_side'
+  const timeLayersIntroText = timeLayersIntro(building.cardId)
 
   return (
     <div className="space-y-6">
@@ -359,8 +370,7 @@ export function BuildingPage() {
         <Section title="Слои времени" kicker="Archiview">
           <p className="mb-4 text-sm leading-relaxed text-arch-muted">
             Двигайте ползунок по годам — снимки сменяют друг друга через плавное затемнение.
-            Надстройку по акту экспертизы завершили в 1938 г.; на шкале 1930–1936 — строительство
-            в лесах (Архив ЦИГИ, PastVu p/68053).
+            {timeLayersIntroText ? ` ${timeLayersIntroText}` : null}
           </p>
           <FacadeTimeLayers building={building} archiview={archiview ?? displayAssets} />
           <p className="mt-4">

@@ -1,0 +1,42 @@
+{
+  "cardId": "MOSCOW_003",
+  "defaultComparisonId": "cmp_001",
+  "comparisons": [
+    {
+      "comparisonId": "cmp_001",
+      "title": "1911 → 2026",
+      "labelingLayout": "overlay",
+      "annotationCount": 14,
+      "isLegacy": false,
+      "markedFacadeUrl": "marked-facade.png",
+      "labeledFacadeUrl": "marked-facade-labeled.png",
+      "historicalRectifiedUrl": "historical-rectified.png",
+      "modernRectifiedUrl": "modern-rectified.png",
+      "modernSourceUrl": "modern-source.png",
+      "annotationsUrl": "annotations.json",
+      "facadeProjectUrl": "facade-project.json",
+      "historicalPhotoYear": "1911",
+      "modernPhotoYear": "2026"
+    }
+  ],
+  "timeLayers": [
+    {
+      "year": "1911",
+      "label": "1911",
+      "title": "До надстройки (PastVu)",
+      "historicalRectifiedUrl": "time-layers/1911.jpg",
+      "sourceUrl": "https://pastvu.com/p/45932",
+      "overlayMode": "rectified",
+      "layerRole": "base"
+    },
+    {
+      "year": "2026",
+      "label": "2026",
+      "title": "Современный фасад",
+      "historicalRectifiedUrl": "time-layers/2026.jpg",
+      "overlayMode": "rectified",
+      "layerRole": "modern"
+    }
+  ],
+  "updatedAt": "2026-06-18T12:00:00.0000000Z"
+}
