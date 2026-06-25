@@ -613,7 +613,6 @@ export function ArchiviewFacadePanel({
 
   /** Overlay на карточке: слева фасад + слайдер, справа список следов сверху. */
   const useSidebarLayout = !embeddedAr && !sideBySide && variant === 'default'
-  const showOnImageBadges = variant !== 'ar' && !useSidebarLayout
 
   const comparisonBlock =
     !sideBySide && variant === 'default' ? (
@@ -690,10 +689,11 @@ export function ArchiviewFacadePanel({
             </>
           ) : imageKind === 'rectified' ? (
             <>
-              Выпрямленное фото с подсветкой областей. Список следов — справа; при наведении на
-              заметку или зону — краткая плашка, <strong>клик</strong> — полная карточка с источниками
-              и достоверностью. Ниже — сравнение архив / современность. Кнопки <strong>+</strong> /{' '}
-              <strong>−</strong> приближают фото; при увеличении можно сдвигать картинку мышью.
+              Выпрямленное фото с подсветкой областей. Номера и цветные зоны на фото; список следов —
+              справа. При наведении — краткая плашка, <strong>клик</strong> по зоне или заметке в списке —
+              полная карточка с источниками и достоверностью. Ниже — сравнение архив / современность.
+              Кнопки <strong>+</strong> / <strong>−</strong> приближают фото; при увеличении можно
+              сдвигать картинку мышью.
             </>
           ) : (
             <>
@@ -858,7 +858,7 @@ export function ArchiviewFacadePanel({
                   })}
                 </svg>
               )}
-              {regions.length > 0 && showOnImageBadges && (
+              {regions.length > 0 && variant !== 'ar' && (
                 <svg
                   className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
                   viewBox="0 0 100 100"
@@ -885,7 +885,7 @@ export function ArchiviewFacadePanel({
                   })}
                 </svg>
               )}
-              {regions.length > 0 && showOnImageBadges && (
+              {regions.length > 0 && variant !== 'ar' && (
                 <div className="pointer-events-none absolute inset-0 z-20 overflow-visible" aria-hidden>
                   {regionsBadges.map((r) => {
                     const on = hoverIdx === r.idx || selectedIdx === r.idx
