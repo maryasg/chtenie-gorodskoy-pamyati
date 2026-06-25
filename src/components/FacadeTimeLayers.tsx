@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Building } from '../types/building'
 import type { ArchiviewBuildingAssets } from '../data/explorer/archiviewAssets'
 import {
@@ -103,11 +103,26 @@ function layerHint(year: string, buildingId: string, label?: string): string {
   return 'Промежуточный архивный снимок: часть деталей уже изменена или утрачена.'
 }
 
+/** Длительность полного прохода шкалы 0→100 при автопроигрывании. */
+const AUTOPLAY_MS_PER_LAYER = 4000
+
 /** Шкала лет: плавный переход между снимками через затемнение (crossfade). */
 export function FacadeTimeLayers({ building, archiview }: Props) {
   const [stack, setStack] = useState<FacadeTimeLayerStack | null>(null)
   const [manifestLoaded, setManifestLoaded] = useState(false)
   const [positionPct, setPositionPct] = useState(100)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const positionRef = useRef(positionPct)
+  const rafRef = useRef<number>(0)
+
+  positionRef.current = positionPct
+
+  const stopAutoplay = () => setIsPlaying(false)
+
+  const setPositionManual = (pct: number) => {
+    stopAutoplay()
+    setPositionPct(pct)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -124,6 +139,7 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
       const built = manifest ? buildFacadeTimeLayerStack(manifest, archiview.cardId) : null
       setStack(built)
       setPositionPct(100)
+      setIsPlaying(false)
       setManifestLoaded(true)
     })
 
@@ -133,6 +149,29 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
   }, [archiview.cardId])
 
   const layers = stack?.layers ?? []
+
+  useEffect(() => {
+    if (!isPlaying || layers.length < 2) return
+
+    const durationMs = Math.max(8000, layers.length * AUTOPLAY_MS_PER_LAYER)
+    let anchorTime = performance.now()
+    let anchorPct = positionRef.current
+
+    const step = (now: number) => {
+      let pct = anchorPct + ((now - anchorTime) / durationMs) * 100
+      if (pct >= 100) {
+        anchorPct = 0
+        anchorTime = now
+        pct = 0
+      }
+      setPositionPct(pct)
+      rafRef.current = requestAnimationFrame(step)
+    }
+
+    rafRef.current = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [isPlaying, layers.length])
+
   const frame = layers.length ? crossfadeAtPosition(layers, positionPct) : null
 
   const stageHint = useMemo(() => {
@@ -166,7 +205,8 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-arch-muted">
-        Двигайте ползунок по годам — снимки сменяют друг друга через плавное затемнение. Порядок:{' '}
+        Двигайте ползунок по годам — снимки сменяют друг друга через плавное затемнение. Можно
+        запустить автопроигрывание под шкалой. Порядок:{' '}
         {layers.map((layer) => layer.label ?? layer.year).join(' → ')}.
       </p>
 
@@ -189,55 +229,70 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
             </>
           ) : null}
           <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/50 to-transparent" />
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/55 to-transparent" />
           <div className="absolute left-3 top-3 rounded-md bg-black/55 px-2 py-1 text-xs text-white backdrop-blur-sm">
             {frame ? displayYearLabel(frame) : ''}
           </div>
         </div>
-      </div>
 
-      <label className="block rounded-xl border border-arch-line bg-arch-surface px-3 py-3 text-sm">
-        <span className="mb-2 flex items-center justify-between text-arch-ink/80">
-          <span>Год на шкале</span>
-          <span className="font-semibold tabular-nums text-arch-green-deep">
-            {frame ? displayYearLabel(frame) : ''}
+        <div className="border-t border-arch-line/40 bg-arch-surface px-3 py-3 text-sm">
+          <span className="mb-2 flex items-center justify-between text-arch-ink/80">
+            <span>Год на шкале</span>
+            <span className="font-semibold tabular-nums text-arch-green-deep">
+              {frame ? displayYearLabel(frame) : ''}
+            </span>
           </span>
-        </span>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          step={0.5}
-          value={positionPct}
-          onChange={(e) => setPositionPct(Number(e.target.value))}
-          className="w-full accent-arch-green"
-          aria-valuetext={frame ? displayYearLabel(frame) : ''}
-        />
-        <div className="mt-2 flex justify-between gap-1 text-[11px] text-arch-muted">
-          {layers.map((layer, index) => {
-            const tickPct = layers.length > 1 ? (index / (layers.length - 1)) * 100 : 0
-            const isActive =
-              Math.abs(positionPct - tickPct) < (layers.length > 1 ? 50 / (layers.length - 1) : 100)
-            return (
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={0.5}
+            value={positionPct}
+            onChange={(e) => setPositionManual(Number(e.target.value))}
+            className="w-full accent-arch-green"
+            aria-valuetext={frame ? displayYearLabel(frame) : ''}
+          />
+          <div className="mt-2 flex justify-between gap-1 text-[11px] text-arch-muted">
+            {layers.map((layer, index) => {
+              const tickPct = layers.length > 1 ? (index / (layers.length - 1)) * 100 : 0
+              const isActive =
+                Math.abs(positionPct - tickPct) < (layers.length > 1 ? 50 / (layers.length - 1) : 100)
+              return (
+                <button
+                  key={`${layer.year}-${layer.label ?? ''}`}
+                  type="button"
+                  onClick={() => setPositionManual(tickPct)}
+                  className={`shrink-0 rounded px-1 py-0.5 transition ${
+                    isActive
+                      ? 'font-semibold text-arch-green-deep'
+                      : 'hover:text-arch-green-deep'
+                  }`}
+                >
+                  {layer.label ?? layer.year}
+                </button>
+              )
+            })}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-arch-muted">
+              {firstYear} ← ползунок → {lastYear}
+            </p>
+            {layers.length > 1 ? (
               <button
-                key={`${layer.year}-${layer.label ?? ''}`}
                 type="button"
-                onClick={() => setPositionPct(tickPct)}
-                className={`shrink-0 rounded px-1 py-0.5 transition ${
-                  isActive
-                    ? 'font-semibold text-arch-green-deep'
-                    : 'hover:text-arch-green-deep'
+                onClick={() => setIsPlaying((playing) => !playing)}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                  isPlaying
+                    ? 'border-arch-green bg-arch-green-soft text-arch-green-deep'
+                    : 'border-arch-line bg-arch-surface-2/60 text-arch-ink/80 hover:border-arch-green/40 hover:bg-arch-green-soft'
                 }`}
+                aria-pressed={isPlaying}
               >
-                {layer.label ?? layer.year}
+                {isPlaying ? '⏸ Пауза' : '▶ Проиграть'}
               </button>
-            )
-          })}
+            ) : null}
+          </div>
         </div>
-        <p className="mt-2 text-xs text-arch-muted">
-          {firstYear} ← ползунок → {lastYear}
-        </p>
-      </label>
+      </div>
 
       <div className="rounded-xl border border-arch-line bg-arch-surface p-4 shadow-sm">
         <p className="text-sm text-arch-ink/80">{stageHint}</p>
