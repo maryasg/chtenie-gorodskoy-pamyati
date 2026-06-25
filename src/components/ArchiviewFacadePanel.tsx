@@ -20,6 +20,10 @@ import {
   savePlateDragPositions,
   type PlateDragMap,
 } from '../lib/tracePlateDragStorage'
+import {
+  TRACE_PLATE_SHELL_CLASS,
+  tracePlateBackground,
+} from '../lib/tracePlateStyle'
 import { computeBadgeLayout, assignBadgeLayouts, type BadgeLayout } from '../lib/regionBadgeLayout'
 
 const CLASS_COLORS: Record<string, string> = {
@@ -41,10 +45,6 @@ const CLASS_COLORS: Record<string, string> = {
   other_artifact: '#8a8a00',
   check_manually: '#b000b0',
 }
-
-/** Полупрозрачная зелёная «стеклянная» плашка — 75% непрозрачности. */
-const TRACE_PLATE_GLASS_BG = 'rgba(18, 53, 40, 0.75)'
-const TRACE_PLATE_HOVER_GLASS_BG = 'rgba(18, 53, 40, 0.65)'
 
 /** Окна и узкие проёмы: без сплошной заливки-квадрата — только контур и кружок. */
 const COMPACT_REGION_AREA = 90
@@ -804,20 +804,19 @@ export function ArchiviewFacadePanel({
     [regions],
   )
 
-  const tracePlateContent =
-    plateRegion && variant !== 'ar' ? (
-      <ExpertTracePlate
-        idx={plateRegion.idx}
-        title={plateRegion.trace?.title ?? plateRegion.label}
-        period={plateRegion.trace?.period}
-        trace={plateRegion.trace}
-        comment={plateRegion.comment}
-        verification={building?.verification}
-        expanded={plateExpanded}
-        compact={platePlacement?.compact}
-        onClose={plateExpanded ? () => setSelectedIdx(null) : undefined}
-      />
-    ) : null
+  const tracePlateContent = plateRegion ? (
+    <ExpertTracePlate
+      idx={plateRegion.idx}
+      title={plateRegion.trace?.title ?? plateRegion.label}
+      period={plateRegion.trace?.period}
+      trace={plateRegion.trace}
+      comment={plateRegion.comment}
+      verification={building?.verification}
+      expanded={plateExpanded}
+      compact={platePlacement?.compact}
+      onClose={plateExpanded ? () => setSelectedIdx(null) : undefined}
+    />
+  ) : null
 
   const comparisonBlock =
     !sideBySide && variant === 'default' ? (
@@ -1197,8 +1196,8 @@ export function ArchiviewFacadePanel({
                   aria-label={`Экспертная заметка ${plateRegion.idx}`}
                 >
                   <div
-                    className="pointer-events-auto max-h-[min(72%,520px)] w-full max-w-[min(92%,340px)] overflow-y-auto rounded-2xl border border-arch-gold/60 px-4 py-4 text-left text-sm leading-relaxed text-arch-surface shadow-2xl backdrop-blur-xl"
-                    style={{ backgroundColor: TRACE_PLATE_GLASS_BG }}
+                    className={`pointer-events-auto max-h-[min(72%,520px)] w-full max-w-[min(92%,340px)] overflow-y-auto px-4 py-4 ${TRACE_PLATE_SHELL_CLASS}`}
+                    style={{ backgroundColor: tracePlateBackground(true) }}
                     onClick={(event) => event.stopPropagation()}
                   >
                     <ExpertTracePlate
@@ -1240,9 +1239,13 @@ export function ArchiviewFacadePanel({
             </div>
           ) : null}
 
-          {plateRegion && platePlacement && plateScreenPosition && tracePlateContent && variant !== 'ar' ? (
+          {plateRegion &&
+          platePlacement &&
+          plateScreenPosition &&
+          tracePlateContent &&
+          !(variant === 'ar' && plateExpanded) ? (
             <div
-              className={`absolute z-[60] overflow-hidden rounded-2xl border border-arch-gold/60 text-left text-sm leading-relaxed text-arch-surface shadow-2xl backdrop-blur-xl ${
+              className={`absolute z-[60] ${TRACE_PLATE_SHELL_CLASS} ${
                 plateExpanded
                   ? 'pointer-events-auto max-w-[min(92%,420px)] sm:max-w-md'
                   : 'pointer-events-auto max-w-[min(92%,280px)] rounded-lg shadow-xl backdrop-blur-md'
@@ -1253,13 +1256,14 @@ export function ArchiviewFacadePanel({
                 transform: plateScreenPosition.transform,
                 maxWidth: platePlacement.maxWidthPx,
                 width: plateExpanded ? undefined : `min(${platePlacement.maxWidthPx}px, 42vw)`,
-                backgroundColor: plateExpanded ? TRACE_PLATE_GLASS_BG : TRACE_PLATE_HOVER_GLASS_BG,
+                backgroundColor: tracePlateBackground(plateExpanded),
               }}
               role={plateExpanded ? 'dialog' : undefined}
               aria-modal={plateExpanded ? true : undefined}
               aria-label={plateExpanded ? `Экспертная заметка ${plateRegion.idx}` : undefined}
               onClick={plateExpanded ? (event) => event.stopPropagation() : undefined}
             >
+              {!embeddedAr ? (
               <div
                 className={`flex touch-none items-center gap-2 border-b border-arch-gold/35 bg-arch-green-deep/20 px-2.5 py-1.5 ${
                   isPlateDragging ? 'cursor-grabbing' : 'cursor-grab'
@@ -1289,6 +1293,7 @@ export function ArchiviewFacadePanel({
                   </button>
                 ) : null}
               </div>
+              ) : null}
               <div className={plateExpanded ? 'px-5 py-4' : 'px-3 py-2.5 text-sm leading-snug'}>
                 {tracePlateContent}
               </div>
