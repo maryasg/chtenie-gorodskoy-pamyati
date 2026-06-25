@@ -51,7 +51,7 @@ export function ExpertTracePlate({
         >
           {idx}
         </span>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 break-words">
           <div className="flex items-start justify-between gap-2">
             <span
               className={`block font-semibold leading-snug ${
@@ -87,7 +87,7 @@ export function ExpertTracePlate({
           ) : null}
 
           {expanded && confidenceInfo ? (
-            <div className="mt-3.5 rounded-lg border border-arch-surface/20 bg-arch-surface/10 px-3 py-2.5">
+            <div className="mt-3.5 rounded-lg border border-arch-surface/25 bg-arch-surface/12 px-3 py-2.5 backdrop-blur-sm">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wide text-arch-surface/60">
                   Достоверность

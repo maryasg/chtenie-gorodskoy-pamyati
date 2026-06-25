@@ -736,13 +736,14 @@ export function ArchiviewFacadePanel({
       )}
 
       {imageOk && (
-        <div
-          className={
-            useSidebarLayout
-              ? 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_17rem] xl:grid-cols-[minmax(0,1fr)_20rem] lg:items-start'
-              : 'flex flex-col gap-4'
-          }
-        >
+        <div className="relative">
+          <div
+            className={
+              useSidebarLayout
+                ? 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_17rem] xl:grid-cols-[minmax(0,1fr)_20rem] lg:items-start'
+                : 'flex flex-col gap-4'
+            }
+          >
           <div
             className={
               useSidebarLayout
@@ -956,7 +957,7 @@ export function ArchiviewFacadePanel({
               )}
               {plateRegion && platePlacement && variant !== 'ar' && !plateExpanded && (
                 <div
-                  className="pointer-events-none absolute z-20 max-w-[min(88%,240px)] rounded-lg border border-arch-gold/70 bg-arch-green-deep/92 px-3 py-2.5 text-left text-sm leading-snug text-arch-surface shadow-xl backdrop-blur-md"
+                  className="pointer-events-none absolute z-20 max-w-[min(88%,260px)] rounded-lg border border-arch-gold/60 bg-arch-green-deep/72 px-3 py-2.5 text-left text-sm leading-snug text-arch-surface shadow-xl backdrop-blur-md"
                   style={{
                     left: `${platePlacement.leftPct}%`,
                     top: `${platePlacement.topPct}%`,
@@ -995,35 +996,6 @@ export function ArchiviewFacadePanel({
                 </div>
               )}
 
-              {plateExpanded && plateRegion && (
-                <div
-                  className={`absolute inset-0 z-40 flex items-center justify-center bg-black/55 ${
-                    embeddedAr ? 'p-2' : 'p-4 sm:p-6'
-                  }`}
-                  role="dialog"
-                  aria-modal="true"
-                  aria-label={`Экспертная заметка ${plateRegion.idx}`}
-                  onClick={() => setSelectedIdx(null)}
-                >
-                  <div
-                    className={`pointer-events-auto max-h-[min(82%,560px)] w-full overflow-y-auto rounded-2xl border border-arch-gold/70 bg-arch-green-deep px-5 py-4 text-left text-sm leading-relaxed text-arch-surface shadow-2xl ${
-                      embeddedAr ? 'max-w-none' : 'max-w-lg'
-                    }`}
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <ExpertTracePlate
-                      idx={plateRegion.idx}
-                      title={plateRegion.trace?.title ?? plateRegion.label}
-                      period={plateRegion.trace?.period}
-                      trace={plateRegion.trace}
-                      comment={plateRegion.comment}
-                      verification={building?.verification}
-                      expanded
-                      onClose={() => setSelectedIdx(null)}
-                    />
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
@@ -1046,6 +1018,38 @@ export function ArchiviewFacadePanel({
               ) : null}
             </div>
           ) : null}
+          </div>
+
+          {plateExpanded && plateRegion && variant !== 'ar' && (
+            <div
+              className={`absolute inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-[2px] ${
+                embeddedAr ? 'p-2' : 'p-4 sm:p-5'
+              }`}
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Экспертная заметка ${plateRegion.idx}`}
+              onClick={() => setSelectedIdx(null)}
+            >
+              <div
+                className={`pointer-events-auto w-[min(96%,42rem)] rounded-2xl border border-arch-gold/55 bg-arch-green-deep/72 px-6 py-5 text-left text-sm leading-relaxed text-arch-surface shadow-2xl backdrop-blur-md ${
+                  embeddedAr ? 'max-w-none' : 'max-w-2xl'
+                }`}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <ExpertTracePlate
+                  idx={plateRegion.idx}
+                  title={plateRegion.trace?.title ?? plateRegion.label}
+                  period={plateRegion.trace?.period}
+                  trace={plateRegion.trace}
+                  comment={plateRegion.comment}
+                  verification={building?.verification}
+                  expanded
+                  onClose={() => setSelectedIdx(null)}
+                />
+              </div>
+            </div>
+          )}
+
         </div>
       )}
     </div>
