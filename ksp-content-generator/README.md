@@ -36,8 +36,11 @@ output/
 ## Требования
 
 - Python **3.10–3.13**
-- Ключ OpenAI API: https://platform.openai.com/api-keys
+- API-ключ (KupiAPI, OpenAI или другой OpenAI-compatible сервис)
 - Интернет
+
+Рекомендуемый провайдер: **KupiAPI** (`https://kupiapi.ru/v1`).  
+Полный каталог моделей и что выбрать для текстов/картинок: **`SERVICES.md`**.
 
 ## Установка (Windows, cmd)
 
@@ -55,8 +58,13 @@ copy .env.example .env
 Откройте `.env` в блокноте и вставьте ключ:
 
 ```
-OPENAI_API_KEY=sk-ваш-ключ
+OPENAI_API_KEY=ваш-ключ-kupiapi
+OPENAI_BASE_URL=https://kupiapi.ru/v1
+TEXT_MODEL=gpt-4o-mini
+IMAGE_MODEL=dall-e-3
 ```
+
+Подробнее о выборе моделей — в `SERVICES.md`.
 
 ## Запуск
 
@@ -88,8 +96,9 @@ python generate.py --force
 
 | Переменная | По умолчанию | Описание |
 |------------|--------------|----------|
-| `OPENAI_API_KEY` | — | Ключ API |
-| `TEXT_MODEL` | `gpt-4o` | Модель для статей |
+| `OPENAI_API_KEY` | — | API-ключ |
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Для KupiAPI: `https://kupiapi.ru/v1` |
+| `TEXT_MODEL` | `gpt-4o-mini` | Модель для статей |
 | `IMAGE_MODEL` | `dall-e-3` | Модель для обложек |
 | `IMAGE_SIZE` | `1792x1024` | Формат 16:9 для dall-e-3 |
 
@@ -134,7 +143,8 @@ python generate.py --force
 
 ## Стоимость API
 
-Списание идёт с баланса OpenAI Platform (не с подписки ChatGPT Plus). Ориентировочно: одна тема = 2 запроса текста + 1 картинка.
+Списание идёт с баланса вашего провайдера (KupiAPI и т.д.).  
+Ориентиры по ценам и выбору моделей — в **`SERVICES.md`**.
 
 ## Безопасность
 

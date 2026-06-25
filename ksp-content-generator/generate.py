@@ -416,14 +416,18 @@ def main() -> int:
         print("Скопируйте .env.example в .env и вставьте ключ.", file=sys.stderr)
         return 1
 
-    text_model = os.getenv("TEXT_MODEL", "gpt-4o").strip()
+    base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip()
+    text_model = os.getenv("TEXT_MODEL", "gpt-4o-mini").strip()
     image_model = os.getenv("IMAGE_MODEL", "dall-e-3").strip()
     image_size = os.getenv("IMAGE_SIZE", "1792x1024").strip()
 
     if image_size != "1792x1024" and image_model == "dall-e-3":
         print("Предупреждение: для 16:9 у dall-e-3 используйте IMAGE_SIZE=1792x1024")
 
-    client = OpenAI(api_key=api_key)
+    print(f"API: {base_url}")
+    print(f"Тексты: {text_model} | Картинки: {image_model}")
+
+    client = OpenAI(api_key=api_key, base_url=base_url)
     plan = load_plan(args.plan)
 
     if args.number:
