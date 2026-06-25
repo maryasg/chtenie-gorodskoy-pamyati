@@ -48,7 +48,8 @@ $files = @(
     'archiview_project_model.py',
     'archiview_project_ui.py',
     'archiview_house_db.py',
-    'archiview_cv.py'
+    'archiview_cv.py',
+    'archiview_edge_canvas.py'
 )
 
 foreach ($name in $files) {
