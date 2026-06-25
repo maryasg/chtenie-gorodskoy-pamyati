@@ -37,9 +37,9 @@ const CLASS_COLORS: Record<string, string> = {
   check_manually: '#b000b0',
 }
 
-/** Полупрозрачная зелёная «стеклянная» плашка — rgba: последнее число = непрозрачность. */
-const TRACE_PLATE_GLASS_BG = 'rgba(18, 53, 40, 0.55)'
-const TRACE_PLATE_HOVER_GLASS_BG = 'rgba(18, 53, 40, 0.48)'
+/** Полупрозрачная зелёная «стеклянная» плашка — 65% непрозрачности. */
+const TRACE_PLATE_GLASS_BG = 'rgba(18, 53, 40, 0.65)'
+const TRACE_PLATE_HOVER_GLASS_BG = 'rgba(18, 53, 40, 0.55)'
 
 /** Окна и узкие проёмы: без сплошной заливки-квадрата — только контур и кружок. */
 const COMPACT_REGION_AREA = 90
@@ -630,8 +630,9 @@ export function ArchiviewFacadePanel({
         maxY: Math.max(...ys),
       },
       layout: blockLayout ?? undefined,
+      sidebarLayout: useSidebarLayout,
     })
-  }, [plateRegion, plateExpanded, blockLayout])
+  }, [plateRegion, plateExpanded, blockLayout, useSidebarLayout])
 
   useLayoutEffect(() => {
     const updateBlockLayout = () => {

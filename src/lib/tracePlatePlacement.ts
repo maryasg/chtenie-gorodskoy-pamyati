@@ -20,6 +20,8 @@ type RegionBBox = { minX: number; minY: number; maxX: number; maxY: number }
 type TracePlateOptions = {
   bbox?: RegionBBox
   layout?: BlockLayoutMetrics
+  /** Двухколоночная раскладка: фото слева, список справа. */
+  sidebarLayout?: boolean
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -35,19 +37,18 @@ function imageToBlock(
   cxPct: number,
   cyPct: number,
   layout?: BlockLayoutMetrics,
-): { blockCx: number; blockCy: number; imageRightPct: number } {
+): { blockCx: number; blockCy: number; imageRightPct: number; imageLeftPct: number } {
   if (!layout) {
-    return { blockCx: cxPct, blockCy: cyPct, imageRightPct: 100 }
+    return { blockCx: cxPct, blockCy: cyPct, imageRightPct: 100, imageLeftPct: 0 }
   }
   const blockCx = layout.imageLeftPct + (cxPct / 100) * layout.imageWidthPct
   const blockCy = layout.imageTopPct + (cyPct / 100) * layout.imageHeightPct
   const imageRightPct = layout.imageLeftPct + layout.imageWidthPct
-  return { blockCx, blockCy, imageRightPct }
+  return { blockCx, blockCy, imageRightPct, imageLeftPct: layout.imageLeftPct }
 }
 
 /**
- * Плашка рядом с артефактом: перекрывает часть фото и часть списка.
- * Пропорции ~3:4 или 4:3 в зависимости от положения подсветки.
+ * Плашка рядом с артефактом: перекрывает часть фото и часть списка на стыке колонок.
  */
 export function tracePlatePlacement(
   cxPct: number,
@@ -57,17 +58,17 @@ export function tracePlatePlacement(
 ): TracePlateLayout {
   const bbox = options?.bbox
   const layout = options?.layout
+  const sidebarLayout = options?.sidebarLayout ?? false
   const span = regionSpan(bbox)
   const regionSmall = span <= 7.5
 
-  const { blockCx, blockCy, imageRightPct } = imageToBlock(cxPct, cyPct, layout)
-  const hasSidebar = layout ? imageRightPct < 98 : false
+  const { blockCx, blockCy, imageRightPct, imageLeftPct } = imageToBlock(cxPct, cyPct, layout)
+  const hasSidebar = sidebarLayout && layout && imageRightPct < 98
 
-  const nearSidebar = hasSidebar && blockCx > imageRightPct * 0.82
   const aspectRatio =
-    nearSidebar || cyPct > 58 || cyPct < 28
+    cyPct > 58 || cyPct < 28
       ? 0.75
-      : blockCx < imageRightPct * 0.38
+      : cxPct < 38
         ? 1.33
         : 0.75
 
@@ -76,22 +77,42 @@ export function tracePlatePlacement(
   let offsetX = 0
   let offsetY = 0
   if (regionSmall) {
-    if (cxPct < 38) offsetX = layout ? layout.imageWidthPct * 0.09 : 9
-    else if (cxPct > 62) offsetX = layout ? -layout.imageWidthPct * 0.09 : -9
+    if (cxPct < 38) offsetX = layout ? layout.imageWidthPct * 0.08 : 8
+    else if (cxPct > 62) offsetX = layout ? -layout.imageWidthPct * 0.06 : -6
     if (cyPct < 34) offsetY = layout ? layout.imageHeightPct * 0.1 : 11
     else if (cyPct > 66) offsetY = layout ? -layout.imageHeightPct * 0.1 : -11
   } else if (span > 14) {
-    offsetY = cyPct < 50 ? (layout ? layout.imageHeightPct * 0.04 : 4) : layout ? -layout.imageHeightPct * 0.04 : -4
+    offsetY =
+      cyPct < 50
+        ? layout
+          ? layout.imageHeightPct * 0.04
+          : 4
+        : layout
+          ? -layout.imageHeightPct * 0.04
+          : -4
   }
 
-  let leftPct = blockCx + offsetX
+  let leftPct: number
   let topPct = blockCy + offsetY
 
-  if (nearSidebar && hasSidebar) {
-    leftPct = clamp(leftPct, imageRightPct * 0.72, imageRightPct + 5)
+  if (hasSidebar) {
+    const seam = imageRightPct
+    const atSeam = seam - 1.5
+    const nearArtifact = blockCx + offsetX
+
+    if (cxPct >= 42) {
+      // Правые артефакты — центр на стыке фото/списка
+      leftPct = atSeam
+    } else {
+      // Левые и центральные — ближе к подсветке, но не уезжают в список
+      leftPct = Math.min(nearArtifact, atSeam + 2)
+    }
+
+    leftPct = clamp(leftPct, imageLeftPct + 14, seam + 3)
   } else {
-    leftPct = clamp(leftPct, 8, Math.min(94, imageRightPct * 0.95))
+    leftPct = clamp(blockCx + offsetX, 8, 94)
   }
+
   topPct = clamp(topPct, 5, expanded ? 78 : 84)
 
   let transform = 'translate(-50%, -50%)'

@@ -24,56 +24,31 @@ type TimelineSegment = {
   thumbTo: number
 }
 
-const M001_TRANSITION_MS = 2200
-const M001_HOLD_MS = 900
+const M001_HOLD_1840_MS = 1000
+const M001_CROSSFADE_MS = 2200
+const M001_HOLD_PLATEAU_MS = 800
+/** Половина появления 1930 (до 50% = 0.4), затем стартует 2026. */
+const M001_1930_HALF_MS = 1100
 
 /** Хореография автопроигрывания для дома Ардовых (MOSCOW_001). */
 function moscow001Timeline(layerCount: number): TimelineSegment[] {
   if (layerCount < 4) return []
 
   return [
-    // 1840: появляется, кружок ползунка тоже проявляется
+    // 1840 — 100%, пауза 1 с
     {
-      durationMs: M001_TRANSITION_MS,
-      from: [0, 0, 0, 0],
+      durationMs: M001_HOLD_1840_MS,
+      from: [1, 0, 0, 0],
       to: [1, 0, 0, 0],
       sliderFrom: 0,
       sliderTo: 0,
       thumbFrom: 0,
       thumbTo: 1,
     },
+    // Одновременно: 1840 → 20%, 1924 → 80%
     {
-      durationMs: M001_HOLD_MS,
+      durationMs: M001_CROSSFADE_MS,
       from: [1, 0, 0, 0],
-      to: [1, 0, 0, 0],
-      sliderFrom: 0,
-      sliderTo: 0,
-      thumbFrom: 1,
-      thumbTo: 1,
-    },
-    // 1840 остаётся на 20%
-    {
-      durationMs: M001_TRANSITION_MS,
-      from: [1, 0, 0, 0],
-      to: [0.2, 0, 0, 0],
-      sliderFrom: 0,
-      sliderTo: 0,
-      thumbFrom: 1,
-      thumbTo: 1,
-    },
-    {
-      durationMs: M001_HOLD_MS,
-      from: [0.2, 0, 0, 0],
-      to: [0.2, 0, 0, 0],
-      sliderFrom: 0,
-      sliderTo: 0,
-      thumbFrom: 1,
-      thumbTo: 1,
-    },
-    // 1924: до 80%
-    {
-      durationMs: M001_TRANSITION_MS,
-      from: [0.2, 0, 0, 0],
       to: [0.2, 0.8, 0, 0],
       sliderFrom: 0,
       sliderTo: 33.33,
@@ -81,7 +56,7 @@ function moscow001Timeline(layerCount: number): TimelineSegment[] {
       thumbTo: 1,
     },
     {
-      durationMs: M001_HOLD_MS,
+      durationMs: M001_HOLD_PLATEAU_MS,
       from: [0.2, 0.8, 0, 0],
       to: [0.2, 0.8, 0, 0],
       sliderFrom: 33.33,
@@ -89,37 +64,28 @@ function moscow001Timeline(layerCount: number): TimelineSegment[] {
       thumbFrom: 1,
       thumbTo: 1,
     },
-    // 1930: до 80%
+    // 1930 до 50% (0.4)
     {
-      durationMs: M001_TRANSITION_MS,
+      durationMs: M001_1930_HALF_MS,
       from: [0.2, 0.8, 0, 0],
-      to: [0.2, 0.8, 0.8, 0],
+      to: [0.2, 0.8, 0.4, 0],
       sliderFrom: 33.33,
-      sliderTo: 66.66,
+      sliderTo: 50,
       thumbFrom: 1,
       thumbTo: 1,
     },
+    // 1930 50%→80% и одновременно 2026 → 100%
     {
-      durationMs: M001_HOLD_MS,
-      from: [0.2, 0.8, 0.8, 0],
-      to: [0.2, 0.8, 0.8, 0],
-      sliderFrom: 66.66,
-      sliderTo: 66.66,
-      thumbFrom: 1,
-      thumbTo: 1,
-    },
-    // 2026: накрывает целиком
-    {
-      durationMs: M001_TRANSITION_MS,
-      from: [0.2, 0.8, 0.8, 0],
+      durationMs: M001_1930_HALF_MS,
+      from: [0.2, 0.8, 0.4, 0],
       to: [0.2, 0.8, 0.8, 1],
-      sliderFrom: 66.66,
+      sliderFrom: 50,
       sliderTo: 100,
       thumbFrom: 1,
       thumbTo: 1,
     },
     {
-      durationMs: M001_HOLD_MS,
+      durationMs: M001_HOLD_PLATEAU_MS,
       from: [0.2, 0.8, 0.8, 1],
       to: [0.2, 0.8, 0.8, 1],
       sliderFrom: 100,
@@ -127,9 +93,9 @@ function moscow001Timeline(layerCount: number): TimelineSegment[] {
       thumbFrom: 1,
       thumbTo: 1,
     },
-    // 2026 уходит, ползунок прыгает на 1840 — кружок невидим
+    // Сброс цикла: всё в прозрачность, ползунок на 1840, кружок невидим
     {
-      durationMs: M001_TRANSITION_MS,
+      durationMs: M001_CROSSFADE_MS,
       from: [0.2, 0.8, 0.8, 1],
       to: [0, 0, 0, 0],
       sliderFrom: 100,
@@ -138,7 +104,7 @@ function moscow001Timeline(layerCount: number): TimelineSegment[] {
       thumbTo: 0,
     },
     {
-      durationMs: M001_HOLD_MS / 2,
+      durationMs: 150,
       from: [0, 0, 0, 0],
       to: [0, 0, 0, 0],
       sliderFrom: 0,
@@ -178,7 +144,9 @@ function sampleTimeline(
         opacities: lerpOpacities(segment.from, segment.to, eased),
         sliderPct: lerp(segment.sliderFrom, segment.sliderTo, eased),
         thumbOpacity: lerp(segment.thumbFrom, segment.thumbTo, eased),
-        emphasisIndex: emphasisLayerIndex(segment.to),
+        emphasisIndex: emphasisLayerIndex(
+          lerpOpacities(segment.from, segment.to, eased),
+        ),
       }
     }
     cursor = nextCursor
