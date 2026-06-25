@@ -24,7 +24,7 @@ import math
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Tuple
+from typing import Iterable, List, Literal, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -111,6 +111,107 @@ def ensure_bgr(img: np.ndarray) -> np.ndarray:
     if img.ndim == 2:
         return cv.cvtColor(img, cv.COLOR_GRAY2BGR)
     return img
+
+
+# ---------------------- time-layer edge-stretch canvas -----------------
+
+TIME_LAYER_WIDTH = 4200
+TIME_LAYER_HEIGHT = 2452
+AlignMode = Literal["center", "top"]
+
+
+def contain_fit_size(src_w: int, src_h: int, canvas_w: int, canvas_h: int) -> Tuple[int, int, float]:
+    if src_w <= 0 or src_h <= 0:
+        raise ValueError("Source image size must be positive")
+    scale = min(canvas_w / float(src_w), canvas_h / float(src_h))
+    fit_w = max(1, int(round(src_w * scale)))
+    fit_h = max(1, int(round(src_h * scale)))
+    return fit_w, fit_h, scale
+
+
+def placement_offset(
+    canvas_w: int,
+    canvas_h: int,
+    fit_w: int,
+    fit_h: int,
+    align: AlignMode = "center",
+) -> Tuple[int, int]:
+    x0 = (canvas_w - fit_w) // 2
+    y0 = 0 if align == "top" else (canvas_h - fit_h) // 2
+    return x0, y0
+
+
+def edge_stretch_to_canvas(
+    img: np.ndarray,
+    canvas_w: int = TIME_LAYER_WIDTH,
+    canvas_h: int = TIME_LAYER_HEIGHT,
+    align: AlignMode = "center",
+    corner_fill: Tuple[int, int, int] | None = None,
+) -> np.ndarray:
+    """Fit image inside canvas and fill margins by repeating edge pixels."""
+    if img is None or img.size == 0:
+        raise ValueError("Empty image")
+    if canvas_w <= 0 or canvas_h <= 0:
+        raise ValueError("Canvas size must be positive")
+
+    src = img
+    if src.ndim == 2:
+        src = cv.cvtColor(src, cv.COLOR_GRAY2BGR)
+    elif src.ndim == 3 and src.shape[2] == 4:
+        src = cv.cvtColor(src, cv.COLOR_BGRA2BGR)
+    else:
+        src = ensure_bgr(src)
+
+    h, w = src.shape[:2]
+    fit_w, fit_h, scale = contain_fit_size(w, h, canvas_w, canvas_h)
+    interp = cv.INTER_AREA if scale < 1.0 else cv.INTER_CUBIC
+    resized = cv.resize(src, (fit_w, fit_h), interpolation=interp)
+
+    x0, y0 = placement_offset(canvas_w, canvas_h, fit_w, fit_h, align=align)
+    x1 = x0 + fit_w
+    y1 = y0 + fit_h
+
+    if corner_fill is None:
+        canvas = np.empty((canvas_h, canvas_w, 3), dtype=resized.dtype)
+    else:
+        canvas = np.full((canvas_h, canvas_w, 3), corner_fill, dtype=resized.dtype)
+
+    canvas[y0:y1, x0:x1] = resized
+
+    if y0 > 0:
+        canvas[0:y0, x0:x1] = resized[0:1, :, :]
+    if y1 < canvas_h:
+        canvas[y1:canvas_h, x0:x1] = resized[-1:, :, :]
+    if x0 > 0:
+        canvas[y0:y1, 0:x0] = resized[:, 0:1, :]
+    if x1 < canvas_w:
+        canvas[y0:y1, x1:canvas_w] = resized[:, -1:, :]
+
+    if y0 > 0 and x0 > 0:
+        canvas[0:y0, 0:x0] = resized[0, 0]
+    if y0 > 0 and x1 < canvas_w:
+        canvas[0:y0, x1:canvas_w] = resized[0, -1]
+    if y1 < canvas_h and x0 > 0:
+        canvas[y1:canvas_h, 0:x0] = resized[-1, 0]
+    if y1 < canvas_h and x1 < canvas_w:
+        canvas[y1:canvas_h, x1:canvas_w] = resized[-1, -1]
+
+    return canvas
+
+
+def edge_stretch_summary(
+    src_w: int,
+    src_h: int,
+    canvas_w: int = TIME_LAYER_WIDTH,
+    canvas_h: int = TIME_LAYER_HEIGHT,
+    align: AlignMode = "center",
+) -> str:
+    fit_w, fit_h, scale = contain_fit_size(src_w, src_h, canvas_w, canvas_h)
+    x0, y0 = placement_offset(canvas_w, canvas_h, fit_w, fit_h, align=align)
+    return (
+        f"исходник {src_w}×{src_h} → вписано {fit_w}×{fit_h} (×{scale:.4f}), "
+        f"положение ({x0}, {y0}), холст {canvas_w}×{canvas_h}"
+    )
 
 
 def clahe_gray(img: np.ndarray, clip_limit: float = 2.0, tile_grid_size: int = 8) -> np.ndarray:
