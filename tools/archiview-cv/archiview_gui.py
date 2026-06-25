@@ -59,6 +59,19 @@ except Exception:  # pragma: no cover - GUI message shown at runtime
     ImageOps = None  # type: ignore[assignment]
 
 try:
+    from archiview_edge_canvas import (
+        TIME_LAYER_HEIGHT,
+        TIME_LAYER_WIDTH,
+        edge_stretch_summary,
+        edge_stretch_to_canvas,
+    )
+except Exception:
+    TIME_LAYER_WIDTH = 4200  # type: ignore[misc,assignment]
+    TIME_LAYER_HEIGHT = 2452  # type: ignore[misc,assignment]
+    edge_stretch_summary = None  # type: ignore[assignment,misc]
+    edge_stretch_to_canvas = None  # type: ignore[assignment,misc]
+
+try:
     from archiview_house_db import HouseDatabaseFrame, HouseRecord, create_house_project
 except Exception:
     HouseDatabaseFrame = None  # type: ignore[assignment,misc]
@@ -3796,6 +3809,18 @@ class App(tk.Tk):
         self._straight_preview_pil = None
         self._straight_crop_drag_start: Optional[Tuple[float, float]] = None
         self._straight_crop_drag_canvas_start: Optional[Tuple[int, int]] = None
+
+        # Edge-stretch canvas for time-layer exports (4200×2452).
+        self.edge_canvas_img = tk.StringVar(value="")
+        self.edge_canvas_out = tk.StringVar(value=str(APP_DIR / "time_layer.jpg"))
+        self.edge_canvas_w = tk.IntVar(value=TIME_LAYER_WIDTH)
+        self.edge_canvas_h = tk.IntVar(value=TIME_LAYER_HEIGHT)
+        self.edge_canvas_align = tk.StringVar(value="center")
+        self.edge_canvas_jpeg_quality = tk.IntVar(value=92)
+        self.edge_canvas_status = tk.StringVar(value="Загрузите фото и нажмите «Применить растяжение краёв».")
+        self._edge_canvas_result_pil = None
+        self._edge_canvas_straight_source_pil = None
+
         self.comparison_rakurs = tk.StringVar(value="similar")
         self.independent_labeling = tk.BooleanVar(value=False)
 
@@ -7713,6 +7738,229 @@ map.on('click',e=>{{
             messagebox.showerror("Ошибка выпрямления", str(exc))
             self._log(f"Ошибка выпрямления: {exc}\n")
 
+    # ---------------- edge-stretch canvas (time layers) ----------------
+
+    def _build_edge_canvas_tab(self, parent: ttk.Frame) -> None:
+        parent.columnconfigure(1, weight=1)
+        self._row_file(parent, "Исходное фото:", self.edge_canvas_img, self.choose_edge_canvas_img, 0)
+        self._row_save(parent, "Куда сохранить:", self.edge_canvas_out, self.choose_edge_canvas_out, 1)
+
+        size_frame = ttk.Frame(parent)
+        size_frame.grid(row=2, column=0, columnspan=3, sticky="w", padx=10, pady=6)
+        ttk.Label(size_frame, text="Размер холста:").pack(side="left")
+        ttk.Spinbox(size_frame, from_=400, to=8000, width=7, textvariable=self.edge_canvas_w).pack(side="left", padx=(8, 4))
+        ttk.Label(size_frame, text="×").pack(side="left")
+        ttk.Spinbox(size_frame, from_=400, to=8000, width=7, textvariable=self.edge_canvas_h).pack(side="left", padx=(4, 12))
+        ttk.Button(
+            size_frame,
+            text=f"Слой времени ({TIME_LAYER_WIDTH}×{TIME_LAYER_HEIGHT})",
+            command=self._reset_edge_canvas_size_preset,
+        ).pack(side="left")
+
+        align_frame = ttk.Frame(parent)
+        align_frame.grid(row=3, column=0, columnspan=3, sticky="w", padx=10, pady=4)
+        ttk.Label(align_frame, text="Положение фото на холсте:").pack(side="left")
+        ttk.Radiobutton(
+            align_frame,
+            text="по центру",
+            variable=self.edge_canvas_align,
+            value="center",
+        ).pack(side="left", padx=(8, 4))
+        ttk.Radiobutton(
+            align_frame,
+            text="сверху (больше поля снизу)",
+            variable=self.edge_canvas_align,
+            value="top",
+        ).pack(side="left", padx=4)
+
+        ttk.Label(
+            parent,
+            text=(
+                "Фото вписывается в холст без обрезки; пустые поля заполняются «растяжением» крайних пикселей — "
+                "как художественный приём вместо чёрных или белых полос после выпрямления. "
+                f"Для сайта Archiview слои времени обычно {TIME_LAYER_WIDTH}×{TIME_LAYER_HEIGHT} px."
+            ),
+            wraplength=900,
+            foreground="#555",
+        ).grid(row=4, column=0, columnspan=3, sticky="w", padx=10, pady=8)
+
+        btns = ttk.Frame(parent)
+        btns.grid(row=5, column=0, columnspan=3, sticky="w", padx=10, pady=8)
+        ttk.Button(btns, text="Применить растяжение краёв", command=self.run_edge_canvas_preview).pack(side="left")
+        tk.Button(
+            btns,
+            text="СОХРАНИТЬ JPG",
+            command=self.save_edge_canvas_result,
+            bg="#0b7a3b",
+            fg="white",
+            activebackground="#075a2c",
+            activeforeground="white",
+            font=("TkDefaultFont", 9, "bold"),
+            padx=8,
+            pady=4,
+        ).pack(side="left", padx=8)
+        ttk.Button(btns, text="Взять выпрямленный предпросмотр", command=self.use_straight_preview_for_edge_canvas).pack(
+            side="left", padx=4
+        )
+        ttk.Button(btns, text="Открыть папку результата", command=lambda: open_path(Path(self.edge_canvas_out.get()).parent)).pack(
+            side="left", padx=4
+        )
+
+        qual = ttk.Frame(parent)
+        qual.grid(row=6, column=0, columnspan=3, sticky="w", padx=10, pady=4)
+        ttk.Label(qual, text="Качество JPG:").pack(side="left")
+        ttk.Scale(qual, from_=70, to=100, variable=self.edge_canvas_jpeg_quality, orient="horizontal", length=180).pack(
+            side="left", padx=8
+        )
+        ttk.Label(qual, textvariable=self.edge_canvas_jpeg_quality).pack(side="left")
+
+        preview_box = ttk.LabelFrame(parent, text="Предпросмотр холста")
+        preview_box.grid(row=7, column=0, columnspan=3, sticky="nsew", padx=10, pady=(4, 10))
+        preview_box.rowconfigure(0, weight=1)
+        preview_box.columnconfigure(0, weight=1)
+        parent.rowconfigure(7, weight=1)
+        self.edge_canvas_preview = tk.Canvas(preview_box, bg="#2e2e2e", highlightthickness=0, height=360)
+        self.edge_canvas_preview.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+        self.edge_canvas_preview.bind("<Configure>", lambda _e: self._refresh_edge_canvas_preview())
+        ttk.Label(preview_box, textvariable=self.edge_canvas_status, wraplength=900, foreground="#555").grid(
+            row=1, column=0, sticky="w", padx=8, pady=(0, 8)
+        )
+
+    def _reset_edge_canvas_size_preset(self) -> None:
+        self.edge_canvas_w.set(TIME_LAYER_WIDTH)
+        self.edge_canvas_h.set(TIME_LAYER_HEIGHT)
+
+    def choose_edge_canvas_img(self) -> None:
+        path = filedialog.askopenfilename(title="Выберите фото", filetypes=IMAGE_TYPES)
+        if path:
+            self.edge_canvas_img.set(path)
+            self._edge_canvas_straight_source_pil = None
+            p = Path(path)
+            self.edge_canvas_out.set(str(p.with_name(p.stem + f"_canvas_{TIME_LAYER_WIDTH}x{TIME_LAYER_HEIGHT}.jpg")))
+
+    def choose_edge_canvas_out(self) -> None:
+        path = filedialog.asksaveasfilename(
+            title="Сохранить холст как",
+            defaultextension=".jpg",
+            filetypes=[("JPEG", "*.jpg"), ("PNG", "*.png"), ("Все файлы", "*.*")],
+        )
+        if path:
+            self.edge_canvas_out.set(path)
+
+    def use_straight_preview_for_edge_canvas(self) -> None:
+        if self._straight_preview_pil is None:
+            messagebox.showinfo(
+                "Нет выпрямления",
+                "Сначала выпрямите фасад на вкладке «Отдельно выпрямить фасад» "
+                "или выберите файл вручную.",
+            )
+            return
+        self._edge_canvas_straight_source_pil = self._straight_preview_pil.copy()
+        self.edge_canvas_img.set("")
+        self._edge_canvas_result_pil = None
+        if hasattr(self, "notebook") and hasattr(self, "tab_edge_canvas"):
+            self.notebook.select(self.tab_edge_canvas)
+        w, h = self._straight_preview_pil.size
+        self.edge_canvas_status.set(
+            f"Взят выпрямленный предпросмотр {w}×{h} px. Нажмите «Применить растяжение краёв»."
+        )
+        self.after(80, self._refresh_edge_canvas_preview)
+
+    def _edge_canvas_source_bgr(self) -> np.ndarray:
+        if self.edge_canvas_img.get().strip():
+            return cv_read(self.edge_canvas_img.get())
+        if self._edge_canvas_straight_source_pil is not None:
+            rgb = np.array(self._edge_canvas_straight_source_pil.convert("RGB"))
+            return cv.cvtColor(rgb, cv.COLOR_RGB2BGR)  # type: ignore[union-attr]
+        raise ValueError("Выберите фото или возьмите выпрямленный предпросмотр.")
+
+    def run_edge_canvas_preview(self) -> None:
+        if edge_stretch_to_canvas is None or cv is None:
+            messagebox.showerror("Модуль", "Нужны OpenCV и archiview_edge_canvas.py.")
+            return
+        try:
+            src = self._edge_canvas_source_bgr()
+            cw = int(self.edge_canvas_w.get())
+            ch = int(self.edge_canvas_h.get())
+            align = "top" if self.edge_canvas_align.get() == "top" else "center"
+            result = edge_stretch_to_canvas(src, canvas_w=cw, canvas_h=ch, align=align)
+            if Image is None:
+                raise RuntimeError("Нужен Pillow для предпросмотра.")
+            self._edge_canvas_result_pil = Image.fromarray(cv.cvtColor(result, cv.COLOR_BGR2RGB))  # type: ignore[union-attr]
+            sh, sw = src.shape[:2]
+            summary = (
+                edge_stretch_summary(sw, sh, canvas_w=cw, canvas_h=ch, align=align)
+                if edge_stretch_summary is not None
+                else f"{sw}×{sh} → {cw}×{ch}"
+            )
+            self.edge_canvas_status.set(f"Готово: {summary}")
+            if hasattr(self, "notebook") and hasattr(self, "tab_edge_canvas"):
+                self.notebook.select(self.tab_edge_canvas)
+            self.after(80, self._refresh_edge_canvas_preview)
+            self._log(f"\nРастяжение краёв: {summary}\n")
+        except Exception as exc:
+            messagebox.showerror("Ошибка", str(exc))
+            self._log(f"Растяжение краёв: {exc}\n")
+
+    def _refresh_edge_canvas_preview(self) -> None:
+        if not hasattr(self, "edge_canvas_preview"):
+            return
+        if not self._canvas_layout_ready(self.edge_canvas_preview):
+            self.after(100, self._refresh_edge_canvas_preview)
+            return
+        if self._edge_canvas_result_pil is None:
+            if self._edge_canvas_straight_source_pil is not None:
+                try:
+                    self._show_pil_on_canvas(
+                        self.edge_canvas_preview,
+                        self._edge_canvas_straight_source_pil,
+                        "_edge_canvas_photo_ref",
+                        "edge_canvas_display",
+                    )
+                    return
+                except Exception:
+                    pass
+            self._draw_canvas_message(
+                self.edge_canvas_preview,
+                "Загрузите фото или возьмите выпрямленный предпросмотр, затем нажмите «Применить растяжение краёв».",
+            )
+            return
+        try:
+            self._show_pil_on_canvas(
+                self.edge_canvas_preview,
+                self._edge_canvas_result_pil,
+                "_edge_canvas_photo_ref",
+                "edge_canvas_display",
+            )
+        except Exception as exc:
+            self.edge_canvas_status.set(str(exc))
+            self._draw_canvas_message(self.edge_canvas_preview, str(exc))
+
+    def save_edge_canvas_result(self) -> None:
+        if self._edge_canvas_result_pil is None:
+            messagebox.showinfo("Нет результата", "Сначала нажмите «Применить растяжение краёв».")
+            return
+        if not self.edge_canvas_out.get().strip():
+            messagebox.showinfo("Нужен путь", "Укажите, куда сохранить файл.")
+            return
+        try:
+            out_path = Path(self.edge_canvas_out.get())
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            img = self._edge_canvas_result_pil
+            w, h = img.size
+            if out_path.suffix.lower() in (".jpg", ".jpeg"):
+                rgb = img.convert("RGB")
+                quality = max(70, min(100, int(self.edge_canvas_jpeg_quality.get())))
+                rgb.save(out_path, format="JPEG", quality=quality, optimize=True)
+            else:
+                img.save(out_path)
+            self.edge_canvas_status.set(f"Сохранено: {out_path.name} ({w}×{h} px)")
+            self._log(f"\nХолст с растянутыми краями → {out_path} ({w}×{h} px)\n")
+            messagebox.showinfo("Готово", f"Сохранено:\n{out_path}\n{w}×{h} px")
+            open_path(out_path.parent)
+        except Exception as exc:
+            messagebox.showerror("Не удалось сохранить", str(exc))
+
 
 # ---------------------------------------------------------------------------
 # v11 embedded workflow: comparison and markup inside tabs, no extra windows
@@ -9235,18 +9483,21 @@ class AppV13(AppV12):
         self.tab_markup = ttk.Frame(self.notebook)
         self.tab_result = ttk.Frame(self.notebook)
         self.tab_straight = ttk.Frame(self.notebook)
+        self.tab_edge_canvas = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_select, text="1. Источники")
         self.notebook.add(self.tab_rectify, text="2. Выпрямление")
         self.notebook.add(self.tab_compare, text="3. Сравнение")
         self.notebook.add(self.tab_markup, text="4. Разметка")
         self.notebook.add(self.tab_result, text="5. Результат")
         self.notebook.add(self.tab_straight, text="6. Отдельно выпрямить фасад")
+        self.notebook.add(self.tab_edge_canvas, text="7. Холст слоёв (растяжение)")
         self._build_select_tab(self.tab_select)
         self._build_rectify_tab(self.tab_rectify)
         self._build_compare_tab(self.tab_compare)
         self._build_markup_tab(self.tab_markup)
         self._build_result_tab(self.tab_result)
         self._build_straight_tab(self.tab_straight)
+        self._build_edge_canvas_tab(self.tab_edge_canvas)
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
         self.active_cmp_banner = tk.StringVar(value="")
@@ -11313,6 +11564,8 @@ class AppV16(AppV15):
             "Delete / Backspace или кнопка — убрать выбранную вершину (минимум 3 точки).\n"
             "v16: «Ниже / Выше» в списке областей — порядок слоёв (большую область можно увести под мелкие).\n"
             "v16: на вкладке «Разметка» — кнопки +/− для масштаба (или колесо над фото).\n"
+            f"v16: вкладка «7. Холст слоёв» — растяжение краёв до {TIME_LAYER_WIDTH}×{TIME_LAYER_HEIGHT} "
+            "для слоёв времени на сайте.\n"
         )
 
     def _build_select_tab(self, parent: ttk.Frame) -> None:
