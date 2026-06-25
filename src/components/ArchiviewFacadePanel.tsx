@@ -634,9 +634,11 @@ export function ArchiviewFacadePanel({
       plateRegion
         ? tracePlatePlacement(plateRegion.cx, plateRegion.cy, plateExpanded, {
             sidebarLayout: useSidebarLayout,
+            cardId: assets.cardId,
+            regionIdx: plateRegion.idx,
           })
         : null,
-    [plateRegion, plateExpanded, useSidebarLayout],
+    [plateRegion, plateExpanded, useSidebarLayout, assets.cardId],
   )
 
   const plateRegionIdx = plateRegion?.idx ?? null
@@ -751,31 +753,47 @@ export function ArchiviewFacadePanel({
     [regions],
   )
 
-  const sidebarTracePlate =
+  const sidebarTracePlateContent =
     plateRegion && platePlacement?.surface === 'sidebar' && variant !== 'ar' ? (
+      <ExpertTracePlate
+        idx={plateRegion.idx}
+        title={plateRegion.trace?.title ?? plateRegion.label}
+        period={plateRegion.trace?.period}
+        trace={plateRegion.trace}
+        comment={plateRegion.comment}
+        verification={building?.verification}
+        expanded={plateExpanded}
+        compact={platePlacement.compact}
+        onClose={plateExpanded ? () => setSelectedIdx(null) : undefined}
+      />
+    ) : null
+
+  const renderSidebarTracePlate = (pinnedToFacade: boolean) => {
+    if (!sidebarTracePlateContent || !platePlacement) return null
+    return (
       <div
-        className={`pointer-events-auto absolute inset-x-0 top-0 z-[60] rounded-2xl border border-white/20 px-4 py-3 text-left text-sm leading-relaxed text-arch-surface shadow-2xl backdrop-blur-xl ${
+        className={`pointer-events-auto z-[60] max-w-none rounded-2xl border border-white/20 px-4 py-3 text-left text-sm leading-relaxed text-arch-surface shadow-2xl backdrop-blur-xl ${
           plateExpanded ? 'px-5 py-4' : ''
+        } ${
+          pinnedToFacade
+            ? 'absolute inset-x-0'
+            : 'relative w-full'
         }`}
-        style={{ backgroundColor: plateExpanded ? TRACE_PLATE_GLASS_BG : TRACE_PLATE_HOVER_GLASS_BG }}
+        style={{
+          backgroundColor: plateExpanded ? TRACE_PLATE_GLASS_BG : TRACE_PLATE_HOVER_GLASS_BG,
+          ...(pinnedToFacade && platePlacement.sidebarTopPct != null
+            ? { top: `${platePlacement.sidebarTopPct}%` }
+            : {}),
+        }}
         role={plateExpanded ? 'dialog' : undefined}
         aria-modal={plateExpanded ? true : undefined}
-        aria-label={plateExpanded ? `Экспертная заметка ${plateRegion.idx}` : undefined}
+        aria-label={plateExpanded ? `Экспертная заметка ${plateRegion!.idx}` : undefined}
         onClick={plateExpanded ? (event) => event.stopPropagation() : undefined}
       >
-        <ExpertTracePlate
-          idx={plateRegion.idx}
-          title={plateRegion.trace?.title ?? plateRegion.label}
-          period={plateRegion.trace?.period}
-          trace={plateRegion.trace}
-          comment={plateRegion.comment}
-          verification={building?.verification}
-          expanded={plateExpanded}
-          compact={platePlacement.compact}
-          onClose={plateExpanded ? () => setSelectedIdx(null) : undefined}
-        />
+        {sidebarTracePlateContent}
       </div>
-    ) : null
+    )
+  }
 
   const comparisonBlock =
     !sideBySide && variant === 'default' ? (
@@ -1198,8 +1216,10 @@ export function ArchiviewFacadePanel({
           {useSidebarLayout ? (
             <>
               {regionList ? (
-                <div className="relative z-0 order-2 min-w-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:self-start">
-                  {sidebarTracePlate}
+                <div className="relative z-0 order-2 min-w-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:min-h-[min(78vh,820px)] lg:self-stretch">
+                  {renderSidebarTracePlate(false) ? (
+                    <div className="mb-2 lg:hidden">{renderSidebarTracePlate(false)}</div>
+                  ) : null}
                   {regionList}
                 </div>
               ) : null}
@@ -1210,6 +1230,12 @@ export function ArchiviewFacadePanel({
               {regionList ? (
                 <div className="w-full shrink-0 lg:w-72 xl:w-80">{regionList}</div>
               ) : null}
+            </div>
+          ) : null}
+
+          {useSidebarLayout && renderSidebarTracePlate(true) ? (
+            <div className="pointer-events-none absolute inset-y-0 right-0 z-[55] hidden w-[17rem] xl:w-[20rem] lg:block">
+              {renderSidebarTracePlate(true)}
             </div>
           ) : null}
 
