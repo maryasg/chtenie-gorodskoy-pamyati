@@ -58,10 +58,8 @@ function displayYearLabel(frame: CrossfadeFrame): string {
   return `${frame.from.label ?? frame.from.year} → ${frame.to.label ?? frame.to.year}`
 }
 
-/** Пауза на кадре — короткий «бит», как в монтаже stills. */
-const LAYER_HOLD_MS = 1000
-/** Одновременный cross-dissolve: оба кадра плавно меняют прозрачность. */
-const LAYER_CROSSFADE_MS = 1600
+/** Длительность плавного перехода между соседними кадрами (без пауз). */
+const LAYER_CROSSFADE_MS = 2200
 
 type LayerDisplayFrame = {
   from: FacadeTimeSnapshot
@@ -71,7 +69,7 @@ type LayerDisplayFrame = {
   sliderPct: number
 }
 
-/** Плавное ускорение/замедление (smoothstep) — привычный ритм монтажа. */
+/** Плавное ускорение/замедление (smoothstep). */
 function easeInOut(t: number): number {
   const x = Math.max(0, Math.min(1, t))
   return x * x * (3 - 2 * x)
@@ -86,7 +84,7 @@ function transitionOpacities(transitionElapsedMs: number): { fromOpacity: number
 }
 
 function segmentDurationMs(): number {
-  return LAYER_HOLD_MS + LAYER_CROSSFADE_MS
+  return LAYER_CROSSFADE_MS
 }
 
 function autoplayCycleMs(layerCount: number): number {
@@ -96,10 +94,7 @@ function autoplayCycleMs(layerCount: number): number {
 function sliderPctForSegment(segmentIndex: number, segmentElapsedMs: number, layerCount: number): number {
   if (layerCount <= 1) return 0
   const tickSpan = 100 / (layerCount - 1)
-  const transitionProgress =
-    segmentElapsedMs <= LAYER_HOLD_MS
-      ? 0
-      : Math.min(1, (segmentElapsedMs - LAYER_HOLD_MS) / LAYER_CROSSFADE_MS)
+  const transitionProgress = Math.min(1, segmentElapsedMs / LAYER_CROSSFADE_MS)
 
   if (segmentIndex >= layerCount - 1) {
     return (1 - transitionProgress) * 100
@@ -124,18 +119,8 @@ function computeAutoplayFrame(layers: FacadeTimeSnapshot[], elapsedMs: number): 
   const segmentElapsed = cycleElapsed - segmentIndex * segmentDurationMs()
   const from = layers[segmentIndex]
   const to = layers[(segmentIndex + 1) % layers.length]
+  const { fromOpacity, toOpacity } = transitionOpacities(segmentElapsed)
 
-  if (segmentElapsed < LAYER_HOLD_MS) {
-    return {
-      from,
-      to,
-      fromOpacity: 1,
-      toOpacity: 0,
-      sliderPct: sliderPctForSegment(segmentIndex, segmentElapsed, layers.length),
-    }
-  }
-
-  const { fromOpacity, toOpacity } = transitionOpacities(segmentElapsed - LAYER_HOLD_MS)
   return {
     from,
     to,
@@ -312,8 +297,9 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
     <div className="space-y-4">
       <p className="text-sm text-arch-muted">
         Двигайте ползунок по годам — снимки сменяют друг друга через плавное затемнение. Можно
-        запустить автопроигрывание: каждый кадр держится ~1 с, затем плавный переход ~1,6 с
-        (как cross-dissolve в монтаже; полный цикл ~{cycleSeconds} с). Порядок:{' '}
+        запустить автопроигрывание: кадры сменяют друг друга непрерывно, без остановок
+        (плавный cross-dissolve ~{Math.round(LAYER_CROSSFADE_MS / 1000)} с на переход; полный цикл
+        ~{cycleSeconds} с). Порядок:{' '}
         {layers.map((layer) => layer.label ?? layer.year).join(' → ')} → {firstYear}.
       </p>
 
