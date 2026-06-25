@@ -128,6 +128,15 @@ const ZOOM_STEP = 0.35
 
 type Pan = { x: number; y: number }
 
+function hoverFramesEqual(
+  a: { left: number; top: number } | null,
+  b: { left: number; top: number } | null,
+): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  return a.left === b.left && a.top === b.top
+}
+
 function clampZoom(value: number): number {
   return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value))
 }
@@ -602,31 +611,42 @@ export function ArchiviewFacadePanel({
         ? regions.find((r) => r.idx === hoverIdx) ?? null
         : null
   const plateExpanded = selectedIdx !== null && plateRegion?.idx === selectedIdx
-  const platePlacement = plateRegion
-    ? tracePlatePlacement(plateRegion.cx, plateRegion.cy, plateExpanded)
-    : null
+  const platePlacement = useMemo(
+    () =>
+      plateRegion
+        ? tracePlatePlacement(plateRegion.cx, plateRegion.cy, plateExpanded)
+        : null,
+    [plateRegion, plateExpanded],
+  )
+
+  const plateRegionIdx = plateRegion?.idx ?? null
+  const platePlacementLeftPct = platePlacement?.leftPct ?? null
+  const platePlacementTopPct = platePlacement?.topPct ?? null
 
   useLayoutEffect(() => {
-    if (!plateRegion || plateExpanded || variant === 'ar' || !platePlacement) {
-      setHoverPlateFrame(null)
+    if (plateRegionIdx === null || plateExpanded || variant === 'ar' || platePlacementLeftPct === null || platePlacementTopPct === null) {
+      setHoverPlateFrame((prev) => (prev === null ? prev : null))
       return
     }
     const block = facadeBlockRef.current
     const viewport = viewportRef.current
     if (!block || !viewport) {
-      setHoverPlateFrame(null)
+      setHoverPlateFrame((prev) => (prev === null ? prev : null))
       return
     }
 
     const update = () => {
       const vpRect = viewport.getBoundingClientRect()
       const blockRect = block.getBoundingClientRect()
-      const xInVp = (platePlacement.leftPct / 100) * vpRect.width
-      const yInVp = (platePlacement.topPct / 100) * vpRect.height
-      setHoverPlateFrame({
+      const xInVp = (platePlacementLeftPct / 100) * vpRect.width
+      const yInVp = (platePlacementTopPct / 100) * vpRect.height
+      const nextHoverFrame = {
         left: vpRect.left - blockRect.left + xInVp,
         top: vpRect.top - blockRect.top + yInVp,
-      })
+      }
+      setHoverPlateFrame((prev) =>
+        hoverFramesEqual(prev, nextHoverFrame) ? prev : nextHoverFrame,
+      )
     }
 
     update()
@@ -641,12 +661,11 @@ export function ArchiviewFacadePanel({
       window.removeEventListener('scroll', update, true)
     }
   }, [
-    plateRegion,
+    plateRegionIdx,
     plateExpanded,
-    platePlacement,
+    platePlacementLeftPct,
+    platePlacementTopPct,
     variant,
-    hoverIdx,
-    selectedIdx,
     zoom,
     pan.x,
     pan.y,
