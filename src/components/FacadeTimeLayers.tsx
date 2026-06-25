@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { Building } from '../types/building'
 import type { ArchiviewBuildingAssets } from '../data/explorer/archiviewAssets'
 import {
@@ -7,6 +7,12 @@ import {
   type FacadeTimeLayerStack,
   type FacadeTimeSnapshot,
 } from '../data/explorer/explorerManifest'
+import {
+  computeStackedAutoplayFrame,
+  stackedAutoplayCycleMs,
+  stackedAutoplayYearLabel,
+  usesStackedAutoplay,
+} from '../lib/facadeTimeLayersAutoplay'
 
 type Props = {
   building: Building
@@ -229,6 +235,7 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
   }, [archiview.cardId])
 
   const layers = stack?.layers ?? []
+  const stackedAutoplay = usesStackedAutoplay(archiview.cardId, layers.length)
 
   useEffect(() => {
     if (!isPlaying || layers.length < 2) return
@@ -237,7 +244,9 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
 
     const step = (now: number) => {
       const elapsed = now - playbackAnchorRef.current
-      const frame = computeAutoplayFrame(layers, elapsed)
+      const frame = stackedAutoplay
+        ? computeStackedAutoplayFrame(layers, elapsed)
+        : computeAutoplayFrame(layers, elapsed)
       setPlaybackElapsedMs(elapsed)
       setPositionPct(frame.sliderPct)
       rafRef.current = requestAnimationFrame(step)
@@ -245,15 +254,35 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
 
     rafRef.current = requestAnimationFrame(step)
     return () => cancelAnimationFrame(rafRef.current)
-  }, [isPlaying, layers])
+  }, [isPlaying, layers, stackedAutoplay, archiview.cardId])
+
+  const stackedFrame = useMemo(() => {
+    if (!stackedAutoplay || !isPlaying || layers.length < 4) return null
+    return computeStackedAutoplayFrame(layers, playbackElapsedMs)
+  }, [stackedAutoplay, isPlaying, layers, playbackElapsedMs, archiview.cardId])
 
   const displayFrame = useMemo(() => {
     if (!layers.length) return null
     if (isPlaying && layers.length >= 2) {
-      return computeAutoplayFrame(layers, playbackElapsedMs)
+      if (stackedAutoplay) {
+        const stacked = computeStackedAutoplayFrame(layers, playbackElapsedMs)
+        const emphasis = layers[stacked.emphasisIndex] ?? layers[0]
+        return {
+          from: emphasis,
+          to: emphasis,
+          fromOpacity: 1,
+          toOpacity: 0,
+          sliderPct: stacked.sliderPct,
+          sliderThumbOpacity: stacked.sliderThumbOpacity,
+          stackedOpacities: stacked.opacities,
+        }
+      }
+      const frame = computeAutoplayFrame(layers, playbackElapsedMs)
+      return { ...frame, sliderThumbOpacity: 1, stackedOpacities: null as number[] | null }
     }
-    return manualDisplayFrame(layers, positionPct)
-  }, [isPlaying, layers, playbackElapsedMs, positionPct])
+    const manual = manualDisplayFrame(layers, positionPct)
+    return { ...manual, sliderThumbOpacity: 1, stackedOpacities: null as number[] | null }
+  }, [isPlaying, layers, playbackElapsedMs, positionPct, stackedAutoplay, archiview.cardId])
 
   const frame = displayFrame
     ? {
@@ -267,11 +296,18 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
   const toOpacity = displayFrame?.toOpacity ?? 0
 
   const stageHint = useMemo(() => {
-    if (!frame) return ''
-    const year = frame.blend >= 0.5 ? frame.to.year : frame.from.year
-    const label = frame.blend >= 0.5 ? frame.to.label : frame.from.label
+    if (!displayFrame) return ''
+    if (stackedFrame) {
+      return layerHint(
+        layers[stackedFrame.emphasisIndex]?.year ?? layers[0].year,
+        building.id,
+        layers[stackedFrame.emphasisIndex]?.label,
+      )
+    }
+    const year = toOpacity >= 0.5 ? displayFrame.to.year : displayFrame.from.year
+    const label = toOpacity >= 0.5 ? displayFrame.to.label : displayFrame.from.label
     return layerHint(year, building.id, label)
-  }, [frame, building.id])
+  }, [displayFrame, stackedFrame, layers, building.id, toOpacity])
 
   if (!manifestLoaded) {
     return (
@@ -291,21 +327,55 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
 
   const firstYear = layers[0].label ?? layers[0].year
   const lastYear = layers[layers.length - 1].label ?? layers[layers.length - 1].year
-  const cycleSeconds = Math.round(autoplayCycleMs(layers.length) / 1000)
+  const cycleSeconds = Math.round(
+    (stackedAutoplay
+      ? stackedAutoplayCycleMs(archiview.cardId!, layers.length)
+      : autoplayCycleMs(layers.length)) / 1000,
+  )
+
+  const sliderYearLabel = stackedFrame
+    ? stackedAutoplayYearLabel(layers, stackedFrame.emphasisIndex)
+    : frame
+      ? displayYearLabel(frame)
+      : ''
+
+  const sliderThumbOpacity = displayFrame?.sliderThumbOpacity ?? 1
+  const stackedOpacities = displayFrame?.stackedOpacities
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-arch-muted">
-        Двигайте ползунок по годам — снимки сменяют друг друга через плавное затемнение. Можно
-        запустить автопроигрывание: кадры сменяют друг друга непрерывно, без остановок
-        (плавный cross-dissolve ~{Math.round(LAYER_CROSSFADE_MS / 1000)} с на переход; полный цикл
-        ~{cycleSeconds} с). Порядок:{' '}
-        {layers.map((layer) => layer.label ?? layer.year).join(' → ')} → {firstYear}.
+        {stackedAutoplay ? (
+          <>
+            Двигайте ползунок по годам или запустите автопроигрывание. В режиме слайд-шоу слои
+            накладываются друг на друга: 1840 остаётся на 20% прозрачности, 1924 и 1930 — на 80%,
+            затем 2026 накрывает всё целиком и уходит в прозрачность — цикл начинается снова с 1840.
+            Полный цикл ~{cycleSeconds} с.
+          </>
+        ) : (
+          <>
+            Двигайте ползунок по годам — снимки сменяют друг друга через плавное затемнение. Можно
+            запустить автопроигрывание: кадры сменяют друг друга непрерывно, без остановок
+            (плавный cross-dissolve ~{Math.round(LAYER_CROSSFADE_MS / 1000)} с на переход; полный цикл
+            ~{cycleSeconds} с). Порядок:{' '}
+            {layers.map((layer) => layer.label ?? layer.year).join(' → ')} → {firstYear}.
+          </>
+        )}
       </p>
 
       <div className="overflow-hidden rounded-2xl border border-arch-line bg-arch-green-deep shadow-md">
         <div className="relative aspect-[4/3] max-h-[min(70vh,640px)] w-full bg-arch-green-deep">
-          {frame ? (
+          {stackedOpacities ? (
+            layers.map((layer, index) => (
+              <img
+                key={`${layer.year}-${layer.label ?? ''}`}
+                src={layer.historicalUrl}
+                alt={`Фасад ${layer.label ?? layer.year}`}
+                className="absolute inset-0 h-full w-full object-contain"
+                style={{ opacity: stackedOpacities[index] ?? 0 }}
+              />
+            ))
+          ) : frame ? (
             <>
               <img
                 src={frame.from.historicalUrl}
@@ -327,7 +397,7 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
           ) : null}
           <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/50 to-transparent" />
           <div className="absolute left-3 top-3 rounded-md bg-black/55 px-2 py-1 text-xs text-white backdrop-blur-sm">
-            {frame ? displayYearLabel(frame) : ''}
+            {sliderYearLabel}
           </div>
         </div>
 
@@ -335,7 +405,7 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
           <span className="mb-2 flex items-center justify-between text-arch-ink/80">
             <span>Год на шкале</span>
             <span className="font-semibold tabular-nums text-arch-green-deep">
-              {frame ? displayYearLabel(frame) : ''}
+              {sliderYearLabel}
             </span>
           </span>
           <input
@@ -345,8 +415,9 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
             step={0.5}
             value={positionPct}
             onChange={(e) => setPositionManual(Number(e.target.value))}
-            className="w-full accent-arch-green"
-            aria-valuetext={frame ? displayYearLabel(frame) : ''}
+            className="time-layers-range w-full accent-arch-green"
+            style={{ '--thumb-opacity': sliderThumbOpacity } as CSSProperties}
+            aria-valuetext={sliderYearLabel}
           />
           <div className="mt-2 flex justify-between gap-1 text-[11px] text-arch-muted">
             {layers.map((layer, index) => {
@@ -400,7 +471,7 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
 
       <div className="rounded-xl border border-arch-line bg-arch-surface p-4 shadow-sm">
         <p className="text-sm text-arch-ink/80">{stageHint}</p>
-        {frame && (frame.blend >= 0.5 ? frame.to.sourceUrl : frame.from.sourceUrl) ? (
+        {frame && !stackedOpacities && (frame.blend >= 0.5 ? frame.to.sourceUrl : frame.from.sourceUrl) ? (
           <p className="mt-2 text-xs text-arch-muted">
             Источник:{' '}
             <a
