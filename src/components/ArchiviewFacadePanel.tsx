@@ -37,9 +37,9 @@ const CLASS_COLORS: Record<string, string> = {
   check_manually: '#b000b0',
 }
 
-/** Полупрозрачная зелёная «стеклянная» плашка — 65% непрозрачности. */
-const TRACE_PLATE_GLASS_BG = 'rgba(18, 53, 40, 0.65)'
-const TRACE_PLATE_HOVER_GLASS_BG = 'rgba(18, 53, 40, 0.55)'
+/** Полупрозрачная зелёная «стеклянная» плашка — 75% непрозрачности. */
+const TRACE_PLATE_GLASS_BG = 'rgba(18, 53, 40, 0.75)'
+const TRACE_PLATE_HOVER_GLASS_BG = 'rgba(18, 53, 40, 0.65)'
 
 /** Окна и узкие проёмы: без сплошной заливки-квадрата — только контур и кружок. */
 const COMPACT_REGION_AREA = 90
@@ -188,25 +188,9 @@ async function pickFacadeImage(
     arMode?: boolean
     hasArHomography?: boolean
     preferRectified?: boolean
-    /** AR: modern-source + polygon_source, если полевое фото ещё без crop/H_ar */
-    preferAlignedSource?: boolean
   },
 ): Promise<{ url: string; kind: FacadeImageKind; w: number; h: number } | null> {
   if (options?.arMode) {
-    if (options.hasArHomography && assets.arPhotoUrl) {
-      const arPhoto = await probeImageMeta(assets.arPhotoUrl)
-      if (arPhoto) {
-        return { url: assets.arPhotoUrl, kind: 'source_modern', w: arPhoto.w, h: arPhoto.h }
-      }
-    }
-
-    if (options.preferAlignedSource && assets.modernSourceUrl) {
-      const source = await probeImageMeta(assets.modernSourceUrl)
-      if (source) {
-        return { url: assets.modernSourceUrl, kind: 'source_modern', w: source.w, h: source.h }
-      }
-    }
-
     if (assets.arPhotoUrl) {
       const arPhoto = await probeImageMeta(assets.arPhotoUrl)
       if (arPhoto) {
@@ -218,13 +202,6 @@ async function pickFacadeImage(
       const source = await probeImageMeta(assets.modernSourceUrl)
       if (source) {
         return { url: assets.modernSourceUrl, kind: 'source_modern', w: source.w, h: source.h }
-      }
-    }
-
-    if (assets.modernRectifiedUrl) {
-      const rectified = await probeImageMeta(assets.modernRectifiedUrl)
-      if (rectified) {
-        return { url: assets.modernRectifiedUrl, kind: 'rectified', w: rectified.w, h: rectified.h }
       }
     }
 
@@ -523,14 +500,10 @@ export function ArchiviewFacadePanel({
       const isSb = layout === 'side_by_side'
       if (!cancelled) setSideBySide(isSb)
 
-      const hasArAlignment =
-        Boolean(H_ar) || Math.abs(cropOffset[0]) > 0.5 || Math.abs(cropOffset[1]) > 0.5
-
       const loaded = await pickFacadeImage(assets, {
         arMode: variant === 'ar',
         hasArHomography: Boolean(H_ar),
         preferRectified: variant === 'default' && !isSb,
-        preferAlignedSource: variant === 'ar' && !hasArAlignment,
       })
       if (cancelled) return
 
@@ -550,12 +523,17 @@ export function ArchiviewFacadePanel({
         annotationsHaveSourcePolygons(annotations)
       const useFieldHomography =
         isArFieldPhoto && !useArHomography && !useSourcePolygonsOnField && Boolean(H_modern_full)
+      const useSourcePolygonsAr =
+        variant === 'ar' &&
+        loaded.kind === 'source_modern' &&
+        annotationsHaveSourcePolygons(annotations)
       const useSourcePolygons =
         !isSb &&
         loaded.kind === 'source_modern' &&
         !useArHomography &&
         !useFieldHomography &&
         !useSourcePolygonsOnField &&
+        !useSourcePolygonsAr &&
         annotationsHaveSourcePolygons(annotations)
       const sourcePolygonOffset: Point = useSourcePolygonsOnField ? cropOffset : [0, 0]
       const H = useArHomography ? H_ar : H_modern_full
@@ -572,10 +550,10 @@ export function ArchiviewFacadePanel({
 
       if (isSb && annData?.side_by_side) {
         buildRegionsSideBySide(annotations, annData, loaded.w, loaded.h)
+      } else if (useSourcePolygonsOnField || useSourcePolygonsAr || useSourcePolygons) {
+        buildRegionsFromSourcePolygons(annotations, loaded.w, loaded.h, sourcePolygonOffset)
       } else if (useArHomography || useFieldHomography) {
         buildRegionsOverlay(annotations, H!, loaded.w, loaded.h)
-      } else if (useSourcePolygonsOnField || useSourcePolygons) {
-        buildRegionsFromSourcePolygons(annotations, loaded.w, loaded.h, sourcePolygonOffset)
       } else if (!isSb && loaded.kind === 'source_modern' && H) {
         buildRegionsOverlay(annotations, H, loaded.w, loaded.h)
       } else if (
@@ -620,9 +598,13 @@ export function ArchiviewFacadePanel({
 
   const platePlacement = useMemo(() => {
     if (!plateRegion) return null
-    const xs = plateRegion.polygonPct.map((p) => p[0])
-    const ys = plateRegion.polygonPct.map((p) => p[1])
-    return tracePlatePlacement(plateRegion.cx, plateRegion.cy, plateExpanded, {
+    const anchorRegion =
+      assets.cardId === 'MOSCOW_001' && (plateRegion.idx === 1 || plateRegion.idx === 9)
+        ? regions.find((r) => r.idx === 3) ?? plateRegion
+        : plateRegion
+    const xs = anchorRegion.polygonPct.map((p) => p[0])
+    const ys = anchorRegion.polygonPct.map((p) => p[1])
+    return tracePlatePlacement(anchorRegion.cx, anchorRegion.cy, plateExpanded, {
       bbox: {
         minX: Math.min(...xs),
         maxX: Math.max(...xs),
@@ -631,8 +613,10 @@ export function ArchiviewFacadePanel({
       },
       layout: blockLayout ?? undefined,
       sidebarLayout: useSidebarLayout,
+      cardId: assets.cardId,
+      regionIdx: plateRegion.idx,
     })
-  }, [plateRegion, plateExpanded, blockLayout, useSidebarLayout])
+  }, [plateRegion, plateExpanded, blockLayout, useSidebarLayout, assets.cardId, regions])
 
   useLayoutEffect(() => {
     const updateBlockLayout = () => {
@@ -866,6 +850,15 @@ export function ArchiviewFacadePanel({
                   onClick={() => setSelectedIdx(null)}
                 />
               ) : null}
+              {plateExpanded && variant === 'ar' ? (
+                <button
+                  type="button"
+                  className="absolute inset-0 z-40 cursor-default border-0 bg-black/45 p-0"
+                  aria-label="Закрыть карточку"
+                  onClick={() => setSelectedIdx(null)}
+                />
+              ) : null}
+              {!embeddedAr ? (
               <div
                 className="absolute right-2 top-2 z-40 flex items-center gap-1 rounded-lg border border-arch-line/80 bg-arch-surface/95 p-1 shadow-md backdrop-blur-sm"
                 role="toolbar"
@@ -900,6 +893,7 @@ export function ArchiviewFacadePanel({
                   +
                 </button>
               </div>
+              ) : null}
 
               <div
                 className={`relative origin-top-left will-change-transform ${
@@ -1044,23 +1038,31 @@ export function ArchiviewFacadePanel({
               ) : null}
               </div>
 
-              {variant === 'ar' && plateRegion && !plateExpanded && (
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 border-t border-arch-surface/15 bg-arch-green-deep/92 px-3 py-2.5 backdrop-blur-sm">
-                  <div className="flex items-center gap-2 text-xs text-arch-surface">
-                    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-arch-gold text-[10px] font-bold text-arch-green-deep">
-                      {plateRegion.idx}
-                    </span>
-                    <span className="min-w-0 truncate font-medium">
-                      {plateRegion.trace?.title ?? plateRegion.label}
-                    </span>
-                    {plateRegion.trace?.period ? (
-                      <span className="hidden shrink-0 text-arch-surface/65 sm:inline">
-                        {plateRegion.trace.period}
-                      </span>
-                    ) : null}
+              {variant === 'ar' && plateExpanded && plateRegion ? (
+                <div
+                  className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center p-4"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label={`Экспертная заметка ${plateRegion.idx}`}
+                >
+                  <div
+                    className="pointer-events-auto max-h-[min(72%,520px)] w-full max-w-[min(92%,340px)] overflow-y-auto rounded-2xl border border-arch-gold/60 px-4 py-4 text-left text-sm leading-relaxed text-arch-surface shadow-2xl backdrop-blur-xl"
+                    style={{ backgroundColor: TRACE_PLATE_GLASS_BG }}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <ExpertTracePlate
+                      idx={plateRegion.idx}
+                      title={plateRegion.trace?.title ?? plateRegion.label}
+                      period={plateRegion.trace?.period}
+                      trace={plateRegion.trace}
+                      comment={plateRegion.comment}
+                      verification={building?.verification}
+                      expanded
+                      onClose={() => setSelectedIdx(null)}
+                    />
                   </div>
                 </div>
-              )}
+              ) : null}
 
             </div>
           </div>

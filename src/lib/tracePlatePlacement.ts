@@ -20,8 +20,9 @@ type RegionBBox = { minX: number; minY: number; maxX: number; maxY: number }
 type TracePlateOptions = {
   bbox?: RegionBBox
   layout?: BlockLayoutMetrics
-  /** Двухколоночная раскладка: фото слева, список справа. */
   sidebarLayout?: boolean
+  cardId?: string
+  regionIdx?: number
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -59,20 +60,17 @@ export function tracePlatePlacement(
   const bbox = options?.bbox
   const layout = options?.layout
   const sidebarLayout = options?.sidebarLayout ?? false
+  const cardId = options?.cardId
+  const regionIdx = options?.regionIdx
   const span = regionSpan(bbox)
   const regionSmall = span <= 7.5
 
   const { blockCx, blockCy, imageRightPct, imageLeftPct } = imageToBlock(cxPct, cyPct, layout)
   const hasSidebar = sidebarLayout && layout && imageRightPct < 98
 
-  const aspectRatio =
-    cyPct > 58 || cyPct < 28
-      ? 0.75
-      : cxPct < 38
-        ? 1.33
-        : 0.75
+  const aspectRatio = cyPct > 58 || cyPct < 28 ? 0.75 : cxPct < 38 ? 1.33 : 0.75
 
-  const maxWidthPx = expanded ? 380 : 260
+  let maxWidthPx = expanded ? 380 : 260
 
   let offsetX = 0
   let offsetY = 0
@@ -101,10 +99,8 @@ export function tracePlatePlacement(
     const nearArtifact = blockCx + offsetX
 
     if (cxPct >= 42) {
-      // Правые артефакты — центр на стыке фото/списка
       leftPct = atSeam
     } else {
-      // Левые и центральные — ближе к подсветке, но не уезжают в список
       leftPct = Math.min(nearArtifact, atSeam + 2)
     }
 
@@ -126,6 +122,13 @@ export function tracePlatePlacement(
     transform = 'translate(-50%, 0)'
   } else if (topPct > 74) {
     transform = 'translate(-50%, -100%)'
+  }
+
+  // Ардовы: плашки #1 и #9 — как у #3, правее и шире
+  if (cardId === 'MOSCOW_001' && (regionIdx === 1 || regionIdx === 9)) {
+    const seam = hasSidebar ? imageRightPct : 100
+    leftPct = clamp(leftPct + (layout ? layout.imageWidthPct * 0.06 : 6), imageLeftPct + 14, seam + 5)
+    maxWidthPx = expanded ? 420 : 330
   }
 
   return {

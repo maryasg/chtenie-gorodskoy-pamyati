@@ -84,11 +84,3 @@ body::before {
   font-weight: 500;
   color: var(--color-arch-muted);
 }
-
-.time-layers-range::-webkit-slider-thumb {
-  opacity: var(--thumb-opacity, 1);
-}
-
-.time-layers-range::-moz-range-thumb {
-  opacity: var(--thumb-opacity, 1);
-}
