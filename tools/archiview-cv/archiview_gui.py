@@ -66,10 +66,18 @@ try:
         edge_stretch_to_canvas,
     )
 except Exception:
-    TIME_LAYER_WIDTH = 4200  # type: ignore[misc,assignment]
-    TIME_LAYER_HEIGHT = 2452  # type: ignore[misc,assignment]
-    edge_stretch_summary = None  # type: ignore[assignment,misc]
-    edge_stretch_to_canvas = None  # type: ignore[assignment,misc]
+    try:
+        from archiview_cv import (  # type: ignore[no-redef]
+            TIME_LAYER_HEIGHT,
+            TIME_LAYER_WIDTH,
+            edge_stretch_summary,
+            edge_stretch_to_canvas,
+        )
+    except Exception:
+        TIME_LAYER_WIDTH = 4200  # type: ignore[misc,assignment]
+        TIME_LAYER_HEIGHT = 2452  # type: ignore[misc,assignment]
+        edge_stretch_summary = None  # type: ignore[assignment,misc]
+        edge_stretch_to_canvas = None  # type: ignore[assignment,misc]
 
 try:
     from archiview_house_db import HouseDatabaseFrame, HouseRecord, create_house_project
@@ -7876,7 +7884,22 @@ map.on('click',e=>{{
 
     def run_edge_canvas_preview(self) -> None:
         if edge_stretch_to_canvas is None or cv is None:
-            messagebox.showerror("Модуль", "Нужны OpenCV и archiview_edge_canvas.py.")
+            lines = []
+            if cv is None:
+                lines.append("• OpenCV не установлен — запустите install_windows.bat в папке v16.")
+            if edge_stretch_to_canvas is None:
+                edge_file = APP_DIR / "archiview_edge_canvas.py"
+                if not edge_file.is_file():
+                    lines.append(
+                        "• Не найден archiview_edge_canvas.py — дважды щёлкните OBNOVIT_IZ_GITA.bat "
+                        "в папке archiview_cv_easy_v16_package на рабочем столе."
+                    )
+                else:
+                    lines.append(
+                        "• Модуль растяжения краёв не загрузился — перезапустите ZAPUSK_V16.bat "
+                        "после OBNOVIT_IZ_GITA.bat."
+                    )
+            messagebox.showerror("Растяжение краёв", "\n".join(lines) or "Нужны OpenCV и модуль растяжения.")
             return
         try:
             src = self._edge_canvas_source_bgr()
