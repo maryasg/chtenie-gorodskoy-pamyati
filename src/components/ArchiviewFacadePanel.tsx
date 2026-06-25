@@ -956,7 +956,7 @@ export function ArchiviewFacadePanel({
               )}
               {plateRegion && platePlacement && variant !== 'ar' && !plateExpanded && (
                 <div
-                  className="pointer-events-none absolute z-20 max-w-[min(88%,200px)] rounded-lg border border-arch-gold/70 bg-arch-green-deep/92 px-2.5 py-2 text-left text-xs leading-snug text-arch-surface shadow-xl backdrop-blur-md"
+                  className="pointer-events-none absolute z-20 max-w-[min(88%,240px)] rounded-lg border border-arch-gold/70 bg-arch-green-deep/92 px-3 py-2.5 text-left text-sm leading-snug text-arch-surface shadow-xl backdrop-blur-md"
                   style={{
                     left: `${platePlacement.leftPct}%`,
                     top: `${platePlacement.topPct}%`,
@@ -1006,8 +1006,8 @@ export function ArchiviewFacadePanel({
                   onClick={() => setSelectedIdx(null)}
                 >
                   <div
-                    className={`pointer-events-auto max-h-[min(82%,520px)] w-full overflow-y-auto rounded-2xl border border-arch-gold/70 bg-arch-green-deep px-4 py-3.5 text-left text-xs leading-snug text-arch-surface shadow-2xl ${
-                      embeddedAr ? 'max-w-none' : 'max-w-md'
+                    className={`pointer-events-auto max-h-[min(82%,560px)] w-full overflow-y-auto rounded-2xl border border-arch-gold/70 bg-arch-green-deep px-5 py-4 text-left text-sm leading-relaxed text-arch-surface shadow-2xl ${
+                      embeddedAr ? 'max-w-none' : 'max-w-lg'
                     }`}
                     onClick={(event) => event.stopPropagation()}
                   >
