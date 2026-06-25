@@ -139,7 +139,7 @@ export const MOSCOW_003: Building = {
     {
       id: 'MOSCOW_003_T011',
       type: 'new_balcony',
-      title: 'Застеклённый балкон на надстройке',
+      title: 'Балкон на надстройке',
       period: '1944–1945',
       confidence: 'probable',
       overallConfidence: 0.78,
