@@ -58,6 +58,110 @@ function displayYearLabel(frame: CrossfadeFrame): string {
   return `${frame.from.label ?? frame.from.year} → ${frame.to.label ?? frame.to.year}`
 }
 
+/** Пауза на кадре перед переходом к следующему. */
+const LAYER_HOLD_MS = 3000
+/** Полная длительность перехода между двумя кадрами. */
+const LAYER_TRANSITION_MS = 3000
+/** Первая фаза: исходный кадр уходит, следующий начинает проявляться. */
+const LAYER_FADE_OUT_MS = 1000
+/** Вторая фаза: следующий кадр доходит до полной яркости. */
+const LAYER_FADE_IN_MS = LAYER_TRANSITION_MS - LAYER_FADE_OUT_MS
+
+type LayerDisplayFrame = {
+  from: FacadeTimeSnapshot
+  to: FacadeTimeSnapshot
+  fromOpacity: number
+  toOpacity: number
+  sliderPct: number
+}
+
+function transitionOpacities(transitionElapsedMs: number): { fromOpacity: number; toOpacity: number } {
+  const elapsed = Math.max(0, Math.min(LAYER_TRANSITION_MS, transitionElapsedMs))
+  if (elapsed <= LAYER_FADE_OUT_MS) {
+    const t = elapsed / LAYER_FADE_OUT_MS
+    return {
+      fromOpacity: 1 - t,
+      toOpacity: t * 0.2,
+    }
+  }
+  const t = (elapsed - LAYER_FADE_OUT_MS) / LAYER_FADE_IN_MS
+  return {
+    fromOpacity: 0,
+    toOpacity: 0.2 + Math.min(1, t) * 0.8,
+  }
+}
+
+function segmentDurationMs(): number {
+  return LAYER_HOLD_MS + LAYER_TRANSITION_MS
+}
+
+function autoplayCycleMs(layerCount: number): number {
+  return Math.max(1, layerCount) * segmentDurationMs()
+}
+
+function sliderPctForSegment(segmentIndex: number, segmentElapsedMs: number, layerCount: number): number {
+  if (layerCount <= 1) return 0
+  const tickSpan = 100 / (layerCount - 1)
+  const transitionProgress =
+    segmentElapsedMs <= LAYER_HOLD_MS
+      ? 0
+      : Math.min(1, (segmentElapsedMs - LAYER_HOLD_MS) / LAYER_TRANSITION_MS)
+
+  if (segmentIndex >= layerCount - 1) {
+    return (1 - transitionProgress) * 100
+  }
+  return segmentIndex * tickSpan + transitionProgress * tickSpan
+}
+
+function computeAutoplayFrame(layers: FacadeTimeSnapshot[], elapsedMs: number): LayerDisplayFrame {
+  if (layers.length === 1) {
+    return {
+      from: layers[0],
+      to: layers[0],
+      fromOpacity: 1,
+      toOpacity: 0,
+      sliderPct: 0,
+    }
+  }
+
+  const cycleMs = autoplayCycleMs(layers.length)
+  const cycleElapsed = ((elapsedMs % cycleMs) + cycleMs) % cycleMs
+  const segmentIndex = Math.floor(cycleElapsed / segmentDurationMs())
+  const segmentElapsed = cycleElapsed - segmentIndex * segmentDurationMs()
+  const from = layers[segmentIndex]
+  const to = layers[(segmentIndex + 1) % layers.length]
+
+  if (segmentElapsed < LAYER_HOLD_MS) {
+    return {
+      from,
+      to,
+      fromOpacity: 1,
+      toOpacity: 0,
+      sliderPct: sliderPctForSegment(segmentIndex, segmentElapsed, layers.length),
+    }
+  }
+
+  const { fromOpacity, toOpacity } = transitionOpacities(segmentElapsed - LAYER_HOLD_MS)
+  return {
+    from,
+    to,
+    fromOpacity,
+    toOpacity,
+    sliderPct: sliderPctForSegment(segmentIndex, segmentElapsed, layers.length),
+  }
+}
+
+function manualDisplayFrame(layers: FacadeTimeSnapshot[], positionPct: number): LayerDisplayFrame {
+  const crossfade = crossfadeAtPosition(layers, positionPct)
+  return {
+    from: crossfade.from,
+    to: crossfade.to,
+    fromOpacity: 1 - crossfade.blend,
+    toOpacity: crossfade.blend,
+    sliderPct: positionPct,
+  }
+}
+
 function emptyTimeLayersMessage(cardId?: string): string {
   if (cardId === 'MOSCOW_001') {
     return 'Для слоёв времени нужны файлы в time-layers/ (1840, 1924, 1930–1936, 2026) — все 4200×2452, выровнены по одному холсту.'
@@ -103,19 +207,15 @@ function layerHint(year: string, buildingId: string, label?: string): string {
   return 'Промежуточный архивный снимок: часть деталей уже изменена или утрачена.'
 }
 
-/** Длительность полного прохода шкалы 0→100 при автопроигрывании. */
-const AUTOPLAY_MS_PER_LAYER = 4000
-
-/** Шкала лет: плавный переход между снимками через затемнение (crossfade). */
+/** Слои времени: плавный переход между снимками через затемнение (crossfade). */
 export function FacadeTimeLayers({ building, archiview }: Props) {
   const [stack, setStack] = useState<FacadeTimeLayerStack | null>(null)
   const [manifestLoaded, setManifestLoaded] = useState(false)
-  const [positionPct, setPositionPct] = useState(100)
+  const [positionPct, setPositionPct] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
-  const positionRef = useRef(positionPct)
+  const [playbackElapsedMs, setPlaybackElapsedMs] = useState(0)
+  const playbackAnchorRef = useRef(0)
   const rafRef = useRef<number>(0)
-
-  positionRef.current = positionPct
 
   const stopAutoplay = () => setIsPlaying(false)
 
@@ -138,7 +238,8 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
       if (cancelled) return
       const built = manifest ? buildFacadeTimeLayerStack(manifest, archiview.cardId) : null
       setStack(built)
-      setPositionPct(100)
+      setPositionPct(0)
+      setPlaybackElapsedMs(0)
       setIsPlaying(false)
       setManifestLoaded(true)
     })
@@ -153,26 +254,38 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
   useEffect(() => {
     if (!isPlaying || layers.length < 2) return
 
-    const durationMs = Math.max(8000, layers.length * AUTOPLAY_MS_PER_LAYER)
-    let anchorTime = performance.now()
-    let anchorPct = positionRef.current
+    playbackAnchorRef.current = performance.now() - playbackElapsedMs
 
     const step = (now: number) => {
-      let pct = anchorPct + ((now - anchorTime) / durationMs) * 100
-      if (pct >= 100) {
-        anchorPct = 0
-        anchorTime = now
-        pct = 0
-      }
-      setPositionPct(pct)
+      const elapsed = now - playbackAnchorRef.current
+      const frame = computeAutoplayFrame(layers, elapsed)
+      setPlaybackElapsedMs(elapsed)
+      setPositionPct(frame.sliderPct)
       rafRef.current = requestAnimationFrame(step)
     }
 
     rafRef.current = requestAnimationFrame(step)
     return () => cancelAnimationFrame(rafRef.current)
-  }, [isPlaying, layers.length])
+  }, [isPlaying, layers])
 
-  const frame = layers.length ? crossfadeAtPosition(layers, positionPct) : null
+  const displayFrame = useMemo(() => {
+    if (!layers.length) return null
+    if (isPlaying && layers.length >= 2) {
+      return computeAutoplayFrame(layers, playbackElapsedMs)
+    }
+    return manualDisplayFrame(layers, positionPct)
+  }, [isPlaying, layers, playbackElapsedMs, positionPct])
+
+  const frame = displayFrame
+    ? {
+        from: displayFrame.from,
+        to: displayFrame.to,
+        blend: displayFrame.toOpacity,
+      }
+    : null
+
+  const fromOpacity = displayFrame?.fromOpacity ?? 1
+  const toOpacity = displayFrame?.toOpacity ?? 0
 
   const stageHint = useMemo(() => {
     if (!frame) return ''
@@ -199,15 +312,15 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
 
   const firstYear = layers[0].label ?? layers[0].year
   const lastYear = layers[layers.length - 1].label ?? layers[layers.length - 1].year
-  const fromOpacity = frame ? 1 - frame.blend : 1
-  const toOpacity = frame ? frame.blend : 0
+  const cycleSeconds = Math.round(autoplayCycleMs(layers.length) / 1000)
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-arch-muted">
         Двигайте ползунок по годам — снимки сменяют друг друга через плавное затемнение. Можно
-        запустить автопроигрывание под шкалой. Порядок:{' '}
-        {layers.map((layer) => layer.label ?? layer.year).join(' → ')}.
+        запустить автопроигрывание под шкалой: каждый кадр держится 3 с, затем за 1 с уходит, а
+        следующий проявляется ещё 2 с (полный цикл ~{cycleSeconds} с). Порядок:{' '}
+        {layers.map((layer) => layer.label ?? layer.year).join(' → ')} → {firstYear}.
       </p>
 
       <div className="overflow-hidden rounded-2xl border border-arch-line bg-arch-green-deep shadow-md">
@@ -217,13 +330,17 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
               <img
                 src={frame.from.historicalUrl}
                 alt={`Фасад ${frame.from.label ?? frame.from.year}`}
-                className="absolute inset-0 h-full w-full object-contain transition-opacity duration-200"
+                className={`absolute inset-0 h-full w-full object-contain ${
+                  isPlaying ? '' : 'transition-opacity duration-200'
+                }`}
                 style={{ opacity: fromOpacity }}
               />
               <img
                 src={frame.to.historicalUrl}
                 alt={`Фасад ${frame.to.label ?? frame.to.year}`}
-                className="pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity duration-200"
+                className={`pointer-events-none absolute inset-0 h-full w-full object-contain ${
+                  isPlaying ? '' : 'transition-opacity duration-200'
+                }`}
                 style={{ opacity: toOpacity }}
               />
             </>
@@ -279,7 +396,14 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
             {layers.length > 1 ? (
               <button
                 type="button"
-                onClick={() => setIsPlaying((playing) => !playing)}
+                onClick={() => {
+                  if (isPlaying) {
+                    stopAutoplay()
+                    return
+                  }
+                  playbackAnchorRef.current = performance.now() - playbackElapsedMs
+                  setIsPlaying(true)
+                }}
                 className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
                   isPlaying
                     ? 'border-arch-green bg-arch-green-soft text-arch-green-deep'
