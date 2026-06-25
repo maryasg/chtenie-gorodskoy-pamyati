@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { ArchiviewAnnotation, ArchiviewBuildingAssets } from '../data/explorer/archiviewAssets'
 import type { Building, MemoryTrace } from '../types/building'
 import {
@@ -127,6 +127,12 @@ const ZOOM_MAX = 4
 const ZOOM_STEP = 0.35
 
 type Pan = { x: number; y: number }
+
+type ScreenRect = { left: number; top: number; width: number; height: number }
+
+function screenRectStyle(frame: ScreenRect): CSSProperties {
+  return { left: frame.left, top: frame.top, width: frame.width, height: frame.height }
+}
 
 function clampZoom(value: number): number {
   return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value))
@@ -291,7 +297,9 @@ export function ArchiviewFacadePanel({
   const [pan, setPan] = useState<Pan>({ x: 0, y: 0 })
   const [isPanning, setIsPanning] = useState(false)
   const viewportRef = useRef<HTMLDivElement>(null)
+  const imageRef = useRef<HTMLImageElement>(null)
   const facadeBlockRef = useRef<HTMLDivElement>(null)
+  const [imageFrameInViewport, setImageFrameInViewport] = useState<ScreenRect | null>(null)
   const [hoverPlateFrame, setHoverPlateFrame] = useState<{ left: number; top: number } | null>(null)
   const panSessionRef = useRef<{ startPan: Pan; startX: number; startY: number; moved: boolean } | null>(
     null,
@@ -607,32 +615,42 @@ export function ArchiviewFacadePanel({
     : null
 
   useLayoutEffect(() => {
-    if (!plateRegion || plateExpanded || variant === 'ar' || !platePlacement) {
-      setHoverPlateFrame(null)
-      return
-    }
-    const block = facadeBlockRef.current
-    const viewport = viewportRef.current
-    if (!block || !viewport) {
-      setHoverPlateFrame(null)
-      return
-    }
-
     const update = () => {
+      const img = imageRef.current
+      const viewport = viewportRef.current
+      const block = facadeBlockRef.current
+      if (!img || !viewport) {
+        setImageFrameInViewport(null)
+        setHoverPlateFrame(null)
+        return
+      }
+      const imgRect = img.getBoundingClientRect()
       const vpRect = viewport.getBoundingClientRect()
-      const blockRect = block.getBoundingClientRect()
-      const xInVp = (platePlacement.leftPct / 100) * vpRect.width
-      const yInVp = (platePlacement.topPct / 100) * vpRect.height
-      setHoverPlateFrame({
-        left: vpRect.left - blockRect.left + xInVp,
-        top: vpRect.top - blockRect.top + yInVp,
+      setImageFrameInViewport({
+        left: imgRect.left - vpRect.left,
+        top: imgRect.top - vpRect.top,
+        width: imgRect.width,
+        height: imgRect.height,
       })
+      if (plateRegion && !plateExpanded && variant !== 'ar' && platePlacement && block) {
+        const blockRect = block.getBoundingClientRect()
+        setHoverPlateFrame({
+          left: imgRect.left - blockRect.left + (platePlacement.leftPct / 100) * imgRect.width,
+          top: imgRect.top - blockRect.top + (platePlacement.topPct / 100) * imgRect.height,
+        })
+      } else {
+        setHoverPlateFrame(null)
+      }
     }
 
     update()
     const ro = new ResizeObserver(update)
-    ro.observe(block)
-    ro.observe(viewport)
+    const img = imageRef.current
+    const viewport = viewportRef.current
+    const block = facadeBlockRef.current
+    if (img) ro.observe(img)
+    if (viewport) ro.observe(viewport)
+    if (block) ro.observe(block)
     window.addEventListener('resize', update)
     window.addEventListener('scroll', update, true)
     return () => {
@@ -652,6 +670,7 @@ export function ArchiviewFacadePanel({
     pan.y,
     imgSize.w,
     imgSize.h,
+    regions.length,
   ])
 
   /** Small regions (e.g. #6, #9) must paint above large overlaps (#12) for clicks — render largest first, smallest last in SVG. */
@@ -805,29 +824,6 @@ export function ArchiviewFacadePanel({
                 : 'relative min-w-0 w-full overflow-visible'
             }
           >
-            {plateExpanded && plateRegion ? (
-              <div
-                className={`pointer-events-auto absolute left-3 right-3 top-2 z-50 rounded-2xl border border-arch-gold/60 px-5 py-4 text-left text-sm leading-relaxed text-arch-surface shadow-2xl backdrop-blur-xl sm:left-4 sm:right-4 sm:top-3 sm:px-6 sm:py-5 ${
-                  embeddedAr ? '' : 'max-w-2xl'
-                }`}
-                style={{ backgroundColor: TRACE_PLATE_GLASS_BG }}
-                role="dialog"
-                aria-modal="true"
-                aria-label={`Экспертная заметка ${plateRegion.idx}`}
-                onClick={(event) => event.stopPropagation()}
-              >
-                <ExpertTracePlate
-                  idx={plateRegion.idx}
-                  title={plateRegion.trace?.title ?? plateRegion.label}
-                  period={plateRegion.trace?.period}
-                  trace={plateRegion.trace}
-                  comment={plateRegion.comment}
-                  verification={building?.verification}
-                  expanded
-                  onClose={() => setSelectedIdx(null)}
-                />
-              </div>
-            ) : null}
           <div className="relative min-w-0 shrink-0">
             <div
               ref={viewportRef}
@@ -907,6 +903,7 @@ export function ArchiviewFacadePanel({
                 }}
               >
                 <img
+                  ref={imageRef}
                   src={displayImageUrl}
                   alt={
                     sideBySide
@@ -922,70 +919,119 @@ export function ArchiviewFacadePanel({
                       : 'max-h-[min(78vh,820px)] rounded-xl'
                   }`}
                 />
-                {regions.length > 0 && (
-                <svg
-                  className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
-                  viewBox="0 0 100 100"
-                  preserveAspectRatio="none"
-                  aria-hidden
-                >
-                  {regions.map((r) => {
-                    const on = hoverIdx === r.idx || selectedIdx === r.idx
-                    const color = CLASS_COLORS[r.cls] ?? '#444'
-                    const style = regionPolygonStyle(color, r.areaPct, on, variant === 'ar')
-                    return (
+                {regions.length > 0 ? (
+                  <svg
+                    className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                    aria-hidden
+                  >
+                    {regions.map((r) => {
+                      const on = hoverIdx === r.idx || selectedIdx === r.idx
+                      const color = CLASS_COLORS[r.cls] ?? '#444'
+                      const style = regionPolygonStyle(color, r.areaPct, on, variant === 'ar')
+                      return (
+                        <polygon
+                          key={r.idx}
+                          points={r.polygonPct.map(([x, y]) => `${x},${y}`).join(' ')}
+                          fill={style.fill}
+                          stroke={color}
+                          strokeWidth={style.strokeWidth}
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      )
+                    })}
+                  </svg>
+                ) : null}
+                {regions.length > 0 && variant !== 'ar' ? (
+                  <svg
+                    className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                    aria-hidden
+                  >
+                    {regionsBadges.map((r) => {
+                      if (!r.badgeLayout.callout) return null
+                      const on = hoverIdx === r.idx || selectedIdx === r.idx
+                      const color = CLASS_COLORS[r.cls] ?? '#444'
+                      return (
+                        <line
+                          key={`callout-${r.idx}`}
+                          x1={r.badgeLayout.anchorX}
+                          y1={r.badgeLayout.anchorY}
+                          x2={r.badgeLayout.badgeX}
+                          y2={r.badgeLayout.badgeY}
+                          stroke={color}
+                          strokeWidth={on ? 0.42 : 0.32}
+                          strokeOpacity={on ? 0.95 : 0.72}
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      )
+                    })}
+                  </svg>
+                ) : null}
+                {regions.length > 0 ? (
+                  <svg
+                    className="absolute inset-0 h-full w-full overflow-visible"
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                  >
+                    {regionsForHit.map((r) => (
                       <polygon
-                        key={r.idx}
+                        key={`hit-${r.idx}`}
                         points={r.polygonPct.map(([x, y]) => `${x},${y}`).join(' ')}
-                        fill={style.fill}
-                        stroke={color}
-                        strokeWidth={style.strokeWidth}
+                        fill="transparent"
+                        stroke="transparent"
+                        className="cursor-pointer"
+                        onMouseEnter={() => setHoverIdx(r.idx)}
+                        onMouseLeave={() => setHoverIdx(null)}
+                        onFocus={() => setHoverIdx(r.idx)}
+                        onBlur={() => setHoverIdx(null)}
+                        onClick={() => setSelectedIdx((current) => (current === r.idx ? null : r.idx))}
                       />
-                    )
-                  })}
-                </svg>
-              )}
-              {regions.length > 0 && variant !== 'ar' && (
-                <svg
-                  className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
-                  viewBox="0 0 100 100"
-                  preserveAspectRatio="none"
+                    ))}
+                    {selectedIdx !== null
+                      ? (() => {
+                          const r = regions.find((region) => region.idx === selectedIdx)
+                          if (!r) return null
+                          return (
+                            <polygon
+                              key={`hit-top-${r.idx}`}
+                              points={r.polygonPct.map(([x, y]) => `${x},${y}`).join(' ')}
+                              fill="transparent"
+                              stroke="transparent"
+                              className="cursor-pointer"
+                              onMouseEnter={() => setHoverIdx(r.idx)}
+                              onMouseLeave={() => setHoverIdx(null)}
+                              onClick={() => setSelectedIdx(null)}
+                            />
+                          )
+                        })()
+                      : null}
+                  </svg>
+                ) : null}
+              </div>
+
+              {imageFrameInViewport && regions.length > 0 && variant !== 'ar' ? (
+                <div
+                  className="pointer-events-none absolute z-20 overflow-visible"
+                  style={screenRectStyle(imageFrameInViewport)}
                   aria-hidden
                 >
-                  {regionsBadges.map((r) => {
-                    if (!r.badgeLayout.callout) return null
-                    const on = hoverIdx === r.idx || selectedIdx === r.idx
-                    const color = CLASS_COLORS[r.cls] ?? '#444'
-                    return (
-                      <line
-                        key={`callout-${r.idx}`}
-                        x1={r.badgeLayout.anchorX}
-                        y1={r.badgeLayout.anchorY}
-                        x2={r.badgeLayout.badgeX}
-                        y2={r.badgeLayout.badgeY}
-                        stroke={color}
-                        strokeWidth={on ? 0.42 : 0.32}
-                        strokeOpacity={on ? 0.95 : 0.72}
-                        vectorEffect="non-scaling-stroke"
-                      />
-                    )
-                  })}
-                </svg>
-              )}
-              {regions.length > 0 && variant !== 'ar' && (
-                <div className="pointer-events-none absolute inset-0 z-20 overflow-visible" aria-hidden>
                   {regionsBadges.map((r) => {
                     const on = hoverIdx === r.idx || selectedIdx === r.idx
                     const color = CLASS_COLORS[r.cls] ?? '#444'
                     const size = on ? 26 : 22
                     const { badgeX, badgeY } = r.badgeLayout
+                    const leftPx = (badgeX / 100) * imageFrameInViewport.width
+                    const topPx = (badgeY / 100) * imageFrameInViewport.height
                     return (
                       <div
                         key={`badge-${r.idx}`}
-                        className="absolute z-20 flex items-center justify-center rounded-full border-2 border-white font-bold leading-none text-white shadow-md"
+                        className="absolute flex items-center justify-center rounded-full border-2 border-white font-bold leading-none text-white shadow-md"
                         style={{
-                          left: `${badgeX}%`,
-                          top: `${badgeY}%`,
+                          left: leftPx,
+                          top: topPx,
                           width: size,
                           height: size,
                           marginLeft: -size / 2,
@@ -1000,48 +1046,7 @@ export function ArchiviewFacadePanel({
                     )
                   })}
                 </div>
-              )}
-              {regions.length > 0 && (
-                <svg
-                  className="absolute inset-0 h-full w-full overflow-visible"
-                  viewBox="0 0 100 100"
-                  preserveAspectRatio="none"
-                >
-                  {regionsForHit.map((r) => (
-                    <polygon
-                      key={`hit-${r.idx}`}
-                      points={r.polygonPct.map(([x, y]) => `${x},${y}`).join(' ')}
-                      fill="transparent"
-                      stroke="transparent"
-                      className="cursor-pointer"
-                      onMouseEnter={() => setHoverIdx(r.idx)}
-                      onMouseLeave={() => setHoverIdx(null)}
-                      onFocus={() => setHoverIdx(r.idx)}
-                      onBlur={() => setHoverIdx(null)}
-                      onClick={() => setSelectedIdx((current) => (current === r.idx ? null : r.idx))}
-                    />
-                  ))}
-                  {selectedIdx !== null
-                    ? (() => {
-                        const r = regions.find((region) => region.idx === selectedIdx)
-                        if (!r) return null
-                        return (
-                          <polygon
-                            key={`hit-top-${r.idx}`}
-                            points={r.polygonPct.map(([x, y]) => `${x},${y}`).join(' ')}
-                            fill="transparent"
-                            stroke="transparent"
-                            className="cursor-pointer"
-                            onMouseEnter={() => setHoverIdx(r.idx)}
-                            onMouseLeave={() => setHoverIdx(null)}
-                            onClick={() => setSelectedIdx(null)}
-                          />
-                        )
-                      })()
-                    : null}
-                </svg>
-              )}
-              </div>
+              ) : null}
 
               {variant === 'ar' && plateRegion && !plateExpanded && (
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 border-t border-arch-surface/15 bg-arch-green-deep/92 px-3 py-2.5 backdrop-blur-sm">
@@ -1083,6 +1088,30 @@ export function ArchiviewFacadePanel({
               {regionList ? (
                 <div className="w-full shrink-0 lg:w-72 xl:w-80">{regionList}</div>
               ) : null}
+            </div>
+          ) : null}
+
+          {plateExpanded && plateRegion && variant !== 'ar' ? (
+            <div
+              className={`pointer-events-auto absolute left-3 right-3 top-2 z-[55] rounded-2xl border border-arch-gold/60 px-5 py-4 text-left text-sm leading-relaxed text-arch-surface shadow-2xl backdrop-blur-xl sm:left-4 sm:right-4 sm:top-3 sm:px-6 sm:py-5 ${
+                embeddedAr ? '' : 'max-w-2xl'
+              }`}
+              style={{ backgroundColor: TRACE_PLATE_GLASS_BG }}
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Экспертная заметка ${plateRegion.idx}`}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <ExpertTracePlate
+                idx={plateRegion.idx}
+                title={plateRegion.trace?.title ?? plateRegion.label}
+                period={plateRegion.trace?.period}
+                trace={plateRegion.trace}
+                comment={plateRegion.comment}
+                verification={building?.verification}
+                expanded
+                onClose={() => setSelectedIdx(null)}
+              />
             </div>
           ) : null}
 
