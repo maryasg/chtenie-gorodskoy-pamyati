@@ -37,9 +37,9 @@ const CLASS_COLORS: Record<string, string> = {
   check_manually: '#b000b0',
 }
 
-/** Полупрозрачная «стеклянная» плашка — rgba надёжнее opacity-модификатора Tailwind. */
-const TRACE_PLATE_GLASS_BG = 'rgba(18, 53, 40, 0.78)'
-const TRACE_PLATE_HOVER_GLASS_BG = 'rgba(18, 53, 40, 0.72)'
+/** Полупрозрачная «стеклянная» плашка — rgba: последнее число = непрозрачность (1.0 = 100%). */
+const TRACE_PLATE_GLASS_BG = 'rgba(18, 53, 40, 0.55)'
+const TRACE_PLATE_HOVER_GLASS_BG = 'rgba(18, 53, 40, 0.48)'
 
 /** Окна и узкие проёмы: без сплошной заливки-квадрата — только контур и кружок. */
 const COMPACT_REGION_AREA = 90
