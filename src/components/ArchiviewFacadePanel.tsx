@@ -214,6 +214,14 @@ async function pickFacadeImage(
       }
     }
 
+    /** Запасной вариант, пока modern-source.png не экспортирован из Archiview (напр. MOSCOW_001). */
+    if (assets.modernRectifiedUrl) {
+      const rectified = await probeImageMeta(assets.modernRectifiedUrl)
+      if (rectified) {
+        return { url: assets.modernRectifiedUrl, kind: 'rectified', w: rectified.w, h: rectified.h }
+      }
+    }
+
     return null
   }
 
@@ -914,9 +922,9 @@ export function ArchiviewFacadePanel({
         >
           {variant === 'ar' ? (
             <>
-              Для AR-preview нужны полевое фото и разметка Archiview. Если подсветка съезжает —
-              переэкспортируйте <code>facade-project.json</code> с <code>modern_crop_offset_xy</code>{' '}
-              через <code>copy_to_website.bat</code> (CardId: {assets.cardId}).
+              Для AR-preview нужно исходное фото <code>modern-source.png</code> (файл{' '}
+              <code>11_modern_source_for_site.png</code> из Archiview). Экспортируйте через{' '}
+              <code>copy_to_website.bat</code> (CardId: {assets.cardId}) → Push → Ctrl+F5.
             </>
           ) : (
             <>
@@ -1020,6 +1028,13 @@ export function ArchiviewFacadePanel({
                   +
                 </button>
               </div>
+              ) : null}
+
+              {variant === 'ar' && imageKind === 'rectified' ? (
+                <div className="pointer-events-none absolute inset-x-0 top-0 z-30 border-b border-amber-400/40 bg-amber-950/75 px-3 py-1.5 text-center text-[11px] leading-snug text-amber-100/95">
+                  Исходное фото ещё не на сайте — показано выпрямленное. Экспортируйте{' '}
+                  <code className="text-amber-50">modern-source.png</code> из Archiview.
+                </div>
               ) : null}
 
               <div
