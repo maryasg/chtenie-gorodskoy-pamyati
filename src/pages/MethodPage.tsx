@@ -106,12 +106,12 @@ function MethodSection({
 export function MethodPage() {
   return (
     <div className="space-y-6">
-      <header className="arch-section overflow-hidden border-arch-green/20 bg-gradient-to-br from-arch-green-deep to-arch-green text-arch-surface">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-arch-gold">Техническая методология</p>
-        <h1 className="mt-2 max-w-3xl text-3xl font-semibold tracking-tight">
+      <header className="arch-section overflow-hidden border-arch-green/20 bg-gradient-to-br from-arch-green-soft to-arch-surface">
+        <p className="arch-kicker">Техническая методология</p>
+        <h1 className="mt-2 max-w-3xl text-3xl font-semibold tracking-tight text-arch-green-deep">
           Как фасад превращается в интерактивную городскую память
         </h1>
-        <p className="mt-4 max-w-3xl text-sm leading-relaxed text-arch-surface/85">
+        <p className="mt-4 max-w-3xl text-sm leading-relaxed text-arch-ink/85">
           Проект соединяет экспертное чтение архитектуры, подготовку фотоматериалов в Archiview и
           публичный сайт. Главная идея: показать не только текст об истории здания, но и конкретные
           места на фасаде, где эта история видна сегодня.
