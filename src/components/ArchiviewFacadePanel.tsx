@@ -200,7 +200,8 @@ async function pickFacadeImage(
   },
 ): Promise<{ url: string; kind: FacadeImageKind; w: number; h: number } | null> {
   if (options?.arMode) {
-    if (assets.arPhotoUrl) {
+    /** Полевой кадр — только если в facade-project.json есть H_rect_to_ar. */
+    if (options.hasArHomography && assets.arPhotoUrl) {
       const arPhoto = await probeImageMeta(assets.arPhotoUrl)
       if (arPhoto) {
         return { url: assets.arPhotoUrl, kind: 'source_modern', w: arPhoto.w, h: arPhoto.h }
@@ -211,6 +212,13 @@ async function pickFacadeImage(
       const source = await probeImageMeta(assets.modernSourceUrl)
       if (source) {
         return { url: assets.modernSourceUrl, kind: 'source_modern', w: source.w, h: source.h }
+      }
+    }
+
+    if (assets.arPhotoUrl) {
+      const arPhoto = await probeImageMeta(assets.arPhotoUrl)
+      if (arPhoto) {
+        return { url: assets.arPhotoUrl, kind: 'source_modern', w: arPhoto.w, h: arPhoto.h }
       }
     }
 
@@ -553,6 +561,7 @@ export function ArchiviewFacadePanel({
         isArFieldPhoto && !useArHomography && !useSourcePolygonsOnField && Boolean(H_modern_full)
       const useSourcePolygonsAr =
         variant === 'ar' &&
+        !isArFieldPhoto &&
         loaded.kind === 'source_modern' &&
         annotationsHaveSourcePolygons(annotations)
       const useSourcePolygons =
