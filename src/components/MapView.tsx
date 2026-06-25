@@ -39,7 +39,8 @@ export function MapView() {
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
 
-    const map = L.map(containerRef.current).setView(MAP_CENTER, MAP_ZOOM)
+    const container = containerRef.current
+    const map = L.map(container, { scrollWheelZoom: false }).setView(MAP_CENTER, MAP_ZOOM)
     map.attributionControl.setPrefix(false)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution:
@@ -57,9 +58,34 @@ export function MapView() {
       markers.set(b.id, marker)
     })
 
+    const activateScrollZoom = () => {
+      map.scrollWheelZoom.enable()
+      container.dataset.zoomActive = 'true'
+    }
+
+    const deactivateScrollZoom = () => {
+      map.scrollWheelZoom.disable()
+      delete container.dataset.zoomActive
+    }
+
+    const onContainerClick = () => {
+      activateScrollZoom()
+    }
+
+    const onDocumentPointerDown = (event: PointerEvent) => {
+      if (!container.contains(event.target as Node)) {
+        deactivateScrollZoom()
+      }
+    }
+
+    container.addEventListener('click', onContainerClick)
+    document.addEventListener('pointerdown', onDocumentPointerDown)
+
     mapRef.current = map
     markersRef.current = markers
     return () => {
+      container.removeEventListener('click', onContainerClick)
+      document.removeEventListener('pointerdown', onDocumentPointerDown)
       map.remove()
       mapRef.current = null
       markers.clear()
@@ -82,7 +108,10 @@ export function MapView() {
 
   return (
     <div className="space-y-4">
-      <div ref={containerRef} className="h-[420px] w-full rounded-xl border border-arch-line shadow-sm" />
+      <div
+        ref={containerRef}
+        className="h-[420px] w-full rounded-xl border border-arch-line shadow-sm data-[zoom-active=true]:ring-2 data-[zoom-active=true]:ring-arch-green/40"
+      />
       <div className="flex flex-wrap gap-3 text-sm">
         {MAP_LEGEND_STATUSES.map((key) => {
           const meta = MAP_STATUS_META[key]
@@ -98,7 +127,9 @@ export function MapView() {
         })}
       </div>
       <p className="text-xs text-arch-muted">
-        Наведите на карточку здания ниже — на карте подсветится точка и названия следов.
+        Колёсико мыши прокручивает страницу. Чтобы приблизить карту — сначала кликните по ней, затем
+        крутите колёсико. Наведите на карточку здания ниже — на карте подсветится точка и названия
+        следов.
       </p>
       <ul className="grid gap-2 sm:grid-cols-2 sm:items-stretch">
         {BUILDINGS.map((b) => (
