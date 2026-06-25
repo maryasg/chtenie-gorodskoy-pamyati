@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ArchiviewAnnotation, ArchiviewBuildingAssets } from '../data/explorer/archiviewAssets'
 import type { Building, MemoryTrace } from '../types/building'
 import {
@@ -36,6 +36,10 @@ const CLASS_COLORS: Record<string, string> = {
   other_artifact: '#8a8a00',
   check_manually: '#b000b0',
 }
+
+/** Полупрозрачная «стеклянная» плашка — rgba надёжнее opacity-модификатора Tailwind. */
+const TRACE_PLATE_GLASS_BG = 'rgba(18, 53, 40, 0.78)'
+const TRACE_PLATE_HOVER_GLASS_BG = 'rgba(18, 53, 40, 0.72)'
 
 /** Окна и узкие проёмы: без сплошной заливки-квадрата — только контур и кружок. */
 const COMPACT_REGION_AREA = 90
@@ -287,6 +291,8 @@ export function ArchiviewFacadePanel({
   const [pan, setPan] = useState<Pan>({ x: 0, y: 0 })
   const [isPanning, setIsPanning] = useState(false)
   const viewportRef = useRef<HTMLDivElement>(null)
+  const facadeBlockRef = useRef<HTMLDivElement>(null)
+  const [hoverPlateFrame, setHoverPlateFrame] = useState<{ left: number; top: number } | null>(null)
   const panSessionRef = useRef<{ startPan: Pan; startX: number; startY: number; moved: boolean } | null>(
     null,
   )
@@ -600,6 +606,54 @@ export function ArchiviewFacadePanel({
     ? tracePlatePlacement(plateRegion.cx, plateRegion.cy, plateExpanded)
     : null
 
+  useLayoutEffect(() => {
+    if (!plateRegion || plateExpanded || variant === 'ar' || !platePlacement) {
+      setHoverPlateFrame(null)
+      return
+    }
+    const block = facadeBlockRef.current
+    const viewport = viewportRef.current
+    if (!block || !viewport) {
+      setHoverPlateFrame(null)
+      return
+    }
+
+    const update = () => {
+      const vpRect = viewport.getBoundingClientRect()
+      const blockRect = block.getBoundingClientRect()
+      const xInVp = (platePlacement.leftPct / 100) * vpRect.width
+      const yInVp = (platePlacement.topPct / 100) * vpRect.height
+      setHoverPlateFrame({
+        left: vpRect.left - blockRect.left + xInVp,
+        top: vpRect.top - blockRect.top + yInVp,
+      })
+    }
+
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(block)
+    ro.observe(viewport)
+    window.addEventListener('resize', update)
+    window.addEventListener('scroll', update, true)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', update)
+      window.removeEventListener('scroll', update, true)
+    }
+  }, [
+    plateRegion,
+    plateExpanded,
+    platePlacement,
+    variant,
+    hoverIdx,
+    selectedIdx,
+    zoom,
+    pan.x,
+    pan.y,
+    imgSize.w,
+    imgSize.h,
+  ])
+
   /** Small regions (e.g. #6, #9) must paint above large overlaps (#12) for clicks — render largest first, smallest last in SVG. */
   const regionsForHit = useMemo(
     () => [...regions].sort((a, b) => polygonAreaAbs(b.polygonPct) - polygonAreaAbs(a.polygonPct)),
@@ -736,7 +790,7 @@ export function ArchiviewFacadePanel({
       )}
 
       {imageOk && (
-        <div className="relative">
+        <div ref={facadeBlockRef} className="relative overflow-hidden">
           <div
             className={
               useSidebarLayout
@@ -753,9 +807,10 @@ export function ArchiviewFacadePanel({
           >
             {plateExpanded && plateRegion ? (
               <div
-                className={`pointer-events-auto absolute left-3 right-3 top-2 z-50 rounded-2xl border border-arch-gold/60 bg-arch-green-deep/80 px-5 py-4 text-left text-sm leading-relaxed text-arch-surface shadow-2xl backdrop-blur-lg sm:left-4 sm:right-4 sm:top-3 sm:px-6 sm:py-5 ${
+                className={`pointer-events-auto absolute left-3 right-3 top-2 z-50 rounded-2xl border border-arch-gold/60 px-5 py-4 text-left text-sm leading-relaxed text-arch-surface shadow-2xl backdrop-blur-xl sm:left-4 sm:right-4 sm:top-3 sm:px-6 sm:py-5 ${
                   embeddedAr ? '' : 'max-w-2xl'
                 }`}
+                style={{ backgroundColor: TRACE_PLATE_GLASS_BG }}
                 role="dialog"
                 aria-modal="true"
                 aria-label={`Экспертная заметка ${plateRegion.idx}`}
@@ -986,27 +1041,6 @@ export function ArchiviewFacadePanel({
                     : null}
                 </svg>
               )}
-              {plateRegion && platePlacement && variant !== 'ar' && !plateExpanded && (
-                <div
-                  className="pointer-events-none absolute z-20 max-w-[min(88%,260px)] rounded-lg border border-arch-gold/60 bg-arch-green-deep/75 px-3 py-2.5 text-left text-sm leading-snug text-arch-surface shadow-xl backdrop-blur-md"
-                  style={{
-                    left: `${platePlacement.leftPct}%`,
-                    top: `${platePlacement.topPct}%`,
-                    transform: platePlacement.transform,
-                  }}
-                >
-                  <ExpertTracePlate
-                    idx={plateRegion.idx}
-                    title={plateRegion.trace?.title ?? plateRegion.label}
-                    period={plateRegion.trace?.period}
-                    trace={plateRegion.trace}
-                    comment={plateRegion.comment}
-                    verification={building?.verification}
-                    expanded={false}
-                    compact={platePlacement.compact}
-                  />
-                </div>
-              )}
               </div>
 
               {variant === 'ar' && plateRegion && !plateExpanded && (
@@ -1038,7 +1072,7 @@ export function ArchiviewFacadePanel({
           {useSidebarLayout ? (
             <>
               {regionList ? (
-                <div className="order-2 min-w-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:self-start">
+                <div className="relative z-0 order-2 min-w-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:self-start">
                   {regionList}
                 </div>
               ) : null}
@@ -1049,6 +1083,29 @@ export function ArchiviewFacadePanel({
               {regionList ? (
                 <div className="w-full shrink-0 lg:w-72 xl:w-80">{regionList}</div>
               ) : null}
+            </div>
+          ) : null}
+
+          {hoverPlateFrame && plateRegion && platePlacement && variant !== 'ar' && !plateExpanded ? (
+            <div
+              className="pointer-events-none absolute z-[60] max-w-[min(88%,260px)] rounded-lg border border-arch-gold/60 px-3 py-2.5 text-left text-sm leading-snug text-arch-surface shadow-xl backdrop-blur-md"
+              style={{
+                backgroundColor: TRACE_PLATE_HOVER_GLASS_BG,
+                left: hoverPlateFrame.left,
+                top: hoverPlateFrame.top,
+                transform: platePlacement.transform,
+              }}
+            >
+              <ExpertTracePlate
+                idx={plateRegion.idx}
+                title={plateRegion.trace?.title ?? plateRegion.label}
+                period={plateRegion.trace?.period}
+                trace={plateRegion.trace}
+                comment={plateRegion.comment}
+                verification={building?.verification}
+                expanded={false}
+                compact={platePlacement.compact}
+              />
             </div>
           ) : null}
           </div>
