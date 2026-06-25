@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Building } from '../types/building'
 import type { ArchiviewBuildingAssets } from '../data/explorer/archiviewAssets'
 import {
@@ -7,12 +7,6 @@ import {
   type FacadeTimeLayerStack,
   type FacadeTimeSnapshot,
 } from '../data/explorer/explorerManifest'
-import {
-  computeStackedAutoplayFrame,
-  stackedAutoplayCycleMs,
-  stackedAutoplayYearLabel,
-  usesStackedAutoplay,
-} from '../lib/facadeTimeLayersAutoplay'
 
 type Props = {
   building: Building
@@ -64,8 +58,8 @@ function displayYearLabel(frame: CrossfadeFrame): string {
   return `${frame.from.label ?? frame.from.year} → ${frame.to.label ?? frame.to.year}`
 }
 
-/** Длительность плавного перехода между соседними кадрами (без пауз). */
-const LAYER_CROSSFADE_MS = 2200
+/** Полный цикл автопроигрывания: 1840 → … → 2026 за 10 с, без пауз на кадрах. */
+const AUTOPLAY_CYCLE_MS = 10_000
 
 type LayerDisplayFrame = {
   from: FacadeTimeSnapshot
@@ -81,31 +75,9 @@ function easeInOut(t: number): number {
   return x * x * (3 - 2 * x)
 }
 
-function transitionOpacities(transitionElapsedMs: number): { fromOpacity: number; toOpacity: number } {
-  const blend = easeInOut(transitionElapsedMs / LAYER_CROSSFADE_MS)
-  return {
-    fromOpacity: 1 - blend,
-    toOpacity: blend,
-  }
-}
-
-function segmentDurationMs(): number {
-  return LAYER_CROSSFADE_MS
-}
-
-function autoplayCycleMs(layerCount: number): number {
-  return Math.max(1, layerCount) * segmentDurationMs()
-}
-
-function sliderPctForSegment(segmentIndex: number, segmentElapsedMs: number, layerCount: number): number {
-  if (layerCount <= 1) return 0
-  const tickSpan = 100 / (layerCount - 1)
-  const transitionProgress = Math.min(1, segmentElapsedMs / LAYER_CROSSFADE_MS)
-
-  if (segmentIndex >= layerCount - 1) {
-    return (1 - transitionProgress) * 100
-  }
-  return segmentIndex * tickSpan + transitionProgress * tickSpan
+function transitionMs(layerCount: number): number {
+  if (layerCount <= 1) return AUTOPLAY_CYCLE_MS
+  return AUTOPLAY_CYCLE_MS / (layerCount - 1)
 }
 
 function computeAutoplayFrame(layers: FacadeTimeSnapshot[], elapsedMs: number): LayerDisplayFrame {
@@ -119,20 +91,23 @@ function computeAutoplayFrame(layers: FacadeTimeSnapshot[], elapsedMs: number): 
     }
   }
 
-  const cycleMs = autoplayCycleMs(layers.length)
-  const cycleElapsed = ((elapsedMs % cycleMs) + cycleMs) % cycleMs
-  const segmentIndex = Math.floor(cycleElapsed / segmentDurationMs())
-  const segmentElapsed = cycleElapsed - segmentIndex * segmentDurationMs()
+  const stepMs = transitionMs(layers.length)
+  const cycleElapsed = ((elapsedMs % AUTOPLAY_CYCLE_MS) + AUTOPLAY_CYCLE_MS) % AUTOPLAY_CYCLE_MS
+  const lastIndex = layers.length - 1
+  const segmentIndex = Math.min(Math.floor(cycleElapsed / stepMs), lastIndex - 1)
+  const segmentElapsed = cycleElapsed - segmentIndex * stepMs
+  const blend = easeInOut(Math.min(1, segmentElapsed / stepMs))
+
   const from = layers[segmentIndex]
-  const to = layers[(segmentIndex + 1) % layers.length]
-  const { fromOpacity, toOpacity } = transitionOpacities(segmentElapsed)
+  const to = layers[segmentIndex + 1]
+  const sliderPct = ((segmentIndex + blend) / lastIndex) * 100
 
   return {
     from,
     to,
-    fromOpacity,
-    toOpacity,
-    sliderPct: sliderPctForSegment(segmentIndex, segmentElapsed, layers.length),
+    fromOpacity: 1 - blend,
+    toOpacity: blend,
+    sliderPct,
   }
 }
 
@@ -235,7 +210,6 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
   }, [archiview.cardId])
 
   const layers = stack?.layers ?? []
-  const stackedAutoplay = usesStackedAutoplay(archiview.cardId, layers.length)
 
   useEffect(() => {
     if (!isPlaying || layers.length < 2) return
@@ -244,9 +218,7 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
 
     const step = (now: number) => {
       const elapsed = now - playbackAnchorRef.current
-      const frame = stackedAutoplay
-        ? computeStackedAutoplayFrame(layers, elapsed)
-        : computeAutoplayFrame(layers, elapsed)
+      const frame = computeAutoplayFrame(layers, elapsed)
       setPlaybackElapsedMs(elapsed)
       setPositionPct(frame.sliderPct)
       rafRef.current = requestAnimationFrame(step)
@@ -254,35 +226,15 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
 
     rafRef.current = requestAnimationFrame(step)
     return () => cancelAnimationFrame(rafRef.current)
-  }, [isPlaying, layers, stackedAutoplay, archiview.cardId])
-
-  const stackedFrame = useMemo(() => {
-    if (!stackedAutoplay || !isPlaying || layers.length < 4) return null
-    return computeStackedAutoplayFrame(layers, playbackElapsedMs)
-  }, [stackedAutoplay, isPlaying, layers, playbackElapsedMs, archiview.cardId])
+  }, [isPlaying, layers])
 
   const displayFrame = useMemo(() => {
     if (!layers.length) return null
     if (isPlaying && layers.length >= 2) {
-      if (stackedAutoplay) {
-        const stacked = computeStackedAutoplayFrame(layers, playbackElapsedMs)
-        const emphasis = layers[stacked.emphasisIndex] ?? layers[0]
-        return {
-          from: emphasis,
-          to: emphasis,
-          fromOpacity: 1,
-          toOpacity: 0,
-          sliderPct: stacked.sliderPct,
-          sliderThumbOpacity: stacked.sliderThumbOpacity,
-          stackedOpacities: stacked.opacities,
-        }
-      }
-      const frame = computeAutoplayFrame(layers, playbackElapsedMs)
-      return { ...frame, sliderThumbOpacity: 1, stackedOpacities: null as number[] | null }
+      return computeAutoplayFrame(layers, playbackElapsedMs)
     }
-    const manual = manualDisplayFrame(layers, positionPct)
-    return { ...manual, sliderThumbOpacity: 1, stackedOpacities: null as number[] | null }
-  }, [isPlaying, layers, playbackElapsedMs, positionPct, stackedAutoplay, archiview.cardId])
+    return manualDisplayFrame(layers, positionPct)
+  }, [isPlaying, layers, playbackElapsedMs, positionPct])
 
   const frame = displayFrame
     ? {
@@ -297,17 +249,10 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
 
   const stageHint = useMemo(() => {
     if (!displayFrame) return ''
-    if (stackedFrame) {
-      return layerHint(
-        layers[stackedFrame.emphasisIndex]?.year ?? layers[0].year,
-        building.id,
-        layers[stackedFrame.emphasisIndex]?.label,
-      )
-    }
     const year = toOpacity >= 0.5 ? displayFrame.to.year : displayFrame.from.year
     const label = toOpacity >= 0.5 ? displayFrame.to.label : displayFrame.from.label
     return layerHint(year, building.id, label)
-  }, [displayFrame, stackedFrame, layers, building.id, toOpacity])
+  }, [displayFrame, building.id, toOpacity])
 
   if (!manifestLoaded) {
     return (
@@ -327,55 +272,22 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
 
   const firstYear = layers[0].label ?? layers[0].year
   const lastYear = layers[layers.length - 1].label ?? layers[layers.length - 1].year
-  const cycleSeconds = Math.round(
-    (stackedAutoplay
-      ? stackedAutoplayCycleMs(archiview.cardId!, layers.length)
-      : autoplayCycleMs(layers.length)) / 1000,
-  )
+  const cycleSeconds = AUTOPLAY_CYCLE_MS / 1000
 
-  const sliderYearLabel = stackedFrame
-    ? stackedAutoplayYearLabel(layers, stackedFrame.emphasisIndex)
-    : frame
-      ? displayYearLabel(frame)
-      : ''
-
-  const sliderThumbOpacity = displayFrame?.sliderThumbOpacity ?? 1
-  const stackedOpacities = displayFrame?.stackedOpacities
+  const sliderYearLabel = frame ? displayYearLabel(frame) : ''
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-arch-muted">
-        {stackedAutoplay ? (
-          <>
-            Двигайте ползунок по годам или запустите автопроигрывание. В режиме слайд-шоу: 1840
-            на 100%, через 1 с одновременно с появлением 1924 уходит на 20%, 1924 — на 80%;
-            затем 1930 до 80%; когда 1930 наполовину проявился — начинает появляться 2026 до 100%.
-            Полный цикл ~{cycleSeconds} с.
-          </>
-        ) : (
-          <>
-            Двигайте ползунок по годам — снимки сменяют друг друга через плавное затемнение. Можно
-            запустить автопроигрывание: кадры сменяют друг друга непрерывно, без остановок
-            (плавный cross-dissolve ~{Math.round(LAYER_CROSSFADE_MS / 1000)} с на переход; полный цикл
-            ~{cycleSeconds} с). Порядок:{' '}
-            {layers.map((layer) => layer.label ?? layer.year).join(' → ')} → {firstYear}.
-          </>
-        )}
+        Двигайте ползунок по годам — снимки сменяют друг друга через плавное затемнение. Кнопка{' '}
+        <strong>▶ Проиграть</strong> — непрерывное слайд-шоу от {firstYear} до {lastYear} за{' '}
+        {cycleSeconds} с, без остановок на кадрах. Порядок:{' '}
+        {layers.map((layer) => layer.label ?? layer.year).join(' → ')}.
       </p>
 
       <div className="overflow-hidden rounded-2xl border border-arch-line bg-arch-green-deep shadow-md">
         <div className="relative aspect-[4/3] max-h-[min(70vh,640px)] w-full bg-arch-green-deep">
-          {stackedOpacities ? (
-            layers.map((layer, index) => (
-              <img
-                key={`${layer.year}-${layer.label ?? ''}`}
-                src={layer.historicalUrl}
-                alt={`Фасад ${layer.label ?? layer.year}`}
-                className="absolute inset-0 h-full w-full object-contain"
-                style={{ opacity: stackedOpacities[index] ?? 0 }}
-              />
-            ))
-          ) : frame ? (
+          {frame ? (
             <>
               <img
                 src={frame.from.historicalUrl}
@@ -415,8 +327,7 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
             step={0.5}
             value={positionPct}
             onChange={(e) => setPositionManual(Number(e.target.value))}
-            className="time-layers-range w-full accent-arch-green"
-            style={{ '--thumb-opacity': sliderThumbOpacity } as CSSProperties}
+            className="w-full accent-arch-green"
             aria-valuetext={sliderYearLabel}
           />
           <div className="mt-2 flex justify-between gap-1 text-[11px] text-arch-muted">
@@ -471,7 +382,7 @@ export function FacadeTimeLayers({ building, archiview }: Props) {
 
       <div className="rounded-xl border border-arch-line bg-arch-surface p-4 shadow-sm">
         <p className="text-sm text-arch-ink/80">{stageHint}</p>
-        {frame && !stackedOpacities && (frame.blend >= 0.5 ? frame.to.sourceUrl : frame.from.sourceUrl) ? (
+        {frame && (frame.blend >= 0.5 ? frame.to.sourceUrl : frame.from.sourceUrl) ? (
           <p className="mt-2 text-xs text-arch-muted">
             Источник:{' '}
             <a
