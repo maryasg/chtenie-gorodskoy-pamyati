@@ -23,10 +23,24 @@ type CardBadgePrefs = {
   collisionRadius?: number
   side?: Record<number, PlacementSide>
   nudge?: Record<number, { dx: number; dy: number }>
+  /** Фиксированная позиция кружка в % (0–100), если подстройка side/nudge недостаточна. */
+  fixedBadge?: Record<number, { x: number; y: number }>
 }
 
-/** Дом со зверями: тонкая подстройка у края зоны (без «отлёта»). */
+/** Дом со зверями: подстройка кружков у края зоны; 3,6,7,10,11 — по разметке на фасаде. */
 const MOSCOW_003_PREFS: CardBadgePrefs = {
+  fixedBadge: {
+    /** Утраченный балкон (слева внизу) → кружок у линии шва надстройки */
+    10: { x: 48, y: 49.5 },
+    /** Ажурный декор на кровле → над правым верхним окном надстройки */
+    6: { x: 71, y: 43 },
+    /** Окно 6-го этажа (центр-право) → у верхнего угла проёма */
+    3: { x: 64.5, y: 44.5 },
+    /** Окно на шве (слева) → выше и правее проёма */
+    7: { x: 20.5, y: 44 },
+    /** Утраченный балкон (центр-низ) → в зону двери (бывшее окно) */
+    11: { x: 49.5, y: 71.5 },
+  },
   nudge: {
     1: { dx: -0.8, dy: -0.4 },
     2: { dx: 0.8, dy: 0 },
@@ -36,22 +50,16 @@ const MOSCOW_003_PREFS: CardBadgePrefs = {
     7: { dx: -1.0, dy: 0 },
     8: { dx: -0.8, dy: 0.2 },
     9: { dx: -1.2, dy: 0.5 },
-    10: { dx: 0, dy: -0.4 },
-    11: { dx: 0.2, dy: -0.4 },
     13: { dx: 0.2, dy: 0.6 },
     14: { dx: -1.0, dy: 0.2 },
   },
   side: {
     1: 'topLeft',
     2: 'right',
-    3: 'below',
     4: 'below',
     5: 'below',
-    7: 'left',
     8: 'left',
     9: 'below',
-    10: 'below',
-    11: 'below',
     13: 'below',
     14: 'left',
   },
@@ -315,6 +323,21 @@ export function assignBadgeLayouts(regions: RegionForBadgeLayout[], cardId?: str
   const { alwaysCallout } = prefsForCard(cardId)
 
   for (const region of sorted) {
+    const { fixedBadge } = prefsForCard(cardId)
+    const fixed = fixedBadge?.[region.idx]
+    if (fixed) {
+      const layout: BadgeLayout = {
+        anchorX: region.badgeLayout.anchorX,
+        anchorY: region.badgeLayout.anchorY,
+        badgeX: clampPct(fixed.x),
+        badgeY: clampPct(fixed.y),
+        callout: true,
+      }
+      region.badgeLayout = layout
+      placed.push(layout)
+      continue
+    }
+
     if (region.areaPct >= BADGE_ON_REGION_AREA && !alwaysCallout) {
       const centered: BadgeLayout = {
         anchorX: region.badgeLayout.anchorX,
