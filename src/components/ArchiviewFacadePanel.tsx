@@ -736,20 +736,44 @@ export function ArchiviewFacadePanel({
       )}
 
       {imageOk && (
-        <div
-          className={
-            useSidebarLayout
-              ? 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_17rem] xl:grid-cols-[minmax(0,1fr)_20rem] lg:items-start'
-              : 'flex flex-col gap-4'
-          }
-        >
+        <div className="relative">
           <div
             className={
               useSidebarLayout
-                ? 'relative min-w-0 lg:col-start-1 lg:row-start-1'
-                : 'relative min-w-0 w-full'
+                ? 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_17rem] xl:grid-cols-[minmax(0,1fr)_20rem] lg:items-start'
+                : 'flex flex-col gap-4'
             }
           >
+          <div
+            className={
+              useSidebarLayout
+                ? 'relative order-1 flex min-w-0 flex-col gap-4 overflow-visible lg:col-start-1 lg:row-start-1 lg:row-span-2'
+                : 'relative min-w-0 w-full overflow-visible'
+            }
+          >
+            {plateExpanded && plateRegion ? (
+              <div
+                className={`pointer-events-auto absolute left-3 right-3 top-2 z-50 rounded-2xl border border-arch-gold/60 bg-arch-green-deep/80 px-5 py-4 text-left text-sm leading-relaxed text-arch-surface shadow-2xl backdrop-blur-lg sm:left-4 sm:right-4 sm:top-3 sm:px-6 sm:py-5 ${
+                  embeddedAr ? '' : 'max-w-2xl'
+                }`}
+                role="dialog"
+                aria-modal="true"
+                aria-label={`Экспертная заметка ${plateRegion.idx}`}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <ExpertTracePlate
+                  idx={plateRegion.idx}
+                  title={plateRegion.trace?.title ?? plateRegion.label}
+                  period={plateRegion.trace?.period}
+                  trace={plateRegion.trace}
+                  comment={plateRegion.comment}
+                  verification={building?.verification}
+                  expanded
+                  onClose={() => setSelectedIdx(null)}
+                />
+              </div>
+            ) : null}
+          <div className="relative min-w-0 shrink-0">
             <div
               ref={viewportRef}
               className={`relative w-full ${
@@ -775,8 +799,16 @@ export function ArchiviewFacadePanel({
               onPointerUp={endPanSession}
               onPointerCancel={endPanSession}
             >
+              {plateExpanded && variant !== 'ar' ? (
+                <button
+                  type="button"
+                  className="absolute inset-0 z-30 cursor-default border-0 bg-transparent p-0"
+                  aria-label="Закрыть карточку"
+                  onClick={() => setSelectedIdx(null)}
+                />
+              ) : null}
               <div
-                className="absolute right-2 top-2 z-30 flex items-center gap-1 rounded-lg border border-arch-line/80 bg-arch-surface/95 p-1 shadow-md backdrop-blur-sm"
+                className="absolute right-2 top-2 z-40 flex items-center gap-1 rounded-lg border border-arch-line/80 bg-arch-surface/95 p-1 shadow-md backdrop-blur-sm"
                 role="toolbar"
                 aria-label="Масштаб фасада"
               >
@@ -956,7 +988,7 @@ export function ArchiviewFacadePanel({
               )}
               {plateRegion && platePlacement && variant !== 'ar' && !plateExpanded && (
                 <div
-                  className="pointer-events-none absolute z-20 max-w-[min(88%,240px)] rounded-lg border border-arch-gold/70 bg-arch-green-deep/92 px-3 py-2.5 text-left text-sm leading-snug text-arch-surface shadow-xl backdrop-blur-md"
+                  className="pointer-events-none absolute z-20 max-w-[min(88%,260px)] rounded-lg border border-arch-gold/60 bg-arch-green-deep/75 px-3 py-2.5 text-left text-sm leading-snug text-arch-surface shadow-xl backdrop-blur-md"
                   style={{
                     left: `${platePlacement.leftPct}%`,
                     top: `${platePlacement.topPct}%`,
@@ -995,36 +1027,12 @@ export function ArchiviewFacadePanel({
                 </div>
               )}
 
-              {plateExpanded && plateRegion && (
-                <div
-                  className={`absolute inset-0 z-40 flex items-center justify-center bg-black/55 ${
-                    embeddedAr ? 'p-2' : 'p-4 sm:p-6'
-                  }`}
-                  role="dialog"
-                  aria-modal="true"
-                  aria-label={`Экспертная заметка ${plateRegion.idx}`}
-                  onClick={() => setSelectedIdx(null)}
-                >
-                  <div
-                    className={`pointer-events-auto max-h-[min(82%,560px)] w-full overflow-y-auto rounded-2xl border border-arch-gold/70 bg-arch-green-deep px-5 py-4 text-left text-sm leading-relaxed text-arch-surface shadow-2xl ${
-                      embeddedAr ? 'max-w-none' : 'max-w-lg'
-                    }`}
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <ExpertTracePlate
-                      idx={plateRegion.idx}
-                      title={plateRegion.trace?.title ?? plateRegion.label}
-                      period={plateRegion.trace?.period}
-                      trace={plateRegion.trace}
-                      comment={plateRegion.comment}
-                      verification={building?.verification}
-                      expanded
-                      onClose={() => setSelectedIdx(null)}
-                    />
-                  </div>
-                </div>
-              )}
             </div>
+          </div>
+
+            {useSidebarLayout && comparisonBlock ? (
+              <div className="relative z-0 min-w-0">{comparisonBlock}</div>
+            ) : null}
           </div>
 
           {useSidebarLayout ? (
@@ -1033,9 +1041,6 @@ export function ArchiviewFacadePanel({
                 <div className="order-2 min-w-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:self-start">
                   {regionList}
                 </div>
-              ) : null}
-              {comparisonBlock ? (
-                <div className="order-3 min-w-0 lg:col-start-1 lg:row-start-2">{comparisonBlock}</div>
               ) : null}
             </>
           ) : !embeddedAr && (regionList || comparisonBlock) ? (
@@ -1046,6 +1051,8 @@ export function ArchiviewFacadePanel({
               ) : null}
             </div>
           ) : null}
+          </div>
+
         </div>
       )}
     </div>
