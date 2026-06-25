@@ -1,7 +1,10 @@
 import { polygonAreaAbs, polygonCentroid, type Point } from './archiviewGeometry'
 
-/** Площадь в %²: крупная зона — номер по центру; мелкие и средние — выноска у края. */
+/** Площадь в %²: крупная зона — номер по центру; мелкие — выноска у края. */
 const BADGE_ON_REGION_AREA = 12
+
+/** Диаметр кружка в координатах фото (0–100). */
+const BADGE_DIAMETER_PCT = 2.6
 
 const BADGE_COLLISION_RADIUS = 2.15
 
@@ -18,47 +21,13 @@ type PlacementSide = 'below' | 'above' | 'left' | 'right' | 'topLeft' | 'topRigh
 type BBox = { minX: number; minY: number; maxX: number; maxY: number }
 
 type CardBadgePrefs = {
-  /** Все номера — выносные кружки у края зоны, не по центру (даже у крупной надстройки). */
-  alwaysCallout?: boolean
   collisionRadius?: number
   side?: Record<number, PlacementSide>
   nudge?: Record<number, { dx: number; dy: number }>
-  /** Фиксированная позиция кружка в % (0–100), если подстройка side/nudge недостаточна. */
-  fixedBadge?: Record<number, { x: number; y: number }>
 }
 
-/**
- * Дом со зверями (MOSCOW_003): все кружки — фиксированные позиции по разметке на фасаде
- * (стрелки Maria, июнь 2026). Не пересчитывать автоматически — иначе «съезжают».
- */
-const MOSCOW_003_PREFS: CardBadgePrefs = {
-  alwaysCallout: true,
-  fixedBadge: {
-    /** Нижние окна — стрелки вверх-вправо */
-    1: { x: 54, y: 65 },
-    2: { x: 48, y: 63 },
-    /** Надстройка (зелёная зона) — стрелки вверх */
-    3: { x: 63, y: 36 },
-    4: { x: 76, y: 36 },
-    5: { x: 67, y: 38 },
-    6: { x: 33, y: 43.5 },
-    7: { x: 17, y: 49 },
-    /** Левое окно: 8 вверх, 9 вниз — к одному проёму */
-    8: { x: 24, y: 41 },
-    9: { x: 23.5, y: 42 },
-    /** Розовые проёмы центра — стрелки вверх */
-    10: { x: 40, y: 56 },
-    11: { x: 46, y: 58 },
-    12: { x: 42, y: 33 },
-    /** Правые окна — стрелки вниз */
-    13: { x: 65.5, y: 51 },
-    14: { x: 73.5, y: 52 },
-  },
-}
-
-/** Дом Ардовых / Куманиных: кружки с номерами рядом с зоной, не на подсветке. */
+/** Дом Ардовых / Куманиных: предпочтительная сторона выноски. */
 const MOSCOW_001_PREFS: CardBadgePrefs = {
-  alwaysCallout: true,
   collisionRadius: 2.65,
   side: {
     1: 'above',
@@ -90,7 +59,6 @@ const MOSCOW_001_PREFS: CardBadgePrefs = {
 
 const CARD_BADGE_PREFS: Record<string, CardBadgePrefs> = {
   MOSCOW_001: MOSCOW_001_PREFS,
-  MOSCOW_003: MOSCOW_003_PREFS,
 }
 
 function prefsForCard(cardId?: string): CardBadgePrefs {
@@ -111,6 +79,26 @@ function polygonBBox(points: Point[]): BBox {
     minY: Math.min(...ys),
     maxY: Math.max(...ys),
   }
+}
+
+/** Ray-casting: точка внутри полигона. */
+export function pointInPolygon(point: Point, polygon: Point[]): boolean {
+  const [x, y] = point
+  let inside = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i]
+    const [xj, yj] = polygon[j]
+    const intersects = yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi
+    if (intersects) inside = !inside
+  }
+  return inside
+}
+
+function regionFitsBadgeInside(bbox: BBox, area: number): boolean {
+  const spanW = bbox.maxX - bbox.minX
+  const spanH = bbox.maxY - bbox.minY
+  const minSpan = Math.min(spanW, spanH)
+  return area >= BADGE_ON_REGION_AREA && minSpan >= BADGE_DIAMETER_PCT * 1.1
 }
 
 function badgeMargin(bbox: BBox): number {
@@ -222,6 +210,30 @@ function badgesOverlap(a: BadgeLayout, b: BadgeLayout, cardId?: string): boolean
   return dx * dx + dy * dy < minDist * minDist
 }
 
+function badgeInsideForeignPolygon(
+  layout: BadgeLayout,
+  ownIdx: number,
+  regions: RegionForBadgeLayout[],
+): boolean {
+  return regions.some(
+    (region) =>
+      region.idx !== ownIdx &&
+      pointInPolygon([layout.badgeX, layout.badgeY], region.polygonPct),
+  )
+}
+
+function layoutValid(
+  layout: BadgeLayout,
+  ownIdx: number,
+  placed: BadgeLayout[],
+  regions: RegionForBadgeLayout[],
+  cardId?: string,
+): boolean {
+  if (placed.some((other) => badgesOverlap(layout, other, cardId))) return false
+  if (badgeInsideForeignPolygon(layout, ownIdx, regions)) return false
+  return true
+}
+
 function layoutScore(layout: BadgeLayout, idx: number, order: number, cardId?: string): number {
   const { side: sideMap } = prefsForCard(cardId)
   const lineLen =
@@ -289,9 +301,9 @@ export function computeBadgeLayout(
 ): BadgeLayout {
   const area = areaPct ?? polygonAreaAbs(polygonPct)
   const [cx, cy] = polygonCentroid(polygonPct)
-  const { alwaysCallout } = prefsForCard(cardId)
+  const bbox = polygonBBox(polygonPct)
 
-  if (area >= BADGE_ON_REGION_AREA && !alwaysCallout) {
+  if (regionFitsBadgeInside(bbox, area)) {
     return { anchorX: cx, anchorY: cy, badgeX: cx, badgeY: cy, callout: false }
   }
 
@@ -306,30 +318,15 @@ type RegionForBadgeLayout = {
   badgeLayout: BadgeLayout
 }
 
-/** Разводит кружки, чтобы не перекрывали друг друга (сначала мелкие зоны). */
+/** Разводит кружки: не перекрывают друг друга и чужие подсветки. */
 export function assignBadgeLayouts(regions: RegionForBadgeLayout[], cardId?: string): void {
   const placed: BadgeLayout[] = []
   const sorted = [...regions].sort((a, b) => a.areaPct - b.areaPct)
 
-  const { alwaysCallout } = prefsForCard(cardId)
-
   for (const region of sorted) {
-    const { fixedBadge } = prefsForCard(cardId)
-    const fixed = fixedBadge?.[region.idx]
-    if (fixed) {
-      const layout: BadgeLayout = {
-        anchorX: region.badgeLayout.anchorX,
-        anchorY: region.badgeLayout.anchorY,
-        badgeX: clampPct(fixed.x),
-        badgeY: clampPct(fixed.y),
-        callout: true,
-      }
-      region.badgeLayout = layout
-      placed.push(layout)
-      continue
-    }
+    const bbox = polygonBBox(region.polygonPct)
 
-    if (region.areaPct >= BADGE_ON_REGION_AREA && !alwaysCallout) {
+    if (regionFitsBadgeInside(bbox, region.areaPct)) {
       const centered: BadgeLayout = {
         anchorX: region.badgeLayout.anchorX,
         anchorY: region.badgeLayout.anchorY,
@@ -337,9 +334,11 @@ export function assignBadgeLayouts(regions: RegionForBadgeLayout[], cardId?: str
         badgeY: region.badgeLayout.anchorY,
         callout: false,
       }
-      region.badgeLayout = centered
-      placed.push(centered)
-      continue
+      if (layoutValid(centered, region.idx, placed, regions, cardId)) {
+        region.badgeLayout = centered
+        placed.push(centered)
+        continue
+      }
     }
 
     const candidates = candidateLayouts(region.polygonPct, region.areaPct, region.idx, cardId)
@@ -347,7 +346,7 @@ export function assignBadgeLayouts(regions: RegionForBadgeLayout[], cardId?: str
     let bestScore = Number.POSITIVE_INFINITY
 
     candidates.forEach((candidate, order) => {
-      if (placed.some((other) => badgesOverlap(candidate, other, cardId))) return
+      if (!layoutValid(candidate, region.idx, placed, regions, cardId)) return
       const score = layoutScore(candidate, region.idx, order, cardId)
       if (score < bestScore) {
         bestScore = score
@@ -360,9 +359,9 @@ export function assignBadgeLayouts(regions: RegionForBadgeLayout[], cardId?: str
         candidates[0] ??
         computeBadgeLayout(region.polygonPct, region.areaPct, region.idx, cardId)
       chosen = seed
-      for (let attempt = 0; attempt < 24; attempt += 1) {
+      for (let attempt = 0; attempt < 28; attempt += 1) {
         const nudged = nudgeLayout(seed, attempt, region.idx, cardId)
-        if (!placed.some((other) => badgesOverlap(nudged, other, cardId))) {
+        if (layoutValid(nudged, region.idx, placed, regions, cardId)) {
           chosen = nudged
           break
         }

@@ -1,136 +1,118 @@
-export type TracePlateSurface = 'sidebar' | 'facade'
+export type BlockLayoutMetrics = {
+  imageLeftPct: number
+  imageTopPct: number
+  imageWidthPct: number
+  imageHeightPct: number
+}
 
-/** Вертикальная зона плашки в правой колонке (MOSCOW_003). */
-export type Moscow003PlateZone = 'orange' | 'red' | 'blue'
-
-export type TracePlatePlacement = {
-  surface: TracePlateSurface
+export type TracePlateLayout = {
   leftPct: number
   topPct: number
   transform: string
   compact: boolean
-  /** % от высоты блока фасада — куда ставить плашку в правой колонке */
-  sidebarTopPct?: number
+  /** width / height — 0.75 = 3:4, 1.33 = 4:3 */
+  aspectRatio: number
+  maxWidthPx: number
 }
 
-/** Группы кружков → зона плашки справа (разметка Maria). */
-const MOSCOW_003_PLATE_ZONE: Record<number, Moscow003PlateZone> = {
-  // Оранжевая обводка — правая верхняя часть фасада
-  3: 'orange',
-  4: 'orange',
-  5: 'orange',
-  13: 'orange',
-  14: 'orange',
-  // Красная обводка — левая / верхняя часть
-  6: 'red',
-  7: 'red',
-  8: 'red',
-  9: 'red',
-  12: 'red',
-  // Синяя обводка — низ по центру
-  1: 'blue',
-  2: 'blue',
-  10: 'blue',
-  11: 'blue',
+type RegionBBox = { minX: number; minY: number; maxX: number; maxY: number }
+
+type TracePlateOptions = {
+  bbox?: RegionBBox
+  layout?: BlockLayoutMetrics
 }
 
-const MOSCOW_003_SIDEBAR_TOP: Record<Moscow003PlateZone, number> = {
-  orange: 6,
-  red: 30,
-  blue: 58,
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
 }
 
-function moscow003SidebarTopPct(regionIdx: number): number {
-  const zone = MOSCOW_003_PLATE_ZONE[regionIdx]
-  return zone ? MOSCOW_003_SIDEBAR_TOP[zone] : MOSCOW_003_SIDEBAR_TOP.red
+function regionSpan(bbox?: RegionBBox): number {
+  if (!bbox) return 12
+  return Math.max(bbox.maxX - bbox.minX, bbox.maxY - bbox.minY)
+}
+
+function imageToBlock(
+  cxPct: number,
+  cyPct: number,
+  layout?: BlockLayoutMetrics,
+): { blockCx: number; blockCy: number; imageRightPct: number } {
+  if (!layout) {
+    return { blockCx: cxPct, blockCy: cyPct, imageRightPct: 100 }
+  }
+  const blockCx = layout.imageLeftPct + (cxPct / 100) * layout.imageWidthPct
+  const blockCy = layout.imageTopPct + (cyPct / 100) * layout.imageHeightPct
+  const imageRightPct = layout.imageLeftPct + layout.imageWidthPct
+  return { blockCx, blockCy, imageRightPct }
 }
 
 /**
- * Позиция плашки: не перекрывать подсвеченную зону.
- * MOSCOW_003 + боковой список: плашка в своей вертикальной зоне справа.
+ * Плашка рядом с артефактом: перекрывает часть фото и часть списка.
+ * Пропорции ~3:4 или 4:3 в зависимости от положения подсветки.
  */
 export function tracePlatePlacement(
   cxPct: number,
   cyPct: number,
   expanded: boolean,
-  options?: { sidebarLayout?: boolean; cardId?: string; regionIdx?: number },
-): TracePlatePlacement {
-  const sidebarLayout = options?.sidebarLayout ?? false
-  const cardId = options?.cardId
-  const regionIdx = options?.regionIdx
+  options?: TracePlateOptions,
+): TracePlateLayout {
+  const bbox = options?.bbox
+  const layout = options?.layout
+  const span = regionSpan(bbox)
+  const regionSmall = span <= 7.5
 
-  if (sidebarLayout) {
-    const sidebarTopPct =
-      cardId === 'MOSCOW_003' && regionIdx != null
-        ? moscow003SidebarTopPct(regionIdx)
-        : 4
+  const { blockCx, blockCy, imageRightPct } = imageToBlock(cxPct, cyPct, layout)
+  const hasSidebar = layout ? imageRightPct < 98 : false
 
-    return {
-      surface: 'sidebar',
-      leftPct: 0,
-      topPct: 0,
-      transform: '',
-      compact: !expanded,
-      sidebarTopPct,
-    }
+  const nearSidebar = hasSidebar && blockCx > imageRightPct * 0.82
+  const aspectRatio =
+    nearSidebar || cyPct > 58 || cyPct < 28
+      ? 0.75
+      : blockCx < imageRightPct * 0.38
+        ? 1.33
+        : 0.75
+
+  const maxWidthPx = expanded ? 380 : 260
+
+  let offsetX = 0
+  let offsetY = 0
+  if (regionSmall) {
+    if (cxPct < 38) offsetX = layout ? layout.imageWidthPct * 0.09 : 9
+    else if (cxPct > 62) offsetX = layout ? -layout.imageWidthPct * 0.09 : -9
+    if (cyPct < 34) offsetY = layout ? layout.imageHeightPct * 0.1 : 11
+    else if (cyPct > 66) offsetY = layout ? -layout.imageHeightPct * 0.1 : -11
+  } else if (span > 14) {
+    offsetY = cyPct < 50 ? (layout ? layout.imageHeightPct * 0.04 : 4) : layout ? -layout.imageHeightPct * 0.04 : -4
   }
 
-  const leftPct = Math.min(86, Math.max(14, cxPct))
+  let leftPct = blockCx + offsetX
+  let topPct = blockCy + offsetY
 
+  if (nearSidebar && hasSidebar) {
+    leftPct = clamp(leftPct, imageRightPct * 0.72, imageRightPct + 5)
+  } else {
+    leftPct = clamp(leftPct, 8, Math.min(94, imageRightPct * 0.95))
+  }
+  topPct = clamp(topPct, 5, expanded ? 78 : 84)
+
+  let transform = 'translate(-50%, -50%)'
   if (expanded) {
-    if (cyPct < 48) {
-      return {
-        surface: 'facade',
-        leftPct,
-        topPct: 92,
-        transform: 'translate(-50%, -100%)',
-        compact: false,
-      }
-    }
-    if (cyPct > 58) {
-      return {
-        surface: 'facade',
-        leftPct,
-        topPct: 8,
-        transform: 'translate(-50%, 0)',
-        compact: false,
-      }
-    }
-    const sidePct = cxPct < 50 ? 76 : 24
-    return {
-      surface: 'facade',
-      leftPct: sidePct,
-      topPct: cyPct,
-      transform: 'translate(-50%, -50%)',
-      compact: false,
-    }
+    if (topPct < 22) transform = 'translate(-50%, 0)'
+    else if (topPct > 72) transform = 'translate(-50%, -100%)'
+  } else if (regionSmall) {
+    if (cyPct < 40) transform = 'translate(-50%, 0)'
+    else if (cyPct > 60) transform = 'translate(-50%, -100%)'
+  } else if (topPct < 18) {
+    transform = 'translate(-50%, 0)'
+  } else if (topPct > 74) {
+    transform = 'translate(-50%, -100%)'
   }
 
-  if (cyPct < 40) {
-    return {
-      surface: 'facade',
-      leftPct,
-      topPct: Math.min(94, cyPct + 16),
-      transform: 'translate(-50%, 0)',
-      compact: true,
-    }
-  }
-  if (cyPct > 66) {
-    return {
-      surface: 'facade',
-      leftPct,
-      topPct: Math.max(6, cyPct - 16),
-      transform: 'translate(-50%, -100%)',
-      compact: true,
-    }
-  }
-
-  const sidePct = cxPct < 50 ? 74 : 26
   return {
-    surface: 'facade',
-    leftPct: sidePct,
-    topPct: cyPct,
-    transform: 'translate(-50%, -50%)',
-    compact: true,
+    leftPct,
+    topPct,
+    transform,
+    compact: !expanded,
+    aspectRatio,
+    maxWidthPx,
   }
 }
