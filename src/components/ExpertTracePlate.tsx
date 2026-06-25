@@ -43,13 +43,21 @@ export function ExpertTracePlate({
 
   return (
     <div className={className}>
-      <div className="flex items-start gap-2">
-        <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-arch-gold text-[11px] font-bold text-arch-green-deep">
+      <div className="flex items-start gap-2.5">
+        <span
+          className={`mt-0.5 inline-flex shrink-0 items-center justify-center rounded-full bg-arch-gold font-bold text-arch-green-deep ${
+            expanded ? 'h-6 w-6 text-[13px]' : 'h-5 w-5 text-[11px]'
+          }`}
+        >
           {idx}
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <span className={`block font-semibold leading-snug ${expanded ? '' : 'line-clamp-2'}`}>
+            <span
+              className={`block font-semibold leading-snug ${
+                expanded ? 'text-[15px]' : 'line-clamp-2 text-[13px]'
+              }`}
+            >
               {title}
             </span>
             {expanded && onClose ? (
@@ -60,43 +68,45 @@ export function ExpertTracePlate({
                   onClose()
                 }}
                 aria-label="Закрыть карточку"
-                className="pointer-events-auto -mr-1 -mt-0.5 shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-arch-surface/70 transition hover:bg-arch-surface/15 hover:text-arch-surface"
+                className="pointer-events-auto -mr-1 -mt-0.5 shrink-0 rounded-md px-1.5 py-0.5 text-xs font-semibold text-arch-surface/70 transition hover:bg-arch-surface/15 hover:text-arch-surface"
               >
                 ✕
               </button>
             ) : null}
           </div>
           {period ? (
-            <span className="mt-0.5 block text-[11px] text-arch-surface/75">{period}</span>
+            <span
+              className={`mt-0.5 block text-arch-surface/75 ${expanded ? 'text-[13px]' : 'text-[11px]'}`}
+            >
+              {period}
+            </span>
           ) : null}
 
           {expanded && body ? (
-            <p className="mt-1.5 text-[11px] font-normal leading-snug text-arch-surface/90">
-              {body}
-            </p>
+            <p className="mt-2 text-[13px] font-normal leading-relaxed text-arch-surface/90">{body}</p>
           ) : null}
 
           {expanded && confidenceInfo ? (
-            <div className="mt-3 rounded-lg border border-arch-surface/20 bg-arch-surface/10 px-2.5 py-2">
+            <div className="mt-3.5 rounded-lg border border-arch-surface/20 bg-arch-surface/10 px-3 py-2.5">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-arch-surface/60">
+                <span className="text-xs font-semibold uppercase tracking-wide text-arch-surface/60">
                   Достоверность
                 </span>
                 <ConfidenceBadge level={confidenceInfo.value} />
               </div>
-              <p className="mt-1.5 text-[10px] leading-snug text-arch-surface/80">{confidenceBasis}</p>
+              <p className="mt-2 text-xs leading-relaxed text-arch-surface/80">{confidenceBasis}</p>
               {showSourceInConfidence ? (
-                <p className="mt-1 text-[10px] leading-snug text-arch-surface/55">
+                <p className="mt-1.5 text-xs leading-relaxed text-arch-surface/55">
                   Источник: {confidenceSourceLine}
                 </p>
               ) : null}
             </div>
           ) : expanded && traceSource && !confidenceInfo ? (
-            <p className="mt-2 text-[10px] leading-snug text-arch-surface/55">Источник: {traceSource}</p>
+            <p className="mt-2 text-xs leading-relaxed text-arch-surface/55">Источник: {traceSource}</p>
           ) : null}
 
           {expanded && !compact ? (
-            <p className="mt-2 text-[10px] text-arch-surface/50">
+            <p className="mt-2.5 text-xs text-arch-surface/50">
               Повторный клик по зоне или заметке в списке — закрыть карточку
             </p>
           ) : null}
