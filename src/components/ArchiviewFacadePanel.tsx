@@ -37,6 +37,10 @@ const CLASS_COLORS: Record<string, string> = {
   check_manually: '#b000b0',
 }
 
+/** Полупрозрачная «стеклянная» плашка — rgba надёжнее opacity-модификатора Tailwind. */
+const TRACE_PLATE_GLASS_BG = 'rgba(18, 53, 40, 0.78)'
+const TRACE_PLATE_HOVER_GLASS_BG = 'rgba(18, 53, 40, 0.72)'
+
 /** Окна и узкие проёмы: без сплошной заливки-квадрата — только контур и кружок. */
 const COMPACT_REGION_AREA = 90
 
@@ -753,9 +757,10 @@ export function ArchiviewFacadePanel({
           >
             {plateExpanded && plateRegion ? (
               <div
-                className={`pointer-events-auto absolute left-3 right-3 top-2 z-50 rounded-2xl border border-arch-gold/60 bg-arch-green-deep/80 px-5 py-4 text-left text-sm leading-relaxed text-arch-surface shadow-2xl backdrop-blur-lg sm:left-4 sm:right-4 sm:top-3 sm:px-6 sm:py-5 ${
+                className={`pointer-events-auto absolute left-3 right-3 top-2 z-50 rounded-2xl border border-arch-gold/60 px-5 py-4 text-left text-sm leading-relaxed text-arch-surface shadow-2xl backdrop-blur-xl sm:left-4 sm:right-4 sm:top-3 sm:px-6 sm:py-5 ${
                   embeddedAr ? '' : 'max-w-2xl'
                 }`}
+                style={{ backgroundColor: TRACE_PLATE_GLASS_BG }}
                 role="dialog"
                 aria-modal="true"
                 aria-label={`Экспертная заметка ${plateRegion.idx}`}
@@ -988,8 +993,9 @@ export function ArchiviewFacadePanel({
               )}
               {plateRegion && platePlacement && variant !== 'ar' && !plateExpanded && (
                 <div
-                  className="pointer-events-none absolute z-20 max-w-[min(88%,260px)] rounded-lg border border-arch-gold/60 bg-arch-green-deep/75 px-3 py-2.5 text-left text-sm leading-snug text-arch-surface shadow-xl backdrop-blur-md"
+                  className="pointer-events-none absolute z-20 max-w-[min(88%,260px)] rounded-lg border border-arch-gold/60 px-3 py-2.5 text-left text-sm leading-snug text-arch-surface shadow-xl backdrop-blur-md"
                   style={{
+                    backgroundColor: TRACE_PLATE_HOVER_GLASS_BG,
                     left: `${platePlacement.leftPct}%`,
                     top: `${platePlacement.topPct}%`,
                     transform: platePlacement.transform,
