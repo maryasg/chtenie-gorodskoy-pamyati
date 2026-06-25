@@ -37,9 +37,9 @@ const CLASS_COLORS: Record<string, string> = {
   check_manually: '#b000b0',
 }
 
-/** Полупрозрачная «стеклянная» плашка — чёрный фон, rgba: последнее число = непрозрачность. */
-const TRACE_PLATE_GLASS_BG = 'rgba(16, 16, 15, 0.65)'
-const TRACE_PLATE_HOVER_GLASS_BG = 'rgba(16, 16, 15, 0.60)'
+/** Полупрозрачная зелёная «стеклянная» плашка — rgba: последнее число = непрозрачность. */
+const TRACE_PLATE_GLASS_BG = 'rgba(18, 53, 40, 0.55)'
+const TRACE_PLATE_HOVER_GLASS_BG = 'rgba(18, 53, 40, 0.48)'
 
 /** Окна и узкие проёмы: без сплошной заливки-квадрата — только контур и кружок. */
 const COMPACT_REGION_AREA = 90
@@ -772,7 +772,7 @@ export function ArchiviewFacadePanel({
     if (!sidebarTracePlateContent || !platePlacement) return null
     return (
       <div
-        className={`pointer-events-auto z-[60] max-w-none rounded-2xl border border-white/20 px-4 py-3 text-left text-sm leading-relaxed text-arch-surface shadow-2xl backdrop-blur-xl ${
+        className={`pointer-events-auto z-[60] max-w-none rounded-2xl border border-arch-gold/60 px-4 py-3 text-left text-sm leading-relaxed text-arch-surface shadow-2xl backdrop-blur-xl ${
           plateExpanded ? 'px-5 py-4' : ''
         } ${
           pinnedToFacade
@@ -1158,7 +1158,7 @@ export function ArchiviewFacadePanel({
               imageFrameInViewport &&
               variant !== 'ar' ? (
                 <div
-                  className="pointer-events-auto absolute z-[55] max-w-[min(88%,420px)] rounded-2xl border border-white/20 px-5 py-4 text-left text-sm leading-relaxed text-arch-surface shadow-2xl backdrop-blur-xl sm:max-w-md"
+                  className="pointer-events-auto absolute z-[55] max-w-[min(88%,420px)] rounded-2xl border border-arch-gold/60 px-5 py-4 text-left text-sm leading-relaxed text-arch-surface shadow-2xl backdrop-blur-xl sm:max-w-md"
                   style={{
                     backgroundColor: TRACE_PLATE_GLASS_BG,
                     left:
@@ -1245,7 +1245,7 @@ export function ArchiviewFacadePanel({
           variant !== 'ar' &&
           !plateExpanded ? (
             <div
-              className="pointer-events-none absolute z-[60] max-w-[min(88%,260px)] rounded-lg border border-white/20 px-3 py-2.5 text-left text-sm leading-snug text-arch-surface shadow-xl backdrop-blur-md"
+              className="pointer-events-none absolute z-[60] max-w-[min(88%,260px)] rounded-lg border border-arch-gold/60 px-3 py-2.5 text-left text-sm leading-snug text-arch-surface shadow-xl backdrop-blur-md"
               style={{
                 backgroundColor: TRACE_PLATE_HOVER_GLASS_BG,
                 left: hoverPlateFrame.left,
