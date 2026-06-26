@@ -295,6 +295,7 @@ export function ArchiviewFacadePanel({
   variant = 'default',
   embeddedAr = false,
   hideIntro = false,
+  mobileArPlateHost = null,
 }: {
   assets: ArchiviewBuildingAssets
   building?: Building
@@ -303,6 +304,8 @@ export function ArchiviewFacadePanel({
   embeddedAr?: boolean
   /** Скрыть подпись (её рисует FacadeARPreview внутри экрана) */
   hideIntro?: boolean
+  /** На телефоне: контейнер под экраном AR для развёрнутой карточки следа */
+  mobileArPlateHost?: HTMLDivElement | null
 }) {
   const [regions, setRegions] = useState<DisplayRegion[]>([])
   const [imageOk, setImageOk] = useState(false)
@@ -330,8 +333,15 @@ export function ArchiviewFacadePanel({
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
   const isMobile = useMediaQuery('(max-width: 639px)')
   const useMobileFacadeChrome = isMobile && !embeddedAr && variant !== 'ar'
+  const useMobileNearRegionBadges =
+    useMobileFacadeChrome &&
+    ((assets.cardId === 'MOSCOW_001' && assets.comparisonId === 'cmp_005') ||
+      assets.cardId === 'MOSCOW_003')
   const useMobileBottomBadges =
-    useMobileFacadeChrome && assets.comparisonId !== 'cmp_009' && assets.comparisonId !== 'cmp_008'
+    useMobileFacadeChrome &&
+    !useMobileNearRegionBadges &&
+    assets.comparisonId !== 'cmp_009' &&
+    assets.comparisonId !== 'cmp_008'
   const mobileBadgeClicks = isMobile && !embeddedAr && variant !== 'ar'
   const [imgSize, setImgSize] = useState({ w: 1, h: 1 })
   const [sideBySide, setSideBySide] = useState(false)
@@ -470,11 +480,13 @@ export function ArchiviewFacadePanel({
       if (useMobileBottomBadges) {
         assignMobileBottomBadgeLayouts(list)
       } else {
-        assignBadgeLayouts(list, assets.cardId, assets.comparisonId)
+        assignBadgeLayouts(list, assets.cardId, assets.comparisonId, {
+          mobile: useMobileNearRegionBadges,
+        })
       }
       setRegions(list)
     },
-    [assets.cardId, assets.comparisonId, useMobileBottomBadges],
+    [assets.cardId, assets.comparisonId, useMobileBottomBadges, useMobileNearRegionBadges],
   )
 
   useEffect(() => {
@@ -484,11 +496,13 @@ export function ArchiviewFacadePanel({
       if (useMobileBottomBadges) {
         assignMobileBottomBadgeLayouts(next)
       } else {
-        assignBadgeLayouts(next, assets.cardId, assets.comparisonId)
+        assignBadgeLayouts(next, assets.cardId, assets.comparisonId, {
+          mobile: useMobileNearRegionBadges,
+        })
       }
       return next
     })
-  }, [useMobileBottomBadges, assets.cardId, assets.comparisonId, regions.length])
+  }, [useMobileBottomBadges, useMobileNearRegionBadges, assets.cardId, assets.comparisonId, regions.length])
 
   const buildRegionsRectified = useCallback(
     (annotations: ArchiviewAnnotation[], width: number, height: number) => {
@@ -932,6 +946,7 @@ export function ArchiviewFacadePanel({
 
   const embeddedPlateLayout = useMemo(() => {
     if (!embeddedAr || !plateRegion) return null
+    if (isMobile && plateExpanded) return null
     if (isMobile) {
       return {
         left: '50%',
@@ -957,10 +972,15 @@ export function ArchiviewFacadePanel({
     }
   }, [embeddedAr, isMobile, plateExpanded, platePlacement, plateRegion])
 
+  const showEmbeddedMobileBelowPlate = Boolean(
+    embeddedAr && isMobile && plateExpanded && plateRegion && tracePlateContent && mobileArPlateHost,
+  )
+
   const showMobilePortal =
     isMobile &&
     Boolean(plateRegion && platePlacement && tracePlateContent) &&
-    (!embeddedAr || plateExpanded)
+    (!embeddedAr || plateExpanded) &&
+    !showEmbeddedMobileBelowPlate
 
   const platePortalStyle = useMemo(() => {
     if (!platePlacement) return null
@@ -1377,7 +1397,7 @@ export function ArchiviewFacadePanel({
                   {regionsBadges.map((r) => {
                     const on = hoverIdx === r.idx || selectedIdx === r.idx
                     const color = CLASS_COLORS[r.cls] ?? '#444'
-                    const size = useMobileBottomBadges ? (on ? 32 : 28) : on ? 26 : 22
+                    const size = mobileBadgeClicks ? (on ? 32 : 28) : on ? 26 : 22
                     const { badgeX, badgeY } = r.badgeLayout
                     return (
                       <button
@@ -1515,6 +1535,20 @@ export function ArchiviewFacadePanel({
 
         </div>
       )}
+      {showEmbeddedMobileBelowPlate && mobileArPlateHost
+        ? createPortal(
+            <div
+              className={`${TRACE_PLATE_SHELL_CLASS} pointer-events-auto overflow-hidden shadow-2xl backdrop-blur-xl`}
+              style={{ backgroundColor: tracePlateBackground(true) }}
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Экспертная заметка ${plateRegion!.idx}`}
+            >
+              <div className="max-h-[min(42vh,300px)] overflow-y-auto px-4 py-3">{tracePlateContent}</div>
+            </div>,
+            mobileArPlateHost,
+          )
+        : null}
       {showPlatePortal && platePortalStyle
         ? createPortal(
             <>
