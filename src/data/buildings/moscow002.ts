@@ -197,6 +197,12 @@ export const MOSCOW_002: Building = {
       url: 'https://pastvu.com/p/2053853',
     },
     {
+      id: 'archi-facade-visual',
+      type: 'project',
+      description: 'ARCHI.RU: визуализация проекта — фрагмент уличного фасада (то, что в нашем кадре)',
+      url: 'https://i.archi.ru/i/650/21954.jpg',
+    },
+    {
       id: 'current',
       type: 'facade',
       description: 'Современный фасад строения 1 (полевая съёмка)',
@@ -209,11 +215,6 @@ export const MOSCOW_002: Building = {
       id: 'archi-asadov-project',
       name: 'ARCHI.RU: Реконструкция и пристройка к зданию библиотеки, Бобров переулок (бюро М. М. Асадова)',
       url: 'https://archi.ru/projects/russia/4349/rekonstrukciya-i-pristroika-k-zdaniyu-biblioteki-bobrov-per',
-    },
-    {
-      id: 'archi-facade-visual',
-      name: 'ARCHI.RU: визуализация проекта — фрагмент уличного фасада (то, что в нашем кадре)',
-      url: 'https://i.archi.ru/i/650/21954.jpg',
     },
     {
       id: 'um-mos',
