@@ -1236,7 +1236,7 @@ export function ArchiviewFacadePanel({
               </div>
               ) : null}
 
-              {variant === 'ar' && imageKind === 'rectified' ? (
+              {variant === 'ar' && imageKind === 'rectified' && !(embeddedAr && isMobile) ? (
                 <div className="pointer-events-none absolute inset-x-0 top-0 z-30 border-b border-amber-400/40 bg-amber-950/75 px-3 py-1.5 text-center text-[11px] leading-snug text-amber-100/95">
                   Исходное фото ещё не на сайте — показано выпрямленное. Экспортируйте{' '}
                   <code className="text-amber-50">modern-source.png</code> из Archiview.

@@ -58,11 +58,10 @@ export function FacadeARPreview({ building, archiview }: Props) {
         </div>
       </div>
 
-      <div className="rounded-xl border border-arch-green/25 bg-arch-green-soft p-4 text-sm leading-relaxed text-arch-green-deep">
+      <div className="hidden rounded-xl border border-arch-green/25 bg-arch-green-soft p-4 text-sm leading-relaxed text-arch-green-deep sm:block">
         <strong>AR-preview (без камеры).</strong> Исходный ракурс с улицы — не выпрямленное фото.
         Подсветка зон Archiview без цифр на фото. <strong>Клик</strong> по области на экране телефона
-        открывает карточку с описанием артефакта. Если исходное фото ещё не экспортировано из
-        Archiview, временно показывается выпрямленный снимок с предупреждением.
+        открывает карточку с описанием артефакта.
       </div>
     </div>
   )
