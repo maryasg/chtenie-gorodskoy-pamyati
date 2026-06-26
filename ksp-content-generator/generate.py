@@ -458,6 +458,11 @@ def parse_args() -> argparse.Namespace:
         help="Месяц для папки output при --title (по умолчанию: май)",
     )
     parser.add_argument(
+        "--filter-month",
+        metavar="МЕСЯЦ",
+        help="Только темы этого месяца из плана, например: май",
+    )
+    parser.add_argument(
         "--skip-images",
         action="store_true",
         help="Generate texts and prompt only, without cover image",
@@ -519,6 +524,13 @@ def main() -> int:
         print(f"Режим одной темы: {args.title.strip()}")
     else:
         plan = load_plan(args.plan)
+        if args.filter_month:
+            wanted_month = args.filter_month.strip().lower()
+            plan = [item for item in plan if str(item.get("month", "")).strip().lower() == wanted_month]
+            if not plan:
+                print(f"Темы месяца «{wanted_month}» не найдены в {args.plan}", file=sys.stderr)
+                return 1
+            print(f"Фильтр по месяцу: {wanted_month} ({len(plan)} тем)")
         if args.number:
             wanted = args.number.strip().zfill(2)
             plan = [item for item in plan if str(item.get("number", "")).strip().zfill(2) == wanted]

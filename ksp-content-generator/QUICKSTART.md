@@ -30,9 +30,48 @@ TEXT_MODEL=gpt-4o-mini
 
 ## 2. Куда класть темы
 
+Все ваши темы уже разложены по месяцам в папке **`content_plan/`**:
+
+```
+content_plan/
+  ноябрь.json    ← 15 тем (написаны)
+  декабрь.json   ← 16 тем
+  январь.json    ← 15 тем
+  февраль.json   ← 15 тем
+  март.json      ← 15 тем
+  май.json       ← 15 тем (план)
+  июнь.json      ← 15 тем (план)
+  июль.json      ← 15 тем (план)
+  all.json       ← все 121 тема
+```
+
+Файл **`content_plan.json`** в корне = копия **`май.json`** (текущий план по умолчанию).
+
+### Запуск по месяцам
+
+```bat
+python generate.py --plan content_plan\май.json --skip-images
+python generate.py --plan content_plan\июнь.json --number 03 --skip-images
+python generate.py --plan content_plan\all.json --filter-month май --skip-images
+```
+
+### Добавить новую тему вручную
+
+Откройте нужный месяц, например `content_plan\май.json`:
+
+```json
+{
+  "month": "май",
+  "number": "16",
+  "title": "Новая тема: заголовок статьи"
+}
+```
+
+Или пересоберите планы из `build_content_plan.py` (если правили скрипт).
+
 ### Вариант A — файл плана (много тем)
 
-`content_plan.json` в корне проекта:
+`content_plan.json` в корне проекта (по умолчанию — май):
 
 ```json
 [
