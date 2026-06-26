@@ -1151,7 +1151,9 @@ export function ArchiviewFacadePanel({
           <div
             className={
               useSidebarLayout
-                ? 'flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_17rem] lg:grid-rows-[auto_auto] xl:grid-cols-[minmax(0,1fr)_20rem] lg:items-start'
+                ? isMobile
+                  ? 'flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_17rem] lg:grid-rows-[auto_auto] xl:grid-cols-[minmax(0,1fr)_20rem] lg:items-start'
+                  : 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_17rem] xl:grid-cols-[minmax(0,1fr)_20rem] lg:items-start'
                 : embeddedAr
                   ? 'flex h-full min-h-0 flex-col'
                   : 'flex flex-col gap-4'
@@ -1160,7 +1162,9 @@ export function ArchiviewFacadePanel({
           <div
             className={
               useSidebarLayout
-                ? 'relative order-1 flex min-w-0 flex-col gap-4 overflow-visible lg:col-start-1 lg:row-start-1'
+                ? isMobile
+                  ? 'relative order-1 flex min-w-0 flex-col gap-4 overflow-visible lg:col-start-1 lg:row-start-1'
+                  : 'relative order-1 flex min-w-0 flex-col gap-4 overflow-visible lg:col-start-1 lg:row-start-1 lg:row-span-2'
                 : embeddedAr
                   ? 'relative flex h-full min-h-0 min-w-0 w-full flex-col'
                   : 'relative min-w-0 w-full overflow-visible'
@@ -1343,7 +1347,10 @@ export function ArchiviewFacadePanel({
                 </svg>
               )}
               {regions.length > 0 && variant !== 'ar' ? (
-                <div className="pointer-events-none absolute inset-0 z-20 overflow-visible" aria-hidden>
+                <div
+                  className={`absolute inset-0 z-20 overflow-visible ${useMobileFacadeChrome ? '' : 'pointer-events-none'}`}
+                  aria-hidden={!useMobileFacadeChrome}
+                >
                   <svg
                     className="absolute inset-0 h-full w-full overflow-visible"
                     viewBox="0 0 100 100"
@@ -1437,9 +1444,13 @@ export function ArchiviewFacadePanel({
             {sideBySide && regionList ? (
               <div className="w-full pt-2">{regionList}</div>
             ) : null}
+
+            {useSidebarLayout && !isMobile && comparisonBlock ? (
+              <div className="relative z-0 min-w-0">{comparisonBlock}</div>
+            ) : null}
           </div>
 
-          {useSidebarLayout && regionList ? (
+          {useSidebarLayout && isMobile && regionList ? (
             <div className="relative z-0 order-2 flex min-w-0 flex-col lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:min-h-[min(78vh,820px)] lg:self-stretch">
               {regionList}
               {building && !sideBySide ? (
@@ -1453,8 +1464,22 @@ export function ArchiviewFacadePanel({
             </div>
           ) : null}
 
-          {useSidebarLayout && comparisonBlock ? (
+          {useSidebarLayout && isMobile && comparisonBlock ? (
             <div className="relative z-0 order-3 min-w-0 lg:col-start-1 lg:row-start-2">{comparisonBlock}</div>
+          ) : null}
+
+          {useSidebarLayout && !isMobile && regionList ? (
+            <div className="relative z-0 order-2 flex min-w-0 flex-col lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:min-h-[min(78vh,820px)] lg:self-stretch">
+              {regionList}
+              {building && !sideBySide ? (
+                <Link
+                  to={`/building/${building.id}/ar`}
+                  className="mt-4 inline-flex items-center justify-center gap-1 rounded-full border border-arch-line bg-arch-surface px-4 py-2.5 text-sm font-medium text-arch-green-deep transition hover:border-arch-green/40 hover:bg-arch-green-soft"
+                >
+                  AR-preview: подсветка на полевом фото →
+                </Link>
+              ) : null}
+            </div>
           ) : null}
           </div>
 
