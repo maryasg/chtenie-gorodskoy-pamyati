@@ -205,7 +205,9 @@ def generate_article(
 
 def build_cover_prompt(telegram_text: str) -> str:
     template = load_text(PROMPTS_DIR / "cover_template.txt")
-    return template.replace("[ТЕКСТ СТАТЬИ]", telegram_text)
+    if "ТЕКСТ СТАТЬИ" not in template:
+        raise RuntimeError("cover_template.txt must contain placeholder ТЕКСТ СТАТЬИ")
+    return template.replace("ТЕКСТ СТАТЬИ", telegram_text)
 
 
 def generate_cover_bytes(
@@ -344,8 +346,10 @@ def validate_cover_prompt(prompt: str, telegram_text: str) -> list[str]:
     issues: list[str] = []
     if telegram_text not in prompt:
         issues.append("cover prompt: не подставлен текст Telegram-статьи")
-    if "[ТЕКСТ СТАТЬИ]" in prompt:
-        issues.append("cover prompt: остался плейсхолдер [ТЕКСТ СТАТЬИ]")
+    if "ТЕКСТ СТАТЬИ" in prompt:
+        issues.append("cover prompt: остался плейсхолдер ТЕКСТ СТАТЬИ")
+    if f"[{telegram_text}]" not in prompt:
+        issues.append("cover prompt: текст статьи должен быть в квадратных скобках [...]")
     if "стетоскоп" not in prompt.lower():
         issues.append("cover prompt: нет напоминания про отсутствие стетоскопов")
     return issues
