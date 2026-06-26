@@ -30,6 +30,8 @@
 5. **`copy_to_website.bat`** — копирует `result/` на сайт в `public/explorer/<ID>/`.
 6. GitHub Desktop → Commit → Push.
 
+Подробнее о нескольких сравнениях, legacy и экспорте на сайт — [`README_v16_ru.md`](README_v16_ru.md) и [`ПРОДОЛЖИТЬ_РАБОТУ.md`](../../ПРОДОЛЖИТЬ_РАБОТУ.md).
+
 ---
 
 ## Почему вы видите странные имена папок
