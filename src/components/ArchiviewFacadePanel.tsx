@@ -672,8 +672,9 @@ export function ArchiviewFacadePanel({
       sidebarLayout: useSidebarLayout,
       cardId: assets.cardId,
       regionIdx: plateRegion.idx,
+      avoidRegionOverlap: embeddedAr && !plateExpanded,
     })
-  }, [plateRegion, plateExpanded, blockLayout, useSidebarLayout, assets.cardId])
+  }, [plateRegion, plateExpanded, blockLayout, useSidebarLayout, assets.cardId, embeddedAr])
 
   useEffect(() => {
     if (!assets.cardId) {
@@ -907,7 +908,7 @@ export function ArchiviewFacadePanel({
     return {
       left: `${platePlacement.leftPct}%`,
       top: `${platePlacement.topPct}%`,
-      transform: 'translate(-50%, -50%)',
+      transform: platePlacement.transform,
       maxWidth: `min(92%, ${Math.max(platePlacement.maxWidthPx, 220)}px)`,
     }
   }, [embeddedAr, plateExpanded, platePlacement, plateRegion])
