@@ -43,7 +43,7 @@ export function blockPctToViewportPct(
   const x = blockRect.left + (blockRect.width * leftPct) / 100
   const y = blockRect.top + (blockRect.height * topPct) / 100
   return {
-    xPct: (x / window.innerWidth) * 100,
-    yPct: (y / window.innerHeight) * 100,
+    xPct: Math.round(((x / window.innerWidth) * 100) * 10) / 10,
+    yPct: Math.round(((y / window.innerHeight) * 100) * 10) / 10,
   }
 }

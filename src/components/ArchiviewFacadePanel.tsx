@@ -143,11 +143,12 @@ function clampPct(value: number, min: number, max: number): number {
 function blockLayoutsEqual(a: BlockLayoutMetrics | null, b: BlockLayoutMetrics | null): boolean {
   if (a === b) return true
   if (!a || !b) return false
+  const eps = 0.2
   return (
-    a.imageLeftPct === b.imageLeftPct &&
-    a.imageTopPct === b.imageTopPct &&
-    a.imageWidthPct === b.imageWidthPct &&
-    a.imageHeightPct === b.imageHeightPct
+    Math.abs(a.imageLeftPct - b.imageLeftPct) < eps &&
+    Math.abs(a.imageTopPct - b.imageTopPct) < eps &&
+    Math.abs(a.imageWidthPct - b.imageWidthPct) < eps &&
+    Math.abs(a.imageHeightPct - b.imageHeightPct) < eps
   )
 }
 
@@ -298,6 +299,26 @@ export function ArchiviewFacadePanel({
   const [regions, setRegions] = useState<DisplayRegion[]>([])
   const [imageOk, setImageOk] = useState(false)
   const [hoverIdx, setHoverIdx] = useState<number | null>(null)
+  const hoverClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const setHoverRegion = useCallback((idx: number | null) => {
+    if (hoverClearTimerRef.current) {
+      clearTimeout(hoverClearTimerRef.current)
+      hoverClearTimerRef.current = null
+    }
+    if (idx !== null) {
+      setHoverIdx(idx)
+      return
+    }
+    hoverClearTimerRef.current = setTimeout(() => setHoverIdx(null), 140)
+  }, [])
+
+  useEffect(
+    () => () => {
+      if (hoverClearTimerRef.current) clearTimeout(hoverClearTimerRef.current)
+    },
+    [],
+  )
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
   const [imgSize, setImgSize] = useState({ w: 1, h: 1 })
   const [sideBySide, setSideBySide] = useState(false)
@@ -638,13 +659,9 @@ export function ArchiviewFacadePanel({
 
   const platePlacement = useMemo(() => {
     if (!plateRegion) return null
-    const anchorRegion =
-      assets.cardId === 'MOSCOW_001' && (plateRegion.idx === 1 || plateRegion.idx === 9)
-        ? regions.find((r) => r.idx === 3) ?? plateRegion
-        : plateRegion
-    const xs = anchorRegion.polygonPct.map((p) => p[0])
-    const ys = anchorRegion.polygonPct.map((p) => p[1])
-    return tracePlatePlacement(anchorRegion.cx, anchorRegion.cy, plateExpanded, {
+    const xs = plateRegion.polygonPct.map((p) => p[0])
+    const ys = plateRegion.polygonPct.map((p) => p[1])
+    return tracePlatePlacement(plateRegion.cx, plateRegion.cy, plateExpanded, {
       bbox: {
         minX: Math.min(...xs),
         maxX: Math.max(...xs),
@@ -656,7 +673,7 @@ export function ArchiviewFacadePanel({
       cardId: assets.cardId,
       regionIdx: plateRegion.idx,
     })
-  }, [plateRegion, plateExpanded, blockLayout, useSidebarLayout, assets.cardId, regions])
+  }, [plateRegion, plateExpanded, blockLayout, useSidebarLayout, assets.cardId])
 
   useEffect(() => {
     if (!assets.cardId) {
@@ -684,19 +701,33 @@ export function ArchiviewFacadePanel({
     null,
   )
 
+  const PLATE_POS_EPS = 0.5
+  const blockLayoutRafRef = useRef<number | null>(null)
+
   useLayoutEffect(() => {
-    if (!plateRegion || !platePlacement || plateDragPositions[plateRegion.idx]) {
+    if (!plateRegion || !platePlacement) {
+      setPlateAutoViewport(null)
+      return
+    }
+    if (plateDragPositions[plateRegion.idx]) {
       setPlateAutoViewport(null)
       return
     }
     const block = facadeBlockRef.current
-    const viewport = viewportRef.current
-    if (!block || !viewport) return
+    if (!block) return
     const blockRect = block.getBoundingClientRect()
     if (blockRect.width < 1 || blockRect.height < 1) return
-    setPlateAutoViewport(
-      blockPctToViewportPct(platePlacement.leftPct, platePlacement.topPct, blockRect),
-    )
+    const next = blockPctToViewportPct(platePlacement.leftPct, platePlacement.topPct, blockRect)
+    setPlateAutoViewport((prev) => {
+      if (
+        prev &&
+        Math.abs(prev.xPct - next.xPct) < PLATE_POS_EPS &&
+        Math.abs(prev.yPct - next.yPct) < PLATE_POS_EPS
+      ) {
+        return prev
+      }
+      return next
+    })
   }, [plateDragPositions, platePlacement, plateRegion, blockLayout, zoom, pan.x, pan.y])
 
   const plateViewportPosition = useMemo(() => {
@@ -775,7 +806,7 @@ export function ArchiviewFacadePanel({
   )
 
   useLayoutEffect(() => {
-    const updateBlockLayout = () => {
+    const measureBlockLayout = () => {
       const block = facadeBlockRef.current
       const viewport = viewportRef.current
       if (!block || !viewport) {
@@ -794,15 +825,27 @@ export function ArchiviewFacadePanel({
       setBlockLayout((prev) => (blockLayoutsEqual(prev, next) ? prev : next))
     }
 
-    updateBlockLayout()
+    const updateBlockLayout = () => {
+      if (blockLayoutRafRef.current !== null) return
+      blockLayoutRafRef.current = requestAnimationFrame(() => {
+        blockLayoutRafRef.current = null
+        measureBlockLayout()
+      })
+    }
+
+    measureBlockLayout()
     const ro = new ResizeObserver(updateBlockLayout)
     const block = facadeBlockRef.current
     const viewport = viewportRef.current
     if (block) ro.observe(block)
     if (viewport) ro.observe(viewport)
     window.addEventListener('resize', updateBlockLayout)
-    window.addEventListener('scroll', updateBlockLayout, true)
+    window.addEventListener('scroll', updateBlockLayout, { capture: true, passive: true })
     return () => {
+      if (blockLayoutRafRef.current !== null) {
+        cancelAnimationFrame(blockLayoutRafRef.current)
+        blockLayoutRafRef.current = null
+      }
       ro.disconnect()
       window.removeEventListener('resize', updateBlockLayout)
       window.removeEventListener('scroll', updateBlockLayout, true)
@@ -862,10 +905,10 @@ export function ArchiviewFacadePanel({
             <li key={r.idx}>
               <button
                 type="button"
-                onMouseEnter={() => setHoverIdx(r.idx)}
-                onMouseLeave={() => setHoverIdx(null)}
-                onFocus={() => setHoverIdx(r.idx)}
-                onBlur={() => setHoverIdx(null)}
+                onMouseEnter={() => setHoverRegion(r.idx)}
+                onMouseLeave={() => setHoverRegion(null)}
+                onFocus={() => setHoverRegion(r.idx)}
+                onBlur={() => setHoverRegion(null)}
                 onClick={() => setSelectedIdx((current) => (current === r.idx ? null : r.idx))}
                 className={`flex w-full gap-2 rounded-lg border px-2.5 py-2 text-left transition ${
                   on || selectedIdx === r.idx
@@ -995,7 +1038,7 @@ export function ArchiviewFacadePanel({
                     ? 'h-full overflow-y-auto overflow-x-hidden'
                     : 'overflow-hidden'
               } ${zoom > ZOOM_MIN ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
-              onMouseLeave={() => setHoverIdx(null)}
+              onMouseLeave={() => setHoverRegion(null)}
               onPointerDown={handleViewportPointerDown}
               onPointerMove={handleViewportPointerMove}
               onPointerUp={endPanSession}
@@ -1123,10 +1166,10 @@ export function ArchiviewFacadePanel({
                       fill="transparent"
                       stroke="transparent"
                       className="cursor-pointer"
-                      onMouseEnter={() => setHoverIdx(r.idx)}
-                      onMouseLeave={() => setHoverIdx(null)}
-                      onFocus={() => setHoverIdx(r.idx)}
-                      onBlur={() => setHoverIdx(null)}
+                      onMouseEnter={() => setHoverRegion(r.idx)}
+                      onMouseLeave={() => setHoverRegion(null)}
+                      onFocus={() => setHoverRegion(r.idx)}
+                      onBlur={() => setHoverRegion(null)}
                       onClick={() => setSelectedIdx((current) => (current === r.idx ? null : r.idx))}
                     />
                   ))}
@@ -1141,8 +1184,8 @@ export function ArchiviewFacadePanel({
                             fill="transparent"
                             stroke="transparent"
                             className="cursor-pointer"
-                            onMouseEnter={() => setHoverIdx(r.idx)}
-                            onMouseLeave={() => setHoverIdx(null)}
+                            onMouseEnter={() => setHoverRegion(r.idx)}
+                            onMouseLeave={() => setHoverRegion(null)}
                             onClick={() => setSelectedIdx(null)}
                           />
                         )
@@ -1285,10 +1328,8 @@ export function ArchiviewFacadePanel({
         ? createPortal(
             <div
               className={`fixed z-[9990] ${TRACE_PLATE_SHELL_CLASS} ${
-                plateExpanded
-                  ? 'pointer-events-auto'
-                  : 'pointer-events-auto rounded-lg shadow-xl backdrop-blur-md'
-              } ${isPlateDragging ? 'select-none' : ''}`}
+                plateExpanded ? 'pointer-events-auto' : 'pointer-events-none'
+              } ${plateExpanded ? '' : 'rounded-lg shadow-xl'} ${isPlateDragging ? 'select-none' : ''}`}
               style={{
                 left: `${plateViewportPosition.xPct}vw`,
                 top: `${plateViewportPosition.yPct}vh`,
@@ -1305,7 +1346,7 @@ export function ArchiviewFacadePanel({
               aria-label={plateExpanded ? `Экспертная заметка ${plateRegion.idx}` : undefined}
               onClick={plateExpanded ? (event) => event.stopPropagation() : undefined}
             >
-              {!embeddedAr ? (
+              {plateExpanded && !embeddedAr ? (
                 <div
                   className={`flex touch-none items-center gap-2 border-b border-arch-gold/35 bg-arch-green-deep/20 px-2.5 py-1.5 ${
                     isPlateDragging ? 'cursor-grabbing' : 'cursor-grab'
