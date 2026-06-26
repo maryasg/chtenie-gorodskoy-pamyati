@@ -1,39 +1,88 @@
 {
-    "cardId":  "MOSCOW_001",
-    "defaultComparisonId":  "cmp_005",
-    "comparisons":  [
-                        {
-                            "comparisonId":  "cmp_005",
-                            "title":  "1936 -\u003e 2026",
-                            "labelingLayout":  "overlay",
-                            "annotationCount":  11,
-                            "isLegacy":  false,
-                            "markedFacadeUrl":  "marked-facade.png",
-                            "labeledFacadeUrl":  "marked-facade-labeled.png",
-                            "historicalRectifiedUrl":  "historical-rectified.png",
-                            "modernRectifiedUrl":  "modern-rectified.png",
-                            "modernSourceUrl":  "modern-source.png",
-                            "annotationsUrl":  "annotations.json",
-                            "facadeProjectUrl":  "facade-project.json",
-                            "historicalPhotoYear":  "1936",
-                            "modernPhotoYear":  "2026"
-                        },
-                        {
-                            "comparisonId":  "cmp_009",
-                            "title":  "1840 -\u003e 2026",
-                            "labelingLayout":  "overlay",
-                            "annotationCount":  3,
-                            "isLegacy":  false,
-                            "markedFacadeUrl":  "comparisons/cmp_009/marked-facade.png",
-                            "labeledFacadeUrl":  "comparisons/cmp_009/marked-facade-labeled.png",
-                            "historicalRectifiedUrl":  "comparisons/cmp_009/historical-rectified.png",
-                            "modernRectifiedUrl":  "comparisons/cmp_009/modern-rectified.png",
-                            "modernSourceUrl":  "comparisons/cmp_009/modern-source.png",
-                            "annotationsUrl":  "comparisons/cmp_009/annotations.json",
-                            "facadeProjectUrl":  "comparisons/cmp_009/facade-project.json",
-                            "historicalPhotoYear":  "1840",
-                            "modernPhotoYear":  "2026"
-                        }
-                    ],
-    "updatedAt":  "2026-06-25T17:25:58.6375517Z"
+    "cardId": "MOSCOW_001",
+    "defaultComparisonId": "cmp_005",
+    "comparisons": [
+        {
+            "comparisonId": "cmp_005",
+            "title": "1936 -> 2026",
+            "labelingLayout": "overlay",
+            "annotationCount": 11,
+            "isLegacy": false,
+            "markedFacadeUrl": "marked-facade.png",
+            "labeledFacadeUrl": "marked-facade-labeled.png",
+            "historicalRectifiedUrl": "historical-rectified.png",
+            "modernRectifiedUrl": "modern-rectified.png",
+            "modernSourceUrl": "modern-source.png",
+            "annotationsUrl": "annotations.json",
+            "facadeProjectUrl": "facade-project.json",
+            "historicalPhotoYear": "1936",
+            "modernPhotoYear": "2026"
+        },
+        {
+            "comparisonId": "cmp_009",
+            "title": "1840 -> 2026",
+            "labelingLayout": "overlay",
+            "annotationCount": 3,
+            "isLegacy": false,
+            "markedFacadeUrl": "comparisons/cmp_009/marked-facade.png",
+            "labeledFacadeUrl": "comparisons/cmp_009/marked-facade-labeled.png",
+            "historicalRectifiedUrl": "comparisons/cmp_009/historical-rectified.png",
+            "modernRectifiedUrl": "comparisons/cmp_009/modern-rectified.png",
+            "modernSourceUrl": "comparisons/cmp_009/modern-source.png",
+            "annotationsUrl": "comparisons/cmp_009/annotations.json",
+            "facadeProjectUrl": "comparisons/cmp_009/facade-project.json",
+            "historicalPhotoYear": "1840",
+            "modernPhotoYear": "2026"
+        },
+        {
+            "comparisonId": "cmp_008",
+            "title": "1938 -> 2026",
+            "labelingLayout": "overlay",
+            "annotationCount": 2,
+            "isLegacy": true,
+            "markedFacadeUrl": "comparisons/cmp_008/marked-facade.png",
+            "labeledFacadeUrl": "comparisons/cmp_008/marked-facade-labeled.png",
+            "historicalRectifiedUrl": "comparisons/cmp_008/historical-rectified.png",
+            "modernRectifiedUrl": "comparisons/cmp_008/modern-rectified.png",
+            "annotationsUrl": "comparisons/cmp_008/annotations.json",
+            "facadeProjectUrl": "comparisons/cmp_008/facade-project.json",
+            "historicalPhotoYear": "1938",
+            "modernPhotoYear": "2026"
+        }
+    ],
+    "timeLayers": [
+        {
+            "year": "1840",
+            "label": "1840",
+            "title": "План усадьбы 1840",
+            "historicalRectifiedUrl": "time-layers/1840.jpg",
+            "overlayMode": "rectified",
+            "layerRole": "base"
+        },
+        {
+            "year": "1924",
+            "label": "1924 (ГИМ)",
+            "title": "Губарев А.А., 9 марта 1924",
+            "historicalRectifiedUrl": "time-layers/1924.jpg",
+            "sourceUrl": "https://catalog.shm.ru/entity/OBJECT/3106660",
+            "overlayMode": "rectified"
+        },
+        {
+            "year": "1930",
+            "label": "1930–1936",
+            "title": "Строительство надстройки в лесах (Архив ЦИГИ, PastVu)",
+            "historicalRectifiedUrl": "time-layers/1930.jpg",
+            "sourceUrl": "https://pastvu.com/p/68053",
+            "overlayMode": "rectified"
+        },
+        {
+            "year": "2026",
+            "label": "2026",
+            "title": "Современный фасад",
+            "historicalRectifiedUrl": "time-layers/2026.jpg",
+            "overlayMode": "rectified",
+            "layerRole": "modern"
+        }
+    ],
+    "updatedAt": "2026-06-26T12:00:00.0000000Z"
 }
