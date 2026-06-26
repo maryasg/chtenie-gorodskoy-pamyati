@@ -143,11 +143,12 @@ function clampPct(value: number, min: number, max: number): number {
 function blockLayoutsEqual(a: BlockLayoutMetrics | null, b: BlockLayoutMetrics | null): boolean {
   if (a === b) return true
   if (!a || !b) return false
+  const eps = 0.2
   return (
-    a.imageLeftPct === b.imageLeftPct &&
-    a.imageTopPct === b.imageTopPct &&
-    a.imageWidthPct === b.imageWidthPct &&
-    a.imageHeightPct === b.imageHeightPct
+    Math.abs(a.imageLeftPct - b.imageLeftPct) < eps &&
+    Math.abs(a.imageTopPct - b.imageTopPct) < eps &&
+    Math.abs(a.imageWidthPct - b.imageWidthPct) < eps &&
+    Math.abs(a.imageHeightPct - b.imageHeightPct) < eps
   )
 }
 
@@ -298,6 +299,26 @@ export function ArchiviewFacadePanel({
   const [regions, setRegions] = useState<DisplayRegion[]>([])
   const [imageOk, setImageOk] = useState(false)
   const [hoverIdx, setHoverIdx] = useState<number | null>(null)
+  const hoverClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const setHoverRegion = useCallback((idx: number | null) => {
+    if (hoverClearTimerRef.current) {
+      clearTimeout(hoverClearTimerRef.current)
+      hoverClearTimerRef.current = null
+    }
+    if (idx !== null) {
+      setHoverIdx(idx)
+      return
+    }
+    hoverClearTimerRef.current = setTimeout(() => setHoverIdx(null), 140)
+  }, [])
+
+  useEffect(
+    () => () => {
+      if (hoverClearTimerRef.current) clearTimeout(hoverClearTimerRef.current)
+    },
+    [],
+  )
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
   const [imgSize, setImgSize] = useState({ w: 1, h: 1 })
   const [sideBySide, setSideBySide] = useState(false)
@@ -680,7 +701,8 @@ export function ArchiviewFacadePanel({
     null,
   )
 
-  const PLATE_POS_EPS = 0.25
+  const PLATE_POS_EPS = 0.5
+  const blockLayoutRafRef = useRef<number | null>(null)
 
   useLayoutEffect(() => {
     if (!plateRegion || !platePlacement) {
@@ -784,7 +806,7 @@ export function ArchiviewFacadePanel({
   )
 
   useLayoutEffect(() => {
-    const updateBlockLayout = () => {
+    const measureBlockLayout = () => {
       const block = facadeBlockRef.current
       const viewport = viewportRef.current
       if (!block || !viewport) {
@@ -803,15 +825,27 @@ export function ArchiviewFacadePanel({
       setBlockLayout((prev) => (blockLayoutsEqual(prev, next) ? prev : next))
     }
 
-    updateBlockLayout()
+    const updateBlockLayout = () => {
+      if (blockLayoutRafRef.current !== null) return
+      blockLayoutRafRef.current = requestAnimationFrame(() => {
+        blockLayoutRafRef.current = null
+        measureBlockLayout()
+      })
+    }
+
+    measureBlockLayout()
     const ro = new ResizeObserver(updateBlockLayout)
     const block = facadeBlockRef.current
     const viewport = viewportRef.current
     if (block) ro.observe(block)
     if (viewport) ro.observe(viewport)
     window.addEventListener('resize', updateBlockLayout)
-    window.addEventListener('scroll', updateBlockLayout, true)
+    window.addEventListener('scroll', updateBlockLayout, { capture: true, passive: true })
     return () => {
+      if (blockLayoutRafRef.current !== null) {
+        cancelAnimationFrame(blockLayoutRafRef.current)
+        blockLayoutRafRef.current = null
+      }
       ro.disconnect()
       window.removeEventListener('resize', updateBlockLayout)
       window.removeEventListener('scroll', updateBlockLayout, true)
@@ -871,10 +905,10 @@ export function ArchiviewFacadePanel({
             <li key={r.idx}>
               <button
                 type="button"
-                onMouseEnter={() => setHoverIdx(r.idx)}
-                onMouseLeave={() => setHoverIdx(null)}
-                onFocus={() => setHoverIdx(r.idx)}
-                onBlur={() => setHoverIdx(null)}
+                onMouseEnter={() => setHoverRegion(r.idx)}
+                onMouseLeave={() => setHoverRegion(null)}
+                onFocus={() => setHoverRegion(r.idx)}
+                onBlur={() => setHoverRegion(null)}
                 onClick={() => setSelectedIdx((current) => (current === r.idx ? null : r.idx))}
                 className={`flex w-full gap-2 rounded-lg border px-2.5 py-2 text-left transition ${
                   on || selectedIdx === r.idx
@@ -1004,7 +1038,7 @@ export function ArchiviewFacadePanel({
                     ? 'h-full overflow-y-auto overflow-x-hidden'
                     : 'overflow-hidden'
               } ${zoom > ZOOM_MIN ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
-              onMouseLeave={() => setHoverIdx(null)}
+              onMouseLeave={() => setHoverRegion(null)}
               onPointerDown={handleViewportPointerDown}
               onPointerMove={handleViewportPointerMove}
               onPointerUp={endPanSession}
@@ -1132,10 +1166,10 @@ export function ArchiviewFacadePanel({
                       fill="transparent"
                       stroke="transparent"
                       className="cursor-pointer"
-                      onMouseEnter={() => setHoverIdx(r.idx)}
-                      onMouseLeave={() => setHoverIdx(null)}
-                      onFocus={() => setHoverIdx(r.idx)}
-                      onBlur={() => setHoverIdx(null)}
+                      onMouseEnter={() => setHoverRegion(r.idx)}
+                      onMouseLeave={() => setHoverRegion(null)}
+                      onFocus={() => setHoverRegion(r.idx)}
+                      onBlur={() => setHoverRegion(null)}
                       onClick={() => setSelectedIdx((current) => (current === r.idx ? null : r.idx))}
                     />
                   ))}
@@ -1150,8 +1184,8 @@ export function ArchiviewFacadePanel({
                             fill="transparent"
                             stroke="transparent"
                             className="cursor-pointer"
-                            onMouseEnter={() => setHoverIdx(r.idx)}
-                            onMouseLeave={() => setHoverIdx(null)}
+                            onMouseEnter={() => setHoverRegion(r.idx)}
+                            onMouseLeave={() => setHoverRegion(null)}
                             onClick={() => setSelectedIdx(null)}
                           />
                         )
