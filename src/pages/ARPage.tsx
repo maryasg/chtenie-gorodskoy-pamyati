@@ -14,19 +14,15 @@ export function ARPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <header className="arch-section border-arch-green/20 bg-gradient-to-br from-arch-green-soft to-arch-surface">
+    <div className="space-y-4">
+      <header className="arch-section border-arch-green/20 bg-gradient-to-br from-arch-green-soft to-arch-surface py-4">
         <Link to={`/building/${building.id}`} className="text-sm font-medium text-arch-green-light hover:text-arch-green-deep">
           ← Карточка здания
         </Link>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-arch-green-deep">
+        <h1 className="mt-1 text-xl font-semibold tracking-tight text-arch-green-deep sm:text-2xl">
           AR-preview: {building.name}
         </h1>
         <p className="mt-1 text-sm text-arch-muted">{building.address}</p>
-        <p className="mt-2 text-sm text-arch-muted">
-          Симуляция дополненной реальности на исходном полевом фото. Сравнение снимков и слои времени —
-          на карточке здания.
-        </p>
       </header>
 
       {archiview?.labelingLayout === 'side_by_side' ? (

@@ -742,6 +742,22 @@ export function ArchiviewFacadePanel({
     return null
   }, [plateAutoViewport, plateDragPositions, platePlacement, plateRegion])
 
+  useLayoutEffect(() => {
+    if (!embeddedAr || !imageOk) return
+    const vp = viewportRef.current
+    if (!vp) return
+    vp.scrollTop = 0
+    vp.scrollLeft = 0
+  }, [embeddedAr, imageOk, displayImageUrl, imgSize.w, imgSize.h, regions.length])
+
+  const resetArViewportScroll = useCallback(() => {
+    if (!embeddedAr) return
+    const vp = viewportRef.current
+    if (!vp) return
+    vp.scrollTop = 0
+    vp.scrollLeft = 0
+  }, [embeddedAr])
+
   const handlePlateDragStart = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
       if (!plateRegion || !platePlacement || !plateViewportPosition) return
@@ -1003,22 +1019,29 @@ export function ArchiviewFacadePanel({
       )}
 
       {imageOk && (
-        <div ref={facadeBlockRef} className="relative overflow-visible">
+        <div
+          ref={facadeBlockRef}
+          className={`relative ${embeddedAr ? 'h-full min-h-0 overflow-hidden' : 'overflow-visible'}`}
+        >
           <div
             className={
               useSidebarLayout
                 ? 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_17rem] xl:grid-cols-[minmax(0,1fr)_20rem] lg:items-start'
-                : 'flex flex-col gap-4'
+                : embeddedAr
+                  ? 'flex h-full min-h-0 flex-col'
+                  : 'flex flex-col gap-4'
             }
           >
           <div
             className={
               useSidebarLayout
                 ? 'relative order-1 flex min-w-0 flex-col gap-4 overflow-visible lg:col-start-1 lg:row-start-1 lg:row-span-2'
-                : 'relative min-w-0 w-full overflow-visible'
+                : embeddedAr
+                  ? 'relative flex h-full min-h-0 min-w-0 w-full flex-col'
+                  : 'relative min-w-0 w-full overflow-visible'
             }
           >
-          <div className="relative min-w-0 shrink-0">
+          <div className={embeddedAr ? 'relative min-h-0 min-w-0 flex-1' : 'relative min-w-0 shrink-0'}>
             <div
               ref={viewportRef}
               className={`relative w-full ${
@@ -1035,7 +1058,7 @@ export function ArchiviewFacadePanel({
                     ? 'h-full max-h-none overflow-hidden'
                     : 'max-h-[min(78vh,820px)] overflow-hidden'
                   : embeddedAr
-                    ? 'h-full overflow-y-auto overflow-x-hidden'
+                    ? 'h-full overflow-x-hidden overflow-y-auto [overflow-anchor:none]'
                     : 'overflow-hidden'
               } ${zoom > ZOOM_MIN ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
               onMouseLeave={() => setHoverRegion(null)}
@@ -1106,7 +1129,7 @@ export function ArchiviewFacadePanel({
 
               <div
                 className={`relative origin-top-left will-change-transform ${
-                  embeddedAr ? 'inline-block max-w-full' : 'mx-auto inline-block max-w-full p-1'
+                  embeddedAr ? 'block w-full' : 'mx-auto inline-block max-w-full p-1'
                 }`}
                 style={{
                   transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
@@ -1124,10 +1147,11 @@ export function ArchiviewFacadePanel({
                   width={imgSize.w}
                   height={imgSize.h}
                   draggable={false}
-                  className={`block h-auto w-auto max-w-full select-none ${
+                  onLoad={resetArViewportScroll}
+                  className={`block w-full select-none ${
                     embeddedAr
-                      ? 'max-h-full rounded-none'
-                      : 'max-h-[min(78vh,820px)] rounded-xl'
+                      ? 'h-auto max-w-full rounded-none'
+                      : 'h-auto w-auto max-w-full max-h-[min(78vh,820px)] rounded-xl'
                   }`}
                 />
                 {regions.length > 0 && (
