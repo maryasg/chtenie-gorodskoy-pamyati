@@ -90,7 +90,13 @@ export function ExpertTracePlate({
           ) : null}
 
           {expanded && body ? (
-            <p className="mt-2 text-[13px] font-normal leading-relaxed text-arch-surface/90">{body}</p>
+            <p
+              className={`mt-2 text-[13px] font-normal leading-relaxed text-arch-surface/90 ${
+                compact ? 'line-clamp-5' : ''
+              }`}
+            >
+              {body}
+            </p>
           ) : null}
 
           {expanded && confidenceInfo ? (

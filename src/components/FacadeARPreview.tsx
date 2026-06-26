@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'react'
 import type { Building } from '../types/building'
 import type { ArchiviewBuildingAssets } from '../data/explorer/archiviewAssets'
 import { ArchiviewFacadePanel } from './ArchiviewFacadePanel'
@@ -9,16 +10,22 @@ type Props = {
 
 /** Симуляция AR без камеры: исходное фото в «экране телефона» + подсветка зон. */
 export function FacadeARPreview({ building, archiview }: Props) {
+  const phoneRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    const phone = phoneRef.current
+    if (!phone) return
+    const headerOffset = 88
+    const top = phone.getBoundingClientRect().top + window.scrollY - headerOffset
+    window.scrollTo({ top: Math.max(0, top), behavior: 'instant' })
+  }, [])
+
   return (
     <div className="space-y-5">
-      <div className="rounded-xl border border-arch-green/25 bg-arch-green-soft p-4 text-sm leading-relaxed text-arch-green-deep">
-        <strong>AR-preview (без камеры).</strong> Исходный ракурс с улицы — не выпрямленное фото.
-        Подсветка зон Archiview без цифр на фото. <strong>Клик</strong> по области на экране телефона
-        открывает карточку с описанием артефакта. Если исходное фото ещё не экспортировано из
-        Archiview, временно показывается выпрямленный снимок с предупреждением.
-      </div>
-
-      <div className="mx-auto w-full max-w-[min(920px,98vw)]">
+      <div
+        ref={phoneRef}
+        className="mx-auto w-full max-w-[min(920px,98vw)] scroll-mt-24"
+      >
         <div
           className="rounded-[3rem] border-[12px] border-neutral-800 bg-neutral-900 px-2.5 pb-4 pt-2.5 shadow-2xl"
           role="img"
@@ -49,6 +56,13 @@ export function FacadeARPreview({ building, archiview }: Props) {
 
           <div className="mx-auto mt-3 h-1.5 w-32 rounded-full bg-neutral-600" aria-hidden />
         </div>
+      </div>
+
+      <div className="rounded-xl border border-arch-green/25 bg-arch-green-soft p-4 text-sm leading-relaxed text-arch-green-deep">
+        <strong>AR-preview (без камеры).</strong> Исходный ракурс с улицы — не выпрямленное фото.
+        Подсветка зон Archiview без цифр на фото. <strong>Клик</strong> по области на экране телефона
+        открывает карточку с описанием артефакта. Если исходное фото ещё не экспортировано из
+        Archiview, временно показывается выпрямленный снимок с предупреждением.
       </div>
     </div>
   )

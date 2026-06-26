@@ -23,6 +23,70 @@ type TracePlateOptions = {
   sidebarLayout?: boolean
   cardId?: string
   regionIdx?: number
+  /** AR-preview: не перекрывать подсветку (кроме крупных зон) */
+  avoidRegionOverlap?: boolean
+}
+
+/** Крупная зона — плашка может лежать поверх (напр. надстройка #1 у Куманиных). */
+const LARGE_REGION_SPAN = 14
+
+function placeOutsideRegionBbox(
+  bbox: RegionBBox,
+  cxPct: number,
+  cyPct: number,
+): { leftPct: number; topPct: number; transform: string } {
+  const margin = 3.5
+  const plateHalfH = 9
+  const plateHalfW = 14
+
+  const spaceBelow = 100 - bbox.maxY
+  const spaceAbove = bbox.minY
+  const spaceLeft = bbox.minX
+  const spaceRight = 100 - bbox.maxX
+
+  const cx = clamp(cxPct, 14, 86)
+
+  if (spaceBelow >= plateHalfH + margin + 4) {
+    return {
+      leftPct: cx,
+      topPct: clamp(bbox.maxY + margin + plateHalfH, 12, 90),
+      transform: 'translate(-50%, 0)',
+    }
+  }
+  if (spaceAbove >= plateHalfH + margin + 4) {
+    return {
+      leftPct: cx,
+      topPct: clamp(bbox.minY - margin - plateHalfH, 10, 88),
+      transform: 'translate(-50%, -100%)',
+    }
+  }
+  if (spaceRight >= plateHalfW + margin + 4) {
+    return {
+      leftPct: clamp(bbox.maxX + margin + plateHalfW, 14, 90),
+      topPct: clamp(cyPct, 12, 88),
+      transform: 'translate(0, -50%)',
+    }
+  }
+  if (spaceLeft >= plateHalfW + margin + 4) {
+    return {
+      leftPct: clamp(bbox.minX - margin - plateHalfW, 10, 86),
+      topPct: clamp(cyPct, 12, 88),
+      transform: 'translate(-100%, -50%)',
+    }
+  }
+
+  if (spaceBelow >= spaceAbove) {
+    return {
+      leftPct: cx,
+      topPct: clamp(bbox.maxY + margin + plateHalfH, 12, 92),
+      transform: 'translate(-50%, 0)',
+    }
+  }
+  return {
+    leftPct: cx,
+    topPct: clamp(bbox.minY - margin - plateHalfH, 8, 88),
+    transform: 'translate(-50%, -100%)',
+  }
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -62,7 +126,9 @@ export function tracePlatePlacement(
   const sidebarLayout = options?.sidebarLayout ?? false
   const cardId = options?.cardId
   const regionIdx = options?.regionIdx
+  const avoidRegionOverlap = options?.avoidRegionOverlap ?? false
   const span = regionSpan(bbox)
+  const regionLarge = span > LARGE_REGION_SPAN
   const regionSmall = span <= 7.5
 
   const { blockCx, blockCy, imageRightPct, imageLeftPct } = imageToBlock(cxPct, cyPct, layout)
@@ -112,7 +178,13 @@ export function tracePlatePlacement(
   topPct = clamp(topPct, 5, expanded ? 78 : 84)
 
   let transform = 'translate(-50%, -50%)'
-  if (expanded) {
+
+  if (avoidRegionOverlap && !expanded && bbox && !regionLarge) {
+    const outside = placeOutsideRegionBbox(bbox, cxPct, cyPct)
+    leftPct = outside.leftPct
+    topPct = outside.topPct
+    transform = outside.transform
+  } else if (expanded) {
     if (topPct < 22) transform = 'translate(-50%, 0)'
     else if (topPct > 72) transform = 'translate(-50%, -100%)'
   } else if (regionSmall) {
@@ -124,8 +196,11 @@ export function tracePlatePlacement(
     transform = 'translate(-50%, -100%)'
   }
 
-  // Ардовы: плашки #1 и #9 — правее и шире, без смещения к чужой зоне
-  if (cardId === 'MOSCOW_001' && (regionIdx === 1 || regionIdx === 9)) {
+  // Ардовы: плашки #1 и #9 на карточке здания — правее и шире (#9 не в AR-hover)
+  const moscow001WidePlate =
+    cardId === 'MOSCOW_001' &&
+    (regionIdx === 1 || (regionIdx === 9 && !(avoidRegionOverlap && !expanded)))
+  if (moscow001WidePlate) {
     const seam = hasSidebar ? imageRightPct : 100
     leftPct = clamp(blockCx + (layout ? layout.imageWidthPct * 0.1 : 10), imageLeftPct + 8, seam + 10)
     maxWidthPx = expanded ? 440 : 360

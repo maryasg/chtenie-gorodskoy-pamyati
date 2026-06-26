@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { Layout } from './components/Layout'
+import { ScrollToTop } from './components/ScrollToTop'
 import { ARPage } from './pages/ARPage'
 import { BuildingPage } from './pages/BuildingPage'
 import { ExpertReviewPage } from './pages/ExpertReviewPage'
@@ -16,6 +17,7 @@ function LegacyCuratorRedirect() {
 export default function App() {
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || '/'}>
+      <ScrollToTop />
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<MapPage />} />

@@ -672,8 +672,9 @@ export function ArchiviewFacadePanel({
       sidebarLayout: useSidebarLayout,
       cardId: assets.cardId,
       regionIdx: plateRegion.idx,
+      avoidRegionOverlap: embeddedAr && !plateExpanded,
     })
-  }, [plateRegion, plateExpanded, blockLayout, useSidebarLayout, assets.cardId])
+  }, [plateRegion, plateExpanded, blockLayout, useSidebarLayout, assets.cardId, embeddedAr])
 
   useEffect(() => {
     if (!assets.cardId) {
@@ -741,6 +742,22 @@ export function ArchiviewFacadePanel({
     }
     return null
   }, [plateAutoViewport, plateDragPositions, platePlacement, plateRegion])
+
+  useLayoutEffect(() => {
+    if (!embeddedAr || !imageOk) return
+    const vp = viewportRef.current
+    if (!vp) return
+    vp.scrollTop = 0
+    vp.scrollLeft = 0
+  }, [embeddedAr, imageOk, displayImageUrl, imgSize.w, imgSize.h, regions.length])
+
+  const resetArViewportScroll = useCallback(() => {
+    if (!embeddedAr) return
+    const vp = viewportRef.current
+    if (!vp) return
+    vp.scrollTop = 0
+    vp.scrollLeft = 0
+  }, [embeddedAr])
 
   const handlePlateDragStart = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
@@ -872,10 +889,29 @@ export function ArchiviewFacadePanel({
       comment={plateRegion.comment}
       verification={building?.verification}
       expanded={plateExpanded}
-      compact={platePlacement?.compact}
+      compact={embeddedAr || platePlacement?.compact}
       onClose={plateExpanded ? () => setSelectedIdx(null) : undefined}
     />
   ) : null
+
+  const embeddedPlateLayout = useMemo(() => {
+    if (!embeddedAr || !plateRegion) return null
+    if (plateExpanded) {
+      return {
+        left: '50%',
+        top: '50%',
+        transform: 'translate(-50%, -50%)',
+        maxWidth: 'min(92%, 300px)',
+      }
+    }
+    if (!platePlacement) return null
+    return {
+      left: `${platePlacement.leftPct}%`,
+      top: `${platePlacement.topPct}%`,
+      transform: platePlacement.transform,
+      maxWidth: `min(92%, ${Math.max(platePlacement.maxWidthPx, 220)}px)`,
+    }
+  }, [embeddedAr, plateExpanded, platePlacement, plateRegion])
 
   const comparisonBlock =
     !sideBySide && variant === 'default' ? (
@@ -1003,22 +1039,29 @@ export function ArchiviewFacadePanel({
       )}
 
       {imageOk && (
-        <div ref={facadeBlockRef} className="relative overflow-visible">
+        <div
+          ref={facadeBlockRef}
+          className={`relative ${embeddedAr ? 'h-full min-h-0 overflow-hidden' : 'overflow-visible'}`}
+        >
           <div
             className={
               useSidebarLayout
                 ? 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_17rem] xl:grid-cols-[minmax(0,1fr)_20rem] lg:items-start'
-                : 'flex flex-col gap-4'
+                : embeddedAr
+                  ? 'flex h-full min-h-0 flex-col'
+                  : 'flex flex-col gap-4'
             }
           >
           <div
             className={
               useSidebarLayout
                 ? 'relative order-1 flex min-w-0 flex-col gap-4 overflow-visible lg:col-start-1 lg:row-start-1 lg:row-span-2'
-                : 'relative min-w-0 w-full overflow-visible'
+                : embeddedAr
+                  ? 'relative flex h-full min-h-0 min-w-0 w-full flex-col'
+                  : 'relative min-w-0 w-full overflow-visible'
             }
           >
-          <div className="relative min-w-0 shrink-0">
+          <div className={embeddedAr ? 'relative min-h-0 min-w-0 flex-1' : 'relative min-w-0 shrink-0'}>
             <div
               ref={viewportRef}
               className={`relative w-full ${
@@ -1035,7 +1078,7 @@ export function ArchiviewFacadePanel({
                     ? 'h-full max-h-none overflow-hidden'
                     : 'max-h-[min(78vh,820px)] overflow-hidden'
                   : embeddedAr
-                    ? 'h-full overflow-y-auto overflow-x-hidden'
+                    ? 'h-full overflow-x-hidden overflow-y-auto [overflow-anchor:none]'
                     : 'overflow-hidden'
               } ${zoom > ZOOM_MIN ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
               onMouseLeave={() => setHoverRegion(null)}
@@ -1055,7 +1098,7 @@ export function ArchiviewFacadePanel({
               {plateExpanded && variant === 'ar' ? (
                 <button
                   type="button"
-                  className="absolute inset-0 z-40 cursor-default border-0 bg-black/45 p-0"
+                  className="absolute inset-0 z-40 cursor-default border-0 bg-transparent p-0"
                   aria-label="Закрыть карточку"
                   onClick={() => setSelectedIdx(null)}
                 />
@@ -1106,7 +1149,7 @@ export function ArchiviewFacadePanel({
 
               <div
                 className={`relative origin-top-left will-change-transform ${
-                  embeddedAr ? 'inline-block max-w-full' : 'mx-auto inline-block max-w-full p-1'
+                  embeddedAr ? 'block w-full' : 'mx-auto inline-block max-w-full p-1'
                 }`}
                 style={{
                   transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
@@ -1124,10 +1167,11 @@ export function ArchiviewFacadePanel({
                   width={imgSize.w}
                   height={imgSize.h}
                   draggable={false}
-                  className={`block h-auto w-auto max-w-full select-none ${
+                  onLoad={resetArViewportScroll}
+                  className={`block w-full select-none ${
                     embeddedAr
-                      ? 'max-h-full rounded-none'
-                      : 'max-h-[min(78vh,820px)] rounded-xl'
+                      ? 'h-auto max-w-full rounded-none'
+                      : 'h-auto w-auto max-w-full max-h-[min(78vh,820px)] rounded-xl'
                   }`}
                 />
                 {regions.length > 0 && (
@@ -1245,33 +1289,30 @@ export function ArchiviewFacadePanel({
                   })}
                 </div>
               ) : null}
-              </div>
-
-              {variant === 'ar' && plateExpanded && plateRegion ? (
+              {embeddedAr && plateRegion && tracePlateContent && embeddedPlateLayout ? (
                 <div
-                  className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center p-4"
-                  role="dialog"
-                  aria-modal="true"
+                  className={`absolute z-50 ${TRACE_PLATE_SHELL_CLASS} overflow-hidden shadow-2xl backdrop-blur-xl ${
+                    plateExpanded ? 'pointer-events-auto' : 'pointer-events-none'
+                  }`}
+                  style={{
+                    left: embeddedPlateLayout.left,
+                    top: embeddedPlateLayout.top,
+                    transform: embeddedPlateLayout.transform,
+                    maxWidth: embeddedPlateLayout.maxWidth,
+                    width: plateExpanded ? embeddedPlateLayout.maxWidth : undefined,
+                    backgroundColor: tracePlateBackground(plateExpanded),
+                  }}
+                  role={plateExpanded ? 'dialog' : undefined}
+                  aria-modal={plateExpanded ? true : undefined}
                   aria-label={`Экспертная заметка ${plateRegion.idx}`}
+                  onClick={plateExpanded ? (event) => event.stopPropagation() : undefined}
                 >
-                  <div
-                    className={`pointer-events-auto max-h-[min(72%,520px)] w-full max-w-[min(92%,340px)] overflow-y-auto px-4 py-4 ${TRACE_PLATE_SHELL_CLASS}`}
-                    style={{ backgroundColor: tracePlateBackground(true) }}
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <ExpertTracePlate
-                      idx={plateRegion.idx}
-                      title={plateRegion.trace?.title ?? plateRegion.label}
-                      period={plateRegion.trace?.period}
-                      trace={plateRegion.trace}
-                      comment={plateRegion.comment}
-                      verification={building?.verification}
-                      expanded
-                      onClose={() => setSelectedIdx(null)}
-                    />
+                  <div className={plateExpanded ? 'px-4 py-3' : 'px-3 py-2 text-sm leading-snug'}>
+                    {tracePlateContent}
                   </div>
                 </div>
               ) : null}
+              </div>
 
             </div>
           </div>
@@ -1320,7 +1361,8 @@ export function ArchiviewFacadePanel({
 
         </div>
       )}
-      {plateRegion &&
+      {!embeddedAr &&
+      plateRegion &&
       platePlacement &&
       plateViewportPosition &&
       tracePlateContent &&
