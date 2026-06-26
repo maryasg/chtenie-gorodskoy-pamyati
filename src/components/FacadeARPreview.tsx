@@ -1,7 +1,8 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import type { Building } from '../types/building'
 import type { ArchiviewBuildingAssets } from '../data/explorer/archiviewAssets'
 import { ArchiviewFacadePanel } from './ArchiviewFacadePanel'
+import { useMediaQuery } from '../lib/useMediaQuery'
 
 type Props = {
   building: Building
@@ -11,6 +12,8 @@ type Props = {
 /** Симуляция AR без камеры: исходное фото в «экране телефона» + подсветка зон. */
 export function FacadeARPreview({ building, archiview }: Props) {
   const phoneRef = useRef<HTMLDivElement>(null)
+  const [arPlateHost, setArPlateHost] = useState<HTMLDivElement | null>(null)
+  const isMobile = useMediaQuery('(max-width: 639px)')
 
   useLayoutEffect(() => {
     const phone = phoneRef.current
@@ -41,17 +44,38 @@ export function FacadeARPreview({ building, archiview }: Props) {
               ) : null}
             </div>
 
-            <div className="relative aspect-[9/16] w-full overflow-hidden">
-              <div className="absolute inset-0">
-                <ArchiviewFacadePanel
-                  assets={archiview}
-                  building={building}
-                  variant="ar"
-                  embeddedAr
-                  hideIntro
+            {isMobile ? (
+              <div className="flex flex-col">
+                <div className="relative aspect-[9/16] w-full shrink-0 overflow-hidden">
+                  <div className="absolute inset-0">
+                    <ArchiviewFacadePanel
+                      assets={archiview}
+                      building={building}
+                      variant="ar"
+                      embeddedAr
+                      hideIntro
+                      mobileArPlateHost={arPlateHost}
+                    />
+                  </div>
+                </div>
+                <div
+                  ref={setArPlateHost}
+                  className="border-t border-arch-surface/10 bg-arch-green-deep px-3 py-3 empty:hidden"
                 />
               </div>
-            </div>
+            ) : (
+              <div className="relative aspect-[9/16] w-full overflow-hidden">
+                <div className="absolute inset-0">
+                  <ArchiviewFacadePanel
+                    assets={archiview}
+                    building={building}
+                    variant="ar"
+                    embeddedAr
+                    hideIntro
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="mx-auto mt-3 h-1.5 w-32 rounded-full bg-neutral-600" aria-hidden />

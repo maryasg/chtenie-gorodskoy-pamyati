@@ -295,6 +295,7 @@ export function ArchiviewFacadePanel({
   variant = 'default',
   embeddedAr = false,
   hideIntro = false,
+  mobileArPlateHost = null,
 }: {
   assets: ArchiviewBuildingAssets
   building?: Building
@@ -303,6 +304,8 @@ export function ArchiviewFacadePanel({
   embeddedAr?: boolean
   /** Скрыть подпись (её рисует FacadeARPreview внутри экрана) */
   hideIntro?: boolean
+  /** На телефоне: контейнер под экраном AR для развёрнутой карточки следа */
+  mobileArPlateHost?: HTMLDivElement | null
 }) {
   const [regions, setRegions] = useState<DisplayRegion[]>([])
   const [imageOk, setImageOk] = useState(false)
@@ -941,6 +944,7 @@ export function ArchiviewFacadePanel({
 
   const embeddedPlateLayout = useMemo(() => {
     if (!embeddedAr || !plateRegion) return null
+    if (isMobile && plateExpanded) return null
     if (isMobile) {
       return {
         left: '50%',
@@ -966,10 +970,15 @@ export function ArchiviewFacadePanel({
     }
   }, [embeddedAr, isMobile, plateExpanded, platePlacement, plateRegion])
 
+  const showEmbeddedMobileBelowPlate = Boolean(
+    embeddedAr && isMobile && plateExpanded && plateRegion && tracePlateContent && mobileArPlateHost,
+  )
+
   const showMobilePortal =
     isMobile &&
     Boolean(plateRegion && platePlacement && tracePlateContent) &&
-    (!embeddedAr || plateExpanded)
+    (!embeddedAr || plateExpanded) &&
+    !showEmbeddedMobileBelowPlate
 
   const platePortalStyle = useMemo(() => {
     if (!platePlacement) return null
@@ -1499,6 +1508,20 @@ export function ArchiviewFacadePanel({
 
         </div>
       )}
+      {showEmbeddedMobileBelowPlate && mobileArPlateHost
+        ? createPortal(
+            <div
+              className={`${TRACE_PLATE_SHELL_CLASS} pointer-events-auto overflow-hidden shadow-2xl backdrop-blur-xl`}
+              style={{ backgroundColor: tracePlateBackground(true) }}
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Экспертная заметка ${plateRegion!.idx}`}
+            >
+              <div className="max-h-[min(42vh,300px)] overflow-y-auto px-4 py-3">{tracePlateContent}</div>
+            </div>,
+            mobileArPlateHost,
+          )
+        : null}
       {showPlatePortal && platePortalStyle
         ? createPortal(
             <>
