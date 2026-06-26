@@ -923,15 +923,15 @@ export function ArchiviewFacadePanel({
 
   const embeddedPlateLayout = useMemo(() => {
     if (!embeddedAr || !plateRegion) return null
-    if (plateExpanded) {
-      if (isMobile) {
-        return {
-          left: '50%',
-          top: '0.75rem',
-          transform: 'translate(-50%, 0)',
-          maxWidth: 'calc(100% - 1rem)',
-        }
+    if (isMobile) {
+      return {
+        left: '50%',
+        top: '50%',
+        transform: 'translate(-50%, -50%)',
+        maxWidth: 'calc(100% - 1rem)',
       }
+    }
+    if (plateExpanded) {
       return {
         left: '50%',
         top: '50%',
@@ -947,6 +947,45 @@ export function ArchiviewFacadePanel({
       maxWidth: `min(92%, ${Math.max(platePlacement.maxWidthPx, 220)}px)`,
     }
   }, [embeddedAr, isMobile, plateExpanded, platePlacement, plateRegion])
+
+  const showMobilePortal =
+    isMobile &&
+    Boolean(plateRegion && platePlacement && tracePlateContent) &&
+    (!embeddedAr || plateExpanded)
+
+  const platePortalStyle = useMemo(() => {
+    if (!platePlacement) return null
+    const shared = {
+      transform: 'translate(-50%, -50%)' as const,
+      maxWidth: plateExpanded
+        ? 'min(440px, calc(100vw - 1.5rem))'
+        : `min(${Math.max(platePlacement.maxWidthPx, 300)}px, calc(100vw - 1.5rem))`,
+      minWidth: plateExpanded ? 'min(300px, calc(100vw - 1.5rem))' : 'min(240px, calc(100vw - 1.5rem))',
+      width: plateExpanded ? ('min(440px, calc(100vw - 1.5rem))' as const) : undefined,
+      backgroundColor: tracePlateBackground(plateExpanded),
+    }
+    if (isMobile) {
+      return {
+        left: '50%',
+        top: '50%',
+        ...shared,
+      }
+    }
+    if (!plateViewportPosition) return null
+    return {
+      left: `${plateViewportPosition.xPct}vw`,
+      top: `${plateViewportPosition.yPct}vh`,
+      ...shared,
+    }
+  }, [isMobile, plateExpanded, platePlacement, plateViewportPosition])
+
+  const showDesktopPortal =
+    !isMobile &&
+    !embeddedAr &&
+    Boolean(plateRegion && platePlacement && plateViewportPosition && tracePlateContent) &&
+    !(variant === 'ar' && plateExpanded)
+
+  const showPlatePortal = showMobilePortal || showDesktopPortal
 
   const comparisonBlock =
     !sideBySide && variant === 'default' ? (
@@ -1363,7 +1402,7 @@ export function ArchiviewFacadePanel({
                   })}
                 </div>
               ) : null}
-              {embeddedAr && plateRegion && tracePlateContent && embeddedPlateLayout ? (
+              {embeddedAr && plateRegion && tracePlateContent && embeddedPlateLayout && !(isMobile && plateExpanded) ? (
                 <div
                   className={`absolute z-50 ${TRACE_PLATE_SHELL_CLASS} overflow-hidden shadow-2xl backdrop-blur-xl ${
                     plateExpanded ? 'pointer-events-auto' : 'pointer-events-none'
@@ -1445,68 +1484,69 @@ export function ArchiviewFacadePanel({
 
         </div>
       )}
-      {!embeddedAr &&
-      plateRegion &&
-      platePlacement &&
-      plateViewportPosition &&
-      tracePlateContent &&
-      !(variant === 'ar' && plateExpanded)
+      {showPlatePortal && platePortalStyle
         ? createPortal(
-            <div
-              className={`fixed z-[9990] ${TRACE_PLATE_SHELL_CLASS} ${
-                plateExpanded ? 'pointer-events-auto' : 'pointer-events-none'
-              } ${plateExpanded ? '' : 'rounded-lg shadow-xl'} ${isPlateDragging ? 'select-none' : ''}`}
-              style={{
-                left: `${plateViewportPosition.xPct}vw`,
-                top: `${plateViewportPosition.yPct}vh`,
-                transform: 'translate(-50%, -50%)',
-                maxWidth: plateExpanded
-                  ? 'min(440px, calc(100vw - 1.5rem))'
-                  : `min(${Math.max(platePlacement.maxWidthPx, 300)}px, calc(100vw - 1.5rem))`,
-                minWidth: plateExpanded ? 'min(300px, calc(100vw - 1.5rem))' : 'min(240px, calc(100vw - 1.5rem))',
-                width: plateExpanded ? 'min(440px, calc(100vw - 1.5rem))' : undefined,
-                backgroundColor: tracePlateBackground(plateExpanded),
-              }}
-              role={plateExpanded ? 'dialog' : undefined}
-              aria-modal={plateExpanded ? true : undefined}
-              aria-label={plateExpanded ? `Экспертная заметка ${plateRegion.idx}` : undefined}
-              onClick={plateExpanded ? (event) => event.stopPropagation() : undefined}
-            >
-              {plateExpanded && !embeddedAr ? (
-                <div
-                  className={`flex touch-none items-center gap-2 border-b border-arch-gold/35 bg-arch-green-deep/20 px-2.5 py-1.5 ${
-                    isPlateDragging ? 'cursor-grabbing' : 'cursor-grab'
-                  }`}
-                  aria-label="Перетащить карточку"
-                  onPointerDown={handlePlateDragStart}
-                  onPointerMove={handlePlateDragMove}
-                  onPointerUp={handlePlateDragEnd}
-                  onPointerCancel={handlePlateDragEnd}
-                >
-                  <span className="text-xs tracking-widest text-arch-surface/45" aria-hidden>
-                    ⋮⋮
-                  </span>
-                  <span className="text-[10px] text-arch-surface/55">перетащите</span>
-                  {plateViewportPosition.isCustom ? (
-                    <button
-                      type="button"
-                      className="ml-auto rounded px-1.5 py-0.5 text-[10px] font-medium text-arch-surface/70 transition hover:bg-arch-surface/10 hover:text-arch-surface"
-                      title="Вернуть автоматическую позицию"
-                      onPointerDown={(event) => event.stopPropagation()}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        resetPlateDragPosition(plateRegion.idx)
-                      }}
-                    >
-                      ↺ авто
-                    </button>
-                  ) : null}
-                </div>
+            <>
+              {plateExpanded && isMobile ? (
+                <button
+                  type="button"
+                  className="fixed inset-0 z-[9989] border-0 bg-arch-ink/45 p-0"
+                  aria-label="Закрыть карточку"
+                  onClick={() => setSelectedIdx(null)}
+                />
               ) : null}
-              <div className={plateExpanded ? 'px-5 py-4' : 'px-3 py-2.5 text-sm leading-snug'}>
-                {tracePlateContent}
+              <div
+                className={`fixed z-[9990] ${TRACE_PLATE_SHELL_CLASS} ${
+                  plateExpanded ? 'pointer-events-auto' : 'pointer-events-none'
+                } ${plateExpanded ? '' : 'rounded-lg shadow-xl'} ${isPlateDragging ? 'select-none' : ''}`}
+                style={platePortalStyle}
+                role={plateExpanded ? 'dialog' : undefined}
+                aria-modal={plateExpanded ? true : undefined}
+                aria-label={plateExpanded ? `Экспертная заметка ${plateRegion!.idx}` : undefined}
+                onClick={plateExpanded ? (event) => event.stopPropagation() : undefined}
+              >
+                {plateExpanded && !embeddedAr && !isMobile ? (
+                  <div
+                    className={`flex touch-none items-center gap-2 border-b border-arch-gold/35 bg-arch-green-deep/20 px-2.5 py-1.5 ${
+                      isPlateDragging ? 'cursor-grabbing' : 'cursor-grab'
+                    }`}
+                    aria-label="Перетащить карточку"
+                    onPointerDown={handlePlateDragStart}
+                    onPointerMove={handlePlateDragMove}
+                    onPointerUp={handlePlateDragEnd}
+                    onPointerCancel={handlePlateDragEnd}
+                  >
+                    <span className="text-xs tracking-widest text-arch-surface/45" aria-hidden>
+                      ⋮⋮
+                    </span>
+                    <span className="text-[10px] text-arch-surface/55">перетащите</span>
+                    {plateViewportPosition?.isCustom ? (
+                      <button
+                        type="button"
+                        className="ml-auto rounded px-1.5 py-0.5 text-[10px] font-medium text-arch-surface/70 transition hover:bg-arch-surface/10 hover:text-arch-surface"
+                        title="Вернуть автоматическую позицию"
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          resetPlateDragPosition(plateRegion!.idx)
+                        }}
+                      >
+                        ↺ авто
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+                <div
+                  className={
+                    plateExpanded
+                      ? 'max-h-[min(70dvh,420px)] overflow-y-auto px-5 py-4'
+                      : 'px-3 py-2.5 text-sm leading-snug'
+                  }
+                >
+                  {tracePlateContent}
+                </div>
               </div>
-            </div>,
+            </>,
             document.body,
           )
         : null}
