@@ -933,12 +933,16 @@ export function ArchiviewFacadePanel({
 
   const regionList =
     regions.length > 0 ? (
-      <ol className="w-full space-y-1.5 text-sm">
+      <ol
+        className={`w-full text-sm ${
+          sideBySide ? 'grid grid-cols-1 gap-2 sm:grid-cols-3' : 'space-y-1.5'
+        }`}
+      >
         {regions.map((r) => {
           const on = hoverIdx === r.idx
           const color = CLASS_COLORS[r.cls] ?? '#444'
           return (
-            <li key={r.idx}>
+            <li key={r.idx} className={sideBySide ? 'min-w-0' : undefined}>
               <button
                 type="button"
                 onMouseEnter={() => setHoverRegion(r.idx)}
@@ -946,7 +950,9 @@ export function ArchiviewFacadePanel({
                 onFocus={() => setHoverRegion(r.idx)}
                 onBlur={() => setHoverRegion(null)}
                 onClick={() => setSelectedIdx((current) => (current === r.idx ? null : r.idx))}
-                className={`flex w-full gap-2 rounded-lg border px-2.5 py-2 text-left transition ${
+                className={`flex gap-2 rounded-lg border px-2.5 py-2 text-left transition ${
+                  sideBySide ? 'h-full min-h-[5.5rem] flex-col items-start' : 'w-full'
+                } ${
                   on || selectedIdx === r.idx
                     ? 'border-arch-green/50 bg-arch-green-soft shadow-sm'
                     : 'border-arch-line bg-arch-surface hover:border-arch-green/30'
@@ -959,13 +965,29 @@ export function ArchiviewFacadePanel({
                   {r.idx}
                 </span>
                 <span className="min-w-0">
-                  <span className="block font-medium leading-tight text-arch-ink">
+                  <span
+                    className={`block font-medium leading-tight text-arch-ink ${
+                      sideBySide ? 'line-clamp-2 text-[13px]' : ''
+                    }`}
+                  >
                     {r.trace?.title ?? r.label}
                   </span>
                   {r.trace ? (
-                    <span className="mt-0.5 block text-xs text-arch-muted">{r.trace.period}</span>
+                    <span
+                      className={`mt-0.5 block text-arch-muted ${
+                        sideBySide ? 'line-clamp-2 text-[11px]' : 'text-xs'
+                      }`}
+                    >
+                      {r.trace.period}
+                    </span>
                   ) : r.comment ? (
-                    <span className="mt-0.5 block text-xs text-arch-muted">{r.comment}</span>
+                    <span
+                      className={`mt-0.5 block text-arch-muted ${
+                        sideBySide ? 'line-clamp-3 text-[11px]' : 'text-xs'
+                      }`}
+                    >
+                      {r.comment}
+                    </span>
                   ) : null}
                 </span>
               </button>
@@ -1315,6 +1337,9 @@ export function ArchiviewFacadePanel({
               </div>
 
             </div>
+            {sideBySide && regionList ? (
+              <div className="w-full pt-2">{regionList}</div>
+            ) : null}
           </div>
 
             {useSidebarLayout && comparisonBlock ? (
@@ -1338,7 +1363,7 @@ export function ArchiviewFacadePanel({
                 </div>
               ) : null}
             </>
-          ) : !embeddedAr && (regionList || comparisonBlock) ? (
+          ) : !embeddedAr && !sideBySide && (regionList || comparisonBlock) ? (
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
               {comparisonBlock}
               {regionList ? (
