@@ -25,14 +25,14 @@ export function BuildingVerificationBanner({ verification }: { verification: Bui
         {historicalPhoto && archiveSources.length > 0 ? (
           <li className="text-sm text-arch-ink">
             <span className="inline-flex rounded-full border border-arch-green/35 bg-arch-green-soft px-2.5 py-0.5 text-xs font-medium text-arch-green-deep">
-              Архивные материалы
+              Архивные фотоматериалы
             </span>
-            <ul className="mt-2 list-inside list-disc space-y-0.5 text-arch-muted">
-              {archiveSources.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-              {modernPhotoYear ? <li>Съёмка {modernPhotoYear} (Archiview)</li> : null}
-            </ul>
+            <p className="mt-1.5 leading-relaxed text-arch-muted">
+              {[
+                ...archiveSources,
+                ...(modernPhotoYear ? [`Съёмка ${modernPhotoYear} (Archiview)`] : []),
+              ].join(', ')}
+            </p>
           </li>
         ) : historicalPhoto ? (
           <li className="flex flex-wrap items-center gap-2 text-sm text-arch-ink">
