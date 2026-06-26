@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: pages-deploy
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -51,4 +51,10 @@ jobs:
           fi
       - id: deployment
         if: steps.should_deploy.outputs.deploy == 'true'
+        uses: actions/deploy-pages@v4
+      - name: Retry deploy after Pages lock (attempt 2)
+        if: steps.should_deploy.outputs.deploy == 'true' && steps.deployment.outcome == 'failure'
+        run: sleep 90
+      - id: deployment_retry
+        if: steps.should_deploy.outputs.deploy == 'true' && steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@v4
