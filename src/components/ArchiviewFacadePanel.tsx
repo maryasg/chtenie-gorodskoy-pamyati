@@ -27,7 +27,8 @@ import {
   TRACE_PLATE_SHELL_CLASS,
   tracePlateBackground,
 } from '../lib/tracePlateStyle'
-import { computeBadgeLayout, assignBadgeLayouts, type BadgeLayout } from '../lib/regionBadgeLayout'
+import { computeBadgeLayout, assignBadgeLayouts, assignMobileBottomBadgeLayouts, type BadgeLayout } from '../lib/regionBadgeLayout'
+import { useMediaQuery } from '../lib/useMediaQuery'
 
 const CLASS_COLORS: Record<string, string> = {
   added_floor: '#00aa00',
@@ -70,7 +71,14 @@ function regionPolygonStyle(
   area: number,
   on: boolean,
   arIdle = false,
+  mobileActive = false,
 ): { fill: string; strokeWidth: number } {
+  if (mobileActive && on) {
+    return {
+      fill: `${color}66`,
+      strokeWidth: 0.85,
+    }
+  }
   if (arIdle && !on) {
     return {
       fill: `${color}28`,
@@ -320,6 +328,8 @@ export function ArchiviewFacadePanel({
     [],
   )
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
+  const isMobile = useMediaQuery('(max-width: 639px)')
+  const useMobileFacadeChrome = isMobile && !embeddedAr && variant !== 'ar'
   const [imgSize, setImgSize] = useState({ w: 1, h: 1 })
   const [sideBySide, setSideBySide] = useState(false)
   const [displayImageUrl, setDisplayImageUrl] = useState('')
@@ -448,11 +458,28 @@ export function ArchiviewFacadePanel({
 
   const publishRegions = useCallback(
     (list: DisplayRegion[]) => {
-      assignBadgeLayouts(list, assets.cardId)
+      if (useMobileFacadeChrome) {
+        assignMobileBottomBadgeLayouts(list)
+      } else {
+        assignBadgeLayouts(list, assets.cardId)
+      }
       setRegions(list)
     },
-    [assets.cardId],
+    [assets.cardId, useMobileFacadeChrome],
   )
+
+  useEffect(() => {
+    if (regions.length === 0) return
+    setRegions((prev) => {
+      const next = prev.map((region) => ({ ...region }))
+      if (useMobileFacadeChrome) {
+        assignMobileBottomBadgeLayouts(next)
+      } else {
+        assignBadgeLayouts(next, assets.cardId)
+      }
+      return next
+    })
+  }, [useMobileFacadeChrome, assets.cardId, regions.length])
 
   const buildRegionsRectified = useCallback(
     (annotations: ArchiviewAnnotation[], width: number, height: number) => {
@@ -897,6 +924,14 @@ export function ArchiviewFacadePanel({
   const embeddedPlateLayout = useMemo(() => {
     if (!embeddedAr || !plateRegion) return null
     if (plateExpanded) {
+      if (isMobile) {
+        return {
+          left: '50%',
+          top: '0.75rem',
+          transform: 'translate(-50%, 0)',
+          maxWidth: 'calc(100% - 1rem)',
+        }
+      }
       return {
         left: '50%',
         top: '50%',
@@ -911,7 +946,7 @@ export function ArchiviewFacadePanel({
       transform: platePlacement.transform,
       maxWidth: `min(92%, ${Math.max(platePlacement.maxWidthPx, 220)}px)`,
     }
-  }, [embeddedAr, plateExpanded, platePlacement, plateRegion])
+  }, [embeddedAr, isMobile, plateExpanded, platePlacement, plateRegion])
 
   const comparisonBlock =
     !sideBySide && variant === 'default' ? (
@@ -1068,7 +1103,7 @@ export function ArchiviewFacadePanel({
           <div
             className={
               useSidebarLayout
-                ? 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_17rem] xl:grid-cols-[minmax(0,1fr)_20rem] lg:items-start'
+                ? 'flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_17rem] lg:grid-rows-[auto_auto] xl:grid-cols-[minmax(0,1fr)_20rem] lg:items-start'
                 : embeddedAr
                   ? 'flex h-full min-h-0 flex-col'
                   : 'flex flex-col gap-4'
@@ -1077,7 +1112,7 @@ export function ArchiviewFacadePanel({
           <div
             className={
               useSidebarLayout
-                ? 'relative order-1 flex min-w-0 flex-col gap-4 overflow-visible lg:col-start-1 lg:row-start-1 lg:row-span-2'
+                ? 'relative order-1 flex min-w-0 flex-col gap-4 overflow-visible lg:col-start-1 lg:row-start-1'
                 : embeddedAr
                   ? 'relative flex h-full min-h-0 min-w-0 w-full flex-col'
                   : 'relative min-w-0 w-full overflow-visible'
@@ -1206,7 +1241,7 @@ export function ArchiviewFacadePanel({
                   {regions.map((r) => {
                     const on = hoverIdx === r.idx || selectedIdx === r.idx
                     const color = CLASS_COLORS[r.cls] ?? '#444'
-                    const style = regionPolygonStyle(color, r.areaPct, on, variant === 'ar')
+                    const style = regionPolygonStyle(color, r.areaPct, on, variant === 'ar', useMobileFacadeChrome)
                     return (
                       <polygon
                         key={r.idx}
@@ -1260,14 +1295,17 @@ export function ArchiviewFacadePanel({
                 </svg>
               )}
               {regions.length > 0 && variant !== 'ar' ? (
-                <div className="pointer-events-none absolute inset-0 overflow-visible" aria-hidden>
+                <div
+                  className={`absolute inset-0 z-20 overflow-visible ${useMobileFacadeChrome ? '' : 'pointer-events-none'}`}
+                  aria-hidden={!useMobileFacadeChrome}
+                >
                   <svg
                     className="absolute inset-0 h-full w-full overflow-visible"
                     viewBox="0 0 100 100"
                     preserveAspectRatio="none"
                   >
                     {regionsBadges.map((r) => {
-                      if (!r.badgeLayout.callout) return null
+                      if (!useMobileFacadeChrome && !r.badgeLayout.callout) return null
                       const on = hoverIdx === r.idx || selectedIdx === r.idx
                       const color = CLASS_COLORS[r.cls] ?? '#444'
                       return (
@@ -1278,8 +1316,8 @@ export function ArchiviewFacadePanel({
                           x2={r.badgeLayout.badgeX}
                           y2={r.badgeLayout.badgeY}
                           stroke={color}
-                          strokeWidth={on ? 0.42 : 0.32}
-                          strokeOpacity={on ? 0.95 : 0.72}
+                          strokeWidth={on ? 0.48 : 0.34}
+                          strokeOpacity={on ? 0.98 : 0.75}
                         />
                       )
                     })}
@@ -1287,12 +1325,24 @@ export function ArchiviewFacadePanel({
                   {regionsBadges.map((r) => {
                     const on = hoverIdx === r.idx || selectedIdx === r.idx
                     const color = CLASS_COLORS[r.cls] ?? '#444'
-                    const size = on ? 26 : 22
+                    const size = useMobileFacadeChrome ? (on ? 32 : 28) : on ? 26 : 22
                     const { badgeX, badgeY } = r.badgeLayout
                     return (
-                      <div
+                      <button
                         key={`badge-${r.idx}`}
-                        className="absolute flex items-center justify-center rounded-full border-2 border-white font-bold leading-none text-white shadow-md"
+                        type="button"
+                        aria-label={`Зона ${r.idx}`}
+                        onMouseEnter={() => setHoverRegion(r.idx)}
+                        onMouseLeave={() => setHoverRegion(null)}
+                        onFocus={() => setHoverRegion(r.idx)}
+                        onBlur={() => setHoverRegion(null)}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setSelectedIdx((current) => (current === r.idx ? null : r.idx))
+                        }}
+                        className={`absolute flex items-center justify-center rounded-full border-2 font-bold leading-none text-white shadow-md ${
+                          useMobileFacadeChrome ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none'
+                        } ${on ? 'border-white ring-2 ring-white/90' : 'border-white'}`}
                         style={{
                           left: `${badgeX}%`,
                           top: `${badgeY}%`,
@@ -1301,12 +1351,14 @@ export function ArchiviewFacadePanel({
                           marginLeft: -size / 2,
                           marginTop: -size / 2,
                           backgroundColor: color,
-                          fontSize: r.idx >= 10 ? 10 : 11,
-                          boxShadow: '0 0 0 1px rgba(0,0,0,0.2)',
+                          fontSize: r.idx >= 10 ? 11 : 12,
+                          boxShadow: on
+                            ? `0 0 0 2px ${color}88, 0 2px 8px rgba(0,0,0,0.35)`
+                            : '0 0 0 1px rgba(0,0,0,0.2)',
                         }}
                       >
                         {r.idx}
-                      </div>
+                      </button>
                     )
                   })}
                 </div>
@@ -1329,7 +1381,7 @@ export function ArchiviewFacadePanel({
                   aria-label={`Экспертная заметка ${plateRegion.idx}`}
                   onClick={plateExpanded ? (event) => event.stopPropagation() : undefined}
                 >
-                  <div className={plateExpanded ? 'px-4 py-3' : 'px-3 py-2 text-sm leading-snug'}>
+                  <div className={plateExpanded ? 'max-h-[min(52vh,320px)] overflow-y-auto px-4 py-3' : 'px-3 py-2 text-sm leading-snug'}>
                     {tracePlateContent}
                   </div>
                 </div>
@@ -1342,42 +1394,49 @@ export function ArchiviewFacadePanel({
             ) : null}
           </div>
 
-            {useSidebarLayout && comparisonBlock ? (
-              <div className="relative z-0 min-w-0">{comparisonBlock}</div>
-            ) : null}
+          {useSidebarLayout && regionList ? (
+            <div className="relative z-0 order-2 flex min-w-0 flex-col lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:min-h-[min(78vh,820px)] lg:self-stretch">
+              {regionList}
+              {building && !sideBySide ? (
+                <Link
+                  to={`/building/${building.id}/ar`}
+                  className="mt-4 inline-flex items-center justify-center gap-1 rounded-full border border-arch-line bg-arch-surface px-4 py-2.5 text-sm font-medium text-arch-green-deep transition hover:border-arch-green/40 hover:bg-arch-green-soft"
+                >
+                  AR-preview: подсветка на полевом фото →
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
+
+          {useSidebarLayout && comparisonBlock ? (
+            <div className="relative z-0 order-3 min-w-0 lg:col-start-1 lg:row-start-2">{comparisonBlock}</div>
+          ) : null}
           </div>
 
-          {useSidebarLayout ? (
-            <>
-              {regionList ? (
-                <div className="relative z-0 order-2 flex min-w-0 flex-col lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:min-h-[min(78vh,820px)] lg:self-stretch">
-                  {regionList}
-                  {building && !sideBySide ? (
-                    <Link
-                      to={`/building/${building.id}/ar`}
-                      className="mt-4 inline-flex items-center justify-center gap-1 rounded-full border border-arch-line bg-arch-surface px-4 py-2.5 text-sm font-medium text-arch-green-deep transition hover:border-arch-green/40 hover:bg-arch-green-soft"
-                    >
-                      AR-preview: подсветка на полевом фото →
-                    </Link>
+          {!useSidebarLayout && !embeddedAr && !sideBySide && (regionList || comparisonBlock) ? (
+            <div className={`flex flex-col gap-4 ${isMobile ? '' : 'lg:flex-row lg:items-start'}`}>
+              {isMobile ? (
+                <>
+                  {regionList ? <div className="flex w-full shrink-0 flex-col">{regionList}</div> : null}
+                  {comparisonBlock}
+                </>
+              ) : (
+                <>
+                  {comparisonBlock}
+                  {regionList ? (
+                    <div className="flex w-full shrink-0 flex-col lg:w-72 xl:w-80">
+                      {regionList}
+                    </div>
                   ) : null}
-                </div>
-              ) : null}
-            </>
-          ) : !embeddedAr && !sideBySide && (regionList || comparisonBlock) ? (
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-              {comparisonBlock}
-              {regionList ? (
-                <div className="flex w-full shrink-0 flex-col lg:w-72 xl:w-80">
-                  {regionList}
-                  {building && !sideBySide ? (
-                    <Link
-                      to={`/building/${building.id}/ar`}
-                      className="mt-4 inline-flex items-center justify-center gap-1 rounded-full border border-arch-line bg-arch-surface px-4 py-2.5 text-sm font-medium text-arch-green-deep transition hover:border-arch-green/40 hover:bg-arch-green-soft"
-                    >
-                      AR-preview: подсветка на полевом фото →
-                    </Link>
-                  ) : null}
-                </div>
+                </>
+              )}
+              {building && !sideBySide ? (
+                <Link
+                  to={`/building/${building.id}/ar`}
+                  className="inline-flex items-center justify-center gap-1 rounded-full border border-arch-line bg-arch-surface px-4 py-2.5 text-sm font-medium text-arch-green-deep transition hover:border-arch-green/40 hover:bg-arch-green-soft"
+                >
+                  AR-preview: подсветка на полевом фото →
+                </Link>
               ) : null}
             </div>
           ) : null}

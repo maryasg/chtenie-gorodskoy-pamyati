@@ -372,3 +372,26 @@ export function assignBadgeLayouts(regions: RegionForBadgeLayout[], cardId?: str
     placed.push(chosen)
   }
 }
+
+/** Мобильный фасад: все номера внизу кадра, выноски к центрам зон. */
+export function assignMobileBottomBadgeLayouts(regions: RegionForBadgeLayout[]): void {
+  const sorted = [...regions].sort((a, b) => a.idx - b.idx)
+  const count = sorted.length
+  if (count === 0) return
+
+  const marginX = 7
+  const bottomY = 92.5
+  const span = 100 - marginX * 2
+
+  sorted.forEach((region, index) => {
+    const [cx, cy] = polygonCentroid(region.polygonPct)
+    const badgeX = count === 1 ? 50 : marginX + (span * index) / (count - 1)
+    region.badgeLayout = {
+      anchorX: cx,
+      anchorY: cy,
+      badgeX: clampPct(badgeX),
+      badgeY: bottomY,
+      callout: true,
+    }
+  })
+}
