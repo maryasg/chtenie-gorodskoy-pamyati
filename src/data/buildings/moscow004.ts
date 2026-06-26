@@ -126,6 +126,12 @@ export const MOSCOW_004: Building = {
   ],
   photos: [
     { id: 'pastvu-55243', type: 'archive', description: 'Архивное фото 1989: место вывески Фалькевича (датировка по PastVu)', url: 'https://pastvu.com/p/55243' },
+    {
+      id: 'photo-rg-falkevich-1923',
+      type: 'archive',
+      description: 'Фото вывески Фалькевича, 1923–1926 гг. (РГ / «Родина»)',
+      url: 'https://cdnstatic.rg.ru/crop1000x667/uploads/images/2024/09/11/a2-9_7a1.jpg',
+    },
     { id: 'pastvu-1307052', type: 'archive', description: 'Архив', url: 'https://pastvu.com/p/1307052' },
   ],
   hotspots: [
@@ -137,11 +143,6 @@ export const MOSCOW_004: Building = {
       id: 'smi-rodina',
       name: '«Родина»: Стало известно, что написано на столетней вывеске — её обнаружили на доме в центре Москвы (2024-09-11)',
       url: 'https://rodina-history.ru/2024/09/11/stalo-izvestno-chto-napisano-na-stoletnej-vyveske-ee-obnaruzhili-na-dome-v-centre-moskvy.html',
-    },
-    {
-      id: 'photo-rg-falkevich-1923',
-      name: 'Фото вывески Фалькевича, 1923–1926 гг. (РГ / «Родина»)',
-      url: 'https://cdnstatic.rg.ru/crop1000x667/uploads/images/2024/09/11/a2-9_7a1.jpg',
     },
     {
       id: 'smi-moskvichmag',
