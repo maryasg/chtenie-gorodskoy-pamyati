@@ -61,9 +61,38 @@ const CARD_BADGE_PREFS: Record<string, CardBadgePrefs> = {
   MOSCOW_001: MOSCOW_001_PREFS,
 }
 
-function prefsForCard(cardId?: string): CardBadgePrefs {
+/** Второе сравнение Куманиных (1840→2026): номера над зоной, не на подсветке. */
+const MOSCOW_001_CMP_009_PREFS: CardBadgePrefs = {
+  collisionRadius: 2.4,
+  side: { 1: 'above', 2: 'above', 3: 'above' },
+  nudge: {
+    1: { dx: 0, dy: -1.4 },
+    2: { dx: -0.6, dy: -1.4 },
+    3: { dx: 0.6, dy: -1.4 },
+  },
+}
+
+const COMPARISON_BADGE_PREFS: Record<string, CardBadgePrefs> = {
+  'MOSCOW_001:cmp_009': MOSCOW_001_CMP_009_PREFS,
+  'MOSCOW_001:cmp_008': {
+    side: { 1: 'above', 2: 'above' },
+    nudge: { 1: { dx: 0, dy: -1.4 }, 2: { dx: 0.6, dy: -1.4 } },
+  },
+}
+
+function prefsForCard(cardId?: string, comparisonId?: string): CardBadgePrefs {
+  if (cardId && comparisonId) {
+    const comparisonKey = `${cardId}:${comparisonId}`
+    if (COMPARISON_BADGE_PREFS[comparisonKey]) return COMPARISON_BADGE_PREFS[comparisonKey]
+  }
   if (!cardId) return {}
   return CARD_BADGE_PREFS[cardId] ?? {}
+}
+
+function badgesAlwaysOutside(cardId?: string, comparisonId?: string): boolean {
+  return Boolean(
+    cardId === 'MOSCOW_001' && comparisonId && (comparisonId === 'cmp_009' || comparisonId === 'cmp_008'),
+  )
 }
 
 function clampPct(value: number): number {
@@ -112,8 +141,9 @@ function layoutOnSide(
   side: PlacementSide,
   idx = 0,
   cardId?: string,
+  comparisonId?: string,
 ): BadgeLayout {
-  const { nudge: nudgeMap } = prefsForCard(cardId)
+  const { nudge: nudgeMap } = prefsForCard(cardId, comparisonId)
   const bbox = polygonBBox(polygon)
   const margin = badgeMargin(bbox)
   const midX = (bbox.minX + bbox.maxX) / 2
@@ -182,8 +212,9 @@ function candidateLayouts(
   area: number,
   idx: number,
   cardId?: string,
+  comparisonId?: string,
 ): BadgeLayout[] {
-  const { side: sideMap } = prefsForCard(cardId)
+  const { side: sideMap } = prefsForCard(cardId, comparisonId)
   const preferred = sideMap?.[idx]
   const sides = preferred
     ? [preferred, ...defaultSideOrder(polygon).filter((side) => side !== preferred)]
@@ -192,7 +223,7 @@ function candidateLayouts(
   const seen = new Set<string>()
   const layouts: BadgeLayout[] = []
   for (const side of sides) {
-    const layout = layoutOnSide(polygon, area, side, idx, cardId)
+    const layout = layoutOnSide(polygon, area, side, idx, cardId, comparisonId)
     const key = `${layout.badgeX.toFixed(1)}:${layout.badgeY.toFixed(1)}`
     if (seen.has(key)) continue
     seen.add(key)
@@ -201,8 +232,13 @@ function candidateLayouts(
   return layouts
 }
 
-function badgesOverlap(a: BadgeLayout, b: BadgeLayout, cardId?: string): boolean {
-  const { collisionRadius } = prefsForCard(cardId)
+function badgesOverlap(
+  a: BadgeLayout,
+  b: BadgeLayout,
+  cardId?: string,
+  comparisonId?: string,
+): boolean {
+  const { collisionRadius } = prefsForCard(cardId, comparisonId)
   const radius = collisionRadius ?? BADGE_COLLISION_RADIUS
   const dx = a.badgeX - b.badgeX
   const dy = a.badgeY - b.badgeY
@@ -225,17 +261,26 @@ function badgeInsideForeignPolygon(
 function layoutValid(
   layout: BadgeLayout,
   ownIdx: number,
+  ownPolygon: Point[],
   placed: BadgeLayout[],
   regions: RegionForBadgeLayout[],
   cardId?: string,
+  comparisonId?: string,
 ): boolean {
-  if (placed.some((other) => badgesOverlap(layout, other, cardId))) return false
+  if (pointInPolygon([layout.badgeX, layout.badgeY], ownPolygon)) return false
+  if (placed.some((other) => badgesOverlap(layout, other, cardId, comparisonId))) return false
   if (badgeInsideForeignPolygon(layout, ownIdx, regions)) return false
   return true
 }
 
-function layoutScore(layout: BadgeLayout, idx: number, order: number, cardId?: string): number {
-  const { side: sideMap } = prefsForCard(cardId)
+function layoutScore(
+  layout: BadgeLayout,
+  idx: number,
+  order: number,
+  cardId?: string,
+  comparisonId?: string,
+): number {
+  const { side: sideMap } = prefsForCard(cardId, comparisonId)
   const lineLen =
     (layout.badgeX - layout.anchorX) ** 2 + (layout.badgeY - layout.anchorY) ** 2
   const edgePenalty = layout.badgeY < 8 ? 40 : layout.badgeY > 94 ? 25 : 0
@@ -257,8 +302,14 @@ function layoutScore(layout: BadgeLayout, idx: number, order: number, cardId?: s
   return lineLen * 14 + edgePenalty + preferredBonus + order * 0.2
 }
 
-function nudgeLayout(layout: BadgeLayout, attempt: number, idx: number, cardId?: string): BadgeLayout {
-  const { side: sideMap } = prefsForCard(cardId)
+function nudgeLayout(
+  layout: BadgeLayout,
+  attempt: number,
+  idx: number,
+  cardId?: string,
+  comparisonId?: string,
+): BadgeLayout {
+  const { side: sideMap } = prefsForCard(cardId, comparisonId)
   const preferred = sideMap?.[idx]
   if (preferred === 'below') {
     return {
@@ -298,17 +349,20 @@ export function computeBadgeLayout(
   areaPct?: number,
   idx?: number,
   cardId?: string,
+  comparisonId?: string,
 ): BadgeLayout {
   const area = areaPct ?? polygonAreaAbs(polygonPct)
   const [cx, cy] = polygonCentroid(polygonPct)
   const bbox = polygonBBox(polygonPct)
 
-  if (regionFitsBadgeInside(bbox, area)) {
+  if (regionFitsBadgeInside(bbox, area) && !badgesAlwaysOutside(cardId, comparisonId)) {
     return { anchorX: cx, anchorY: cy, badgeX: cx, badgeY: cy, callout: false }
   }
 
-  const candidates = candidateLayouts(polygonPct, area, idx ?? 0, cardId)
-  return candidates[0] ?? layoutOnSide(polygonPct, area, 'below', idx ?? 0, cardId)
+  const candidates = candidateLayouts(polygonPct, area, idx ?? 0, cardId, comparisonId)
+  return (
+    candidates[0] ?? layoutOnSide(polygonPct, area, 'above', idx ?? 0, cardId, comparisonId)
+  )
 }
 
 type RegionForBadgeLayout = {
@@ -319,14 +373,19 @@ type RegionForBadgeLayout = {
 }
 
 /** Разводит кружки: не перекрывают друг друга и чужие подсветки. */
-export function assignBadgeLayouts(regions: RegionForBadgeLayout[], cardId?: string): void {
+export function assignBadgeLayouts(
+  regions: RegionForBadgeLayout[],
+  cardId?: string,
+  comparisonId?: string,
+): void {
   const placed: BadgeLayout[] = []
   const sorted = [...regions].sort((a, b) => a.areaPct - b.areaPct)
+  const alwaysOutside = badgesAlwaysOutside(cardId, comparisonId)
 
   for (const region of sorted) {
     const bbox = polygonBBox(region.polygonPct)
 
-    if (regionFitsBadgeInside(bbox, region.areaPct)) {
+    if (regionFitsBadgeInside(bbox, region.areaPct) && !alwaysOutside) {
       const centered: BadgeLayout = {
         anchorX: region.badgeLayout.anchorX,
         anchorY: region.badgeLayout.anchorY,
@@ -334,20 +393,30 @@ export function assignBadgeLayouts(regions: RegionForBadgeLayout[], cardId?: str
         badgeY: region.badgeLayout.anchorY,
         callout: false,
       }
-      if (layoutValid(centered, region.idx, placed, regions, cardId)) {
+      if (
+        layoutValid(centered, region.idx, region.polygonPct, placed, regions, cardId, comparisonId)
+      ) {
         region.badgeLayout = centered
         placed.push(centered)
         continue
       }
     }
 
-    const candidates = candidateLayouts(region.polygonPct, region.areaPct, region.idx, cardId)
+    const candidates = candidateLayouts(
+      region.polygonPct,
+      region.areaPct,
+      region.idx,
+      cardId,
+      comparisonId,
+    )
     let chosen: BadgeLayout | null = null
     let bestScore = Number.POSITIVE_INFINITY
 
     candidates.forEach((candidate, order) => {
-      if (!layoutValid(candidate, region.idx, placed, regions, cardId)) return
-      const score = layoutScore(candidate, region.idx, order, cardId)
+      if (!layoutValid(candidate, region.idx, region.polygonPct, placed, regions, cardId, comparisonId)) {
+        return
+      }
+      const score = layoutScore(candidate, region.idx, order, cardId, comparisonId)
       if (score < bestScore) {
         bestScore = score
         chosen = candidate
@@ -357,11 +426,11 @@ export function assignBadgeLayouts(regions: RegionForBadgeLayout[], cardId?: str
     if (!chosen) {
       const seed =
         candidates[0] ??
-        computeBadgeLayout(region.polygonPct, region.areaPct, region.idx, cardId)
+        computeBadgeLayout(region.polygonPct, region.areaPct, region.idx, cardId, comparisonId)
       chosen = seed
       for (let attempt = 0; attempt < 28; attempt += 1) {
-        const nudged = nudgeLayout(seed, attempt, region.idx, cardId)
-        if (layoutValid(nudged, region.idx, placed, regions, cardId)) {
+        const nudged = nudgeLayout(seed, attempt, region.idx, cardId, comparisonId)
+        if (layoutValid(nudged, region.idx, region.polygonPct, placed, regions, cardId, comparisonId)) {
           chosen = nudged
           break
         }

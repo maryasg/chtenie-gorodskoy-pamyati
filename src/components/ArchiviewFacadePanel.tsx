@@ -330,6 +330,9 @@ export function ArchiviewFacadePanel({
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
   const isMobile = useMediaQuery('(max-width: 639px)')
   const useMobileFacadeChrome = isMobile && !embeddedAr && variant !== 'ar'
+  const useMobileBottomBadges =
+    useMobileFacadeChrome && assets.comparisonId !== 'cmp_009' && assets.comparisonId !== 'cmp_008'
+  const mobileBadgeClicks = isMobile && !embeddedAr && variant !== 'ar'
   const [imgSize, setImgSize] = useState({ w: 1, h: 1 })
   const [sideBySide, setSideBySide] = useState(false)
   const [displayImageUrl, setDisplayImageUrl] = useState('')
@@ -450,36 +453,42 @@ export function ArchiviewFacadePanel({
         cx,
         cy,
         areaPct,
-        badgeLayout: computeBadgeLayout(polygonPct, areaPct, idx, assets.cardId),
+        badgeLayout: computeBadgeLayout(
+          polygonPct,
+          areaPct,
+          idx,
+          assets.cardId,
+          assets.comparisonId,
+        ),
       }
     },
-    [assets.cardId, tracesById],
+    [assets.cardId, assets.comparisonId, tracesById],
   )
 
   const publishRegions = useCallback(
     (list: DisplayRegion[]) => {
-      if (useMobileFacadeChrome) {
+      if (useMobileBottomBadges) {
         assignMobileBottomBadgeLayouts(list)
       } else {
-        assignBadgeLayouts(list, assets.cardId)
+        assignBadgeLayouts(list, assets.cardId, assets.comparisonId)
       }
       setRegions(list)
     },
-    [assets.cardId, useMobileFacadeChrome],
+    [assets.cardId, assets.comparisonId, useMobileBottomBadges],
   )
 
   useEffect(() => {
     if (regions.length === 0) return
     setRegions((prev) => {
       const next = prev.map((region) => ({ ...region }))
-      if (useMobileFacadeChrome) {
+      if (useMobileBottomBadges) {
         assignMobileBottomBadgeLayouts(next)
       } else {
-        assignBadgeLayouts(next, assets.cardId)
+        assignBadgeLayouts(next, assets.cardId, assets.comparisonId)
       }
       return next
     })
-  }, [useMobileFacadeChrome, assets.cardId, regions.length])
+  }, [useMobileBottomBadges, assets.cardId, assets.comparisonId, regions.length])
 
   const buildRegionsRectified = useCallback(
     (annotations: ArchiviewAnnotation[], width: number, height: number) => {
@@ -1295,7 +1304,7 @@ export function ArchiviewFacadePanel({
               )}
               {regions.length > 0 && (
                 <svg
-                  className="absolute inset-0 h-full w-full overflow-visible"
+                  className="absolute inset-0 z-10 h-full w-full touch-manipulation overflow-visible"
                   viewBox="0 0 100 100"
                   preserveAspectRatio="none"
                 >
@@ -1334,17 +1343,14 @@ export function ArchiviewFacadePanel({
                 </svg>
               )}
               {regions.length > 0 && variant !== 'ar' ? (
-                <div
-                  className={`absolute inset-0 z-20 overflow-visible ${useMobileFacadeChrome ? '' : 'pointer-events-none'}`}
-                  aria-hidden={!useMobileFacadeChrome}
-                >
+                <div className="pointer-events-none absolute inset-0 z-20 overflow-visible" aria-hidden>
                   <svg
                     className="absolute inset-0 h-full w-full overflow-visible"
                     viewBox="0 0 100 100"
                     preserveAspectRatio="none"
                   >
                     {regionsBadges.map((r) => {
-                      if (!useMobileFacadeChrome && !r.badgeLayout.callout) return null
+                      if (!useMobileBottomBadges && !r.badgeLayout.callout) return null
                       const on = hoverIdx === r.idx || selectedIdx === r.idx
                       const color = CLASS_COLORS[r.cls] ?? '#444'
                       return (
@@ -1364,7 +1370,7 @@ export function ArchiviewFacadePanel({
                   {regionsBadges.map((r) => {
                     const on = hoverIdx === r.idx || selectedIdx === r.idx
                     const color = CLASS_COLORS[r.cls] ?? '#444'
-                    const size = useMobileFacadeChrome ? (on ? 32 : 28) : on ? 26 : 22
+                    const size = useMobileBottomBadges ? (on ? 32 : 28) : on ? 26 : 22
                     const { badgeX, badgeY } = r.badgeLayout
                     return (
                       <button
@@ -1380,7 +1386,7 @@ export function ArchiviewFacadePanel({
                           setSelectedIdx((current) => (current === r.idx ? null : r.idx))
                         }}
                         className={`absolute flex items-center justify-center rounded-full border-2 font-bold leading-none text-white shadow-md ${
-                          useMobileFacadeChrome ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none'
+                          mobileBadgeClicks ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none'
                         } ${on ? 'border-white ring-2 ring-white/90' : 'border-white'}`}
                         style={{
                           left: `${badgeX}%`,
