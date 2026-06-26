@@ -336,7 +336,8 @@ export function ArchiviewFacadePanel({
   const useMobileNearRegionBadges =
     useMobileFacadeChrome &&
     ((assets.cardId === 'MOSCOW_001' && assets.comparisonId === 'cmp_005') ||
-      assets.cardId === 'MOSCOW_003')
+      assets.cardId === 'MOSCOW_003' ||
+      assets.cardId === 'MOSCOW_004')
   const useMobileBottomBadges =
     useMobileFacadeChrome &&
     !useMobileNearRegionBadges &&
