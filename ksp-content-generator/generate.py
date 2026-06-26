@@ -145,39 +145,43 @@ def generate_cover(
     prompt: str,
     dest: Path,
 ) -> None:
-    if model == "dall-e-3":
-        response = client.images.generate(
-            model=model,
-            prompt=prompt,
-            size=size,  # type: ignore[arg-type]
-            quality="standard",
-            n=1,
-        )
-        image_url = response.data[0].url
-        if not image_url:
-            raise RuntimeError("Image API returned no URL")
-        import requests
+    import base64
 
-        image_bytes = requests.get(image_url, timeout=120).content
-        dest.write_bytes(image_bytes)
+    import requests
+
+    response = client.images.generate(
+        model=model,
+        prompt=prompt,
+        size=size,  # type: ignore[arg-type]
+        quality="standard",
+        n=1,
+    )
+    item = response.data[0]
+
+    if item.b64_json:
+        dest.write_bytes(base64.b64decode(item.b64_json))
         return
 
-    if model in {"gpt-image-1", "gpt-image-1-mini"}:
-        response = client.images.generate(
-            model=model,
-            prompt=prompt,
-            size=size,  # type: ignore[arg-type]
-            n=1,
-        )
-        b64 = response.data[0].b64_json
-        if not b64:
-            raise RuntimeError("Image API returned no image data")
-        import base64
-
-        dest.write_bytes(base64.b64decode(b64))
+    if item.url:
+        dest.write_bytes(requests.get(item.url, timeout=120).content)
         return
 
-    raise ValueError(f"Unsupported IMAGE_MODEL: {model}")
+    raise RuntimeError("Image API returned no image data")
+
+
+def make_clients() -> tuple[OpenAI, OpenAI]:
+    text_key = os.getenv("OPENAI_API_KEY", "").strip()
+    text_base = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip()
+
+    image_key = os.getenv("IMAGE_API_KEY", text_key).strip()
+    image_base = os.getenv("IMAGE_BASE_URL", text_base).strip()
+
+    if not text_key:
+        raise ValueError("OPENAI_API_KEY is not set")
+
+    text_client = OpenAI(api_key=text_key, base_url=text_base)
+    image_client = OpenAI(api_key=image_key, base_url=image_base)
+    return text_client, image_client
 
 
 def count_chars(text: str) -> int:
@@ -296,13 +300,15 @@ def save_meta(
 
 
 def process_topic(
-    client: OpenAI,
+    text_client: OpenAI,
+    image_client: OpenAI,
     item: dict,
     output_root: Path,
     text_model: str,
     image_model: str,
     image_size: str,
     skip_image: bool,
+    images_only: bool,
     force: bool,
 ) -> list[str]:
     month = str(item["month"]).strip()
@@ -320,8 +326,57 @@ def process_topic(
     prompt_path = dest / "image_prompt.txt"
     cover_path = dest / "cover.png"
 
+    if images_only or (vk_path.exists() and tg_path.exists() and not skip_image and not cover_path.exists()):
+        if not tg_path.exists():
+            print("Пропуск: нет telegram.md — сначала сгенерируйте тексты")
+            return [f"{number}: нет telegram.md для обложки"]
+
+        if images_only and cover_path.exists() and not force:
+            print("Пропуск: cover.png уже есть (используйте --force)")
+            issues = validate_outputs(dest, skip_image=False)
+            save_meta(
+                dest / "meta.json",
+                month=month,
+                number=number,
+                title=title,
+                generated_at=generated_at,
+                text_model=text_model,
+                image_model=image_model,
+                validation_issues=issues,
+            )
+            return issues
+
+        tg_text = tg_path.read_text(encoding="utf-8").strip()
+        if prompt_path.exists() and not force:
+            cover_prompt = prompt_path.read_text(encoding="utf-8").strip()
+        else:
+            cover_prompt = build_cover_prompt(tg_text)
+            prompt_path.write_text(cover_prompt + "\n", encoding="utf-8")
+
+        print(f"Генерация обложки ({image_model}, {image_size})...")
+        generate_cover(image_client, image_model, image_size, cover_prompt, cover_path)
+
+        issues = validate_outputs(dest, skip_image=False)
+        save_meta(
+            dest / "meta.json",
+            month=month,
+            number=number,
+            title=title,
+            generated_at=generated_at,
+            text_model=text_model,
+            image_model=image_model,
+            validation_issues=issues,
+        )
+        if issues:
+            print("Проверка качества: есть замечания")
+            for issue in issues:
+                print(f"  - {issue}")
+        else:
+            print("Проверка качества: OK")
+        return issues
+
     if not force and vk_path.exists() and tg_path.exists():
-        print("Пропуск: файлы уже есть (используйте --force для перегенерации)")
+        print("Пропуск: файлы уже есть (используйте --force или --images-only)")
         issues = validate_outputs(dest, skip_image=skip_image)
         save_meta(
             dest / "meta.json",
@@ -339,11 +394,11 @@ def process_topic(
     tg_prompt = load_text(PROMPTS_DIR / "telegram_system.txt")
 
     print("Генерация VK...")
-    vk_text = generate_article(client, text_model, vk_prompt, title)
+    vk_text = generate_article(text_client, text_model, vk_prompt, title)
     vk_path.write_text(vk_text + "\n", encoding="utf-8")
 
     print("Генерация Telegram...")
-    tg_text = generate_article(client, text_model, tg_prompt, title, vk_text=vk_text)
+    tg_text = generate_article(text_client, text_model, tg_prompt, title, vk_text=vk_text)
     tg_path.write_text(tg_text + "\n", encoding="utf-8")
 
     cover_prompt = build_cover_prompt(tg_text)
@@ -351,7 +406,7 @@ def process_topic(
 
     if not skip_image:
         print(f"Генерация обложки ({image_model}, {image_size})...")
-        generate_cover(client, image_model, image_size, cover_prompt, cover_path)
+        generate_cover(image_client, image_model, image_size, cover_prompt, cover_path)
 
     issues = validate_outputs(dest, skip_image=skip_image)
     save_meta(
@@ -399,6 +454,11 @@ def parse_args() -> argparse.Namespace:
         help="Generate texts and prompt only, without cover image",
     )
     parser.add_argument(
+        "--images-only",
+        action="store_true",
+        help="Generate cover images only (requires existing telegram.md)",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="Regenerate even if output files already exist",
@@ -411,23 +471,38 @@ def main() -> int:
     args = parse_args()
 
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
-    if not api_key:
+    if not api_key and not args.images_only:
         print("Ошибка: задайте OPENAI_API_KEY в файле .env", file=sys.stderr)
         print("Скопируйте .env.example в .env и вставьте ключ.", file=sys.stderr)
         return 1
 
+    if args.images_only and not os.getenv("IMAGE_API_KEY", api_key).strip():
+        print("Ошибка: для --images-only нужен IMAGE_API_KEY или OPENAI_API_KEY", file=sys.stderr)
+        return 1
+
     base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip()
+    image_base = os.getenv("IMAGE_BASE_URL", base_url).strip()
     text_model = os.getenv("TEXT_MODEL", "gpt-4o-mini").strip()
     image_model = os.getenv("IMAGE_MODEL", "dall-e-3").strip()
     image_size = os.getenv("IMAGE_SIZE", "1792x1024").strip()
 
+    if args.images_only and args.skip_images:
+        print("Ошибка: нельзя одновременно --images-only и --skip-images", file=sys.stderr)
+        return 1
+
     if image_size != "1792x1024" and image_model == "dall-e-3":
         print("Предупреждение: для 16:9 у dall-e-3 используйте IMAGE_SIZE=1792x1024")
 
-    print(f"API: {base_url}")
-    print(f"Тексты: {text_model} | Картинки: {image_model}")
+    try:
+        text_client, image_client = make_clients()
+    except ValueError as exc:
+        print(f"Ошибка: {exc}", file=sys.stderr)
+        print("Скопируйте .env.example в .env и вставьте ключ.", file=sys.stderr)
+        return 1
 
-    client = OpenAI(api_key=api_key, base_url=base_url)
+    print(f"Тексты API: {base_url}")
+    print(f"Картинки API: {image_base}")
+    print(f"Тексты: {text_model} | Картинки: {image_model}")
     plan = load_plan(args.plan)
 
     if args.number:
@@ -440,13 +515,15 @@ def main() -> int:
     all_issues: list[str] = []
     for item in plan:
         issues = process_topic(
-            client,
+            text_client,
+            image_client,
             item,
             args.output,
             text_model=text_model,
             image_model=image_model,
             image_size=image_size,
             skip_image=args.skip_images,
+            images_only=args.images_only,
             force=args.force,
         )
         all_issues.extend(issues)

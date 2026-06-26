@@ -65,28 +65,82 @@ OPENAI_BASE_URL=https://kupiapi.ru/v1
 
 ## Модели для КАРТИНОК (обложки 16:9)
 
-В вашем списке **нет цен на image-модели** — уточните в личном кабинете KupiAPI раздел «Изображения» / Image API.
+### Важно: KupiAPI — только тексты
 
-Типичные ID (если есть у провайдера):
+**KupiAPI не генерирует картинки.** Там есть только `/v1/chat/completions` (GPT, Claude, DeepSeek).
 
-| Модель | ID | Когда использовать |
-|--------|-----|-------------------|
-| **DALL·E 3** | `dall-e-3` | Рекомендуется: 16:9 (`1792x1024`), русский текст на обложке |
-| GPT Image | `gpt-image-1` | Альтернатива, если есть в KupiAPI |
-| Flux / SD | `flux-*` | Дешевле, но хуже с русскими надписями |
+Для обложек нужен **второй сервис** с Image API.
 
-### Рекомендация для обложек
+### Рекомендуемая схема
 
-1. **`dall-e-3`** + размер **`1792x1024`** — основной выбор.
-2. Если дорого — генерируйте обложки отдельно и реже: `python generate.py --skip-images` для текстов, потом только картинки.
-3. Русский текст на изображении лучше проверять глазами и при необходимости перегенерировать: `python generate.py --number 04 --force`.
+| Что | Сервис | Переменные в `.env` |
+|-----|--------|---------------------|
+| Тексты | KupiAPI | `OPENAI_API_KEY`, `OPENAI_BASE_URL` |
+| Картинки | ProxyAPI или OpenAI | `IMAGE_API_KEY`, `IMAGE_BASE_URL` |
 
-В `.env` для картинок:
+### Вариант 1 — ProxyAPI (удобно из России)
+
+Сайт: https://proxyapi.ru  
+Документация по картинкам: https://proxyapi.ru/docs/openai-image-generation
 
 ```env
+# Тексты
+OPENAI_API_KEY=rk_live_...
+OPENAI_BASE_URL=https://kupiapi.ru/v1
+TEXT_MODEL=gpt-4o-mini
+
+# Картинки
+IMAGE_API_KEY=ваш-ключ-proxyapi
+IMAGE_BASE_URL=https://api.proxyapi.ru/openai/v1
 IMAGE_MODEL=dall-e-3
 IMAGE_SIZE=1792x1024
 ```
+
+### Вариант 2 — OpenAI напрямую (только картинки)
+
+```env
+OPENAI_API_KEY=rk_live_...
+OPENAI_BASE_URL=https://kupiapi.ru/v1
+TEXT_MODEL=gpt-4o-mini
+
+IMAGE_API_KEY=sk-ваш-ключ-openai
+IMAGE_BASE_URL=https://api.openai.com/v1
+IMAGE_MODEL=dall-e-3
+IMAGE_SIZE=1792x1024
+```
+
+### Какие image-модели брать
+
+| Модель | ID | Когда |
+|--------|-----|-------|
+| **DALL·E 3** | `dall-e-3` | ✅ лучший выбор: 16:9, русский текст на обложке |
+| GPT Image | `gpt-image-1` | альтернатива, если есть у провайдера |
+| GPT Image 2 | `gpt-image-2` | новее, у ProxyAPI |
+
+Размер для 16:9: **`1792x1024`**
+
+### Как запускать картинки
+
+Всё сразу (тексты + обложка):
+
+```bat
+python generate.py --number 02
+```
+
+Сначала тексты, потом обложки:
+
+```bat
+python generate.py --skip-images
+python generate.py --images-only
+```
+
+Одна обложка заново:
+
+```bat
+python generate.py --images-only --number 04 --force
+```
+
+Готовые файлы: `output\май\02-...\cover.png`
 
 ---
 

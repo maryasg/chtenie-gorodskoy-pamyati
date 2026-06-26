@@ -80,10 +80,16 @@ python generate.py
 python generate.py --number 04
 ```
 
-Только тексты, без картинок (если хотите сначала проверить статьи):
+Только тексты, без картинок:
 
 ```bat
 python generate.py --skip-images
+```
+
+Только обложки (если тексты уже есть):
+
+```bat
+python generate.py --images-only
 ```
 
 Перегенерировать заново:
