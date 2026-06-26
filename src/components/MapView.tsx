@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import { Link } from 'react-router-dom'
-import { BUILDINGS, MAP_CENTER, MAP_ZOOM } from '../data/buildings'
+import { BUILDINGS } from '../data/buildings'
 import type { Building } from '../types/building'
 import { MAP_LEGEND_STATUSES, MAP_STATUS_META } from '../data/statuses'
 
@@ -30,6 +30,15 @@ function traceSummary(b: Building): string {
   return titles.join(' · ') + more
 }
 
+function fitAllBuildings(map: L.Map) {
+  const bounds = L.latLngBounds(BUILDINGS.map((b) => [b.lat, b.lng] as L.LatLngTuple))
+  const narrow = window.innerWidth < 640
+  map.fitBounds(bounds, {
+    padding: narrow ? [56, 20] : [44, 44],
+    maxZoom: narrow ? 13 : 14,
+  })
+}
+
 export function MapView() {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
@@ -40,7 +49,7 @@ export function MapView() {
     if (!containerRef.current || mapRef.current) return
 
     const container = containerRef.current
-    const map = L.map(container, { scrollWheelZoom: false }).setView(MAP_CENTER, MAP_ZOOM)
+    const map = L.map(container, { scrollWheelZoom: false })
     map.attributionControl.setPrefix(false)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution:
@@ -57,6 +66,14 @@ export function MapView() {
       )
       markers.set(b.id, marker)
     })
+
+    fitAllBuildings(map)
+
+    const onResize = () => {
+      if (!mapRef.current) return
+      fitAllBuildings(mapRef.current)
+    }
+    window.addEventListener('resize', onResize)
 
     const activateScrollZoom = () => {
       map.scrollWheelZoom.enable()
@@ -84,6 +101,7 @@ export function MapView() {
     mapRef.current = map
     markersRef.current = markers
     return () => {
+      window.removeEventListener('resize', onResize)
       container.removeEventListener('click', onContainerClick)
       document.removeEventListener('pointerdown', onDocumentPointerDown)
       map.remove()
