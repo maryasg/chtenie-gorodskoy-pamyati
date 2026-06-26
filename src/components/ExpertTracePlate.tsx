@@ -35,6 +35,7 @@ export function ExpertTracePlate({
   const confidenceInfo = confidence ? getConfidenceInfo(confidence) : null
   const message = trace?.userMessage ?? comment ?? ''
   const { body, source: traceSource } = splitTraceMessage(message)
+  const previewText = (comment?.trim() || body).trim()
   const confidenceBasis = confidence
     ? describeConfidenceBasis(confidence, traceSource, verification)
     : null
@@ -80,6 +81,12 @@ export function ExpertTracePlate({
             >
               {period}
             </span>
+          ) : null}
+
+          {!expanded && previewText ? (
+            <p className="mt-1.5 line-clamp-4 text-[12px] font-normal leading-snug text-arch-surface/85">
+              {previewText}
+            </p>
           ) : null}
 
           {expanded && body ? (

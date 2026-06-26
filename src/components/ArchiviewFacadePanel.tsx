@@ -638,13 +638,9 @@ export function ArchiviewFacadePanel({
 
   const platePlacement = useMemo(() => {
     if (!plateRegion) return null
-    const anchorRegion =
-      assets.cardId === 'MOSCOW_001' && (plateRegion.idx === 1 || plateRegion.idx === 9)
-        ? regions.find((r) => r.idx === 3) ?? plateRegion
-        : plateRegion
-    const xs = anchorRegion.polygonPct.map((p) => p[0])
-    const ys = anchorRegion.polygonPct.map((p) => p[1])
-    return tracePlatePlacement(anchorRegion.cx, anchorRegion.cy, plateExpanded, {
+    const xs = plateRegion.polygonPct.map((p) => p[0])
+    const ys = plateRegion.polygonPct.map((p) => p[1])
+    return tracePlatePlacement(plateRegion.cx, plateRegion.cy, plateExpanded, {
       bbox: {
         minX: Math.min(...xs),
         maxX: Math.max(...xs),
@@ -656,7 +652,7 @@ export function ArchiviewFacadePanel({
       cardId: assets.cardId,
       regionIdx: plateRegion.idx,
     })
-  }, [plateRegion, plateExpanded, blockLayout, useSidebarLayout, assets.cardId, regions])
+  }, [plateRegion, plateExpanded, blockLayout, useSidebarLayout, assets.cardId])
 
   useEffect(() => {
     if (!assets.cardId) {
@@ -684,19 +680,32 @@ export function ArchiviewFacadePanel({
     null,
   )
 
+  const PLATE_POS_EPS = 0.25
+
   useLayoutEffect(() => {
-    if (!plateRegion || !platePlacement || plateDragPositions[plateRegion.idx]) {
+    if (!plateRegion || !platePlacement) {
+      setPlateAutoViewport(null)
+      return
+    }
+    if (plateDragPositions[plateRegion.idx]) {
       setPlateAutoViewport(null)
       return
     }
     const block = facadeBlockRef.current
-    const viewport = viewportRef.current
-    if (!block || !viewport) return
+    if (!block) return
     const blockRect = block.getBoundingClientRect()
     if (blockRect.width < 1 || blockRect.height < 1) return
-    setPlateAutoViewport(
-      blockPctToViewportPct(platePlacement.leftPct, platePlacement.topPct, blockRect),
-    )
+    const next = blockPctToViewportPct(platePlacement.leftPct, platePlacement.topPct, blockRect)
+    setPlateAutoViewport((prev) => {
+      if (
+        prev &&
+        Math.abs(prev.xPct - next.xPct) < PLATE_POS_EPS &&
+        Math.abs(prev.yPct - next.yPct) < PLATE_POS_EPS
+      ) {
+        return prev
+      }
+      return next
+    })
   }, [plateDragPositions, platePlacement, plateRegion, blockLayout, zoom, pan.x, pan.y])
 
   const plateViewportPosition = useMemo(() => {
@@ -1285,10 +1294,8 @@ export function ArchiviewFacadePanel({
         ? createPortal(
             <div
               className={`fixed z-[9990] ${TRACE_PLATE_SHELL_CLASS} ${
-                plateExpanded
-                  ? 'pointer-events-auto'
-                  : 'pointer-events-auto rounded-lg shadow-xl backdrop-blur-md'
-              } ${isPlateDragging ? 'select-none' : ''}`}
+                plateExpanded ? 'pointer-events-auto' : 'pointer-events-none'
+              } ${plateExpanded ? '' : 'rounded-lg shadow-xl'} ${isPlateDragging ? 'select-none' : ''}`}
               style={{
                 left: `${plateViewportPosition.xPct}vw`,
                 top: `${plateViewportPosition.yPct}vh`,
@@ -1305,7 +1312,7 @@ export function ArchiviewFacadePanel({
               aria-label={plateExpanded ? `Экспертная заметка ${plateRegion.idx}` : undefined}
               onClick={plateExpanded ? (event) => event.stopPropagation() : undefined}
             >
-              {!embeddedAr ? (
+              {plateExpanded && !embeddedAr ? (
                 <div
                   className={`flex touch-none items-center gap-2 border-b border-arch-gold/35 bg-arch-green-deep/20 px-2.5 py-1.5 ${
                     isPlateDragging ? 'cursor-grabbing' : 'cursor-grab'

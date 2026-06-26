@@ -124,11 +124,20 @@ export function tracePlatePlacement(
     transform = 'translate(-50%, -100%)'
   }
 
-  // Ардовы: плашки #1 и #9 — как у #3, правее и шире
+  // Ардовы: плашки #1 и #9 — правее и шире, без смещения к чужой зоне
   if (cardId === 'MOSCOW_001' && (regionIdx === 1 || regionIdx === 9)) {
     const seam = hasSidebar ? imageRightPct : 100
     leftPct = clamp(blockCx + (layout ? layout.imageWidthPct * 0.1 : 10), imageLeftPct + 8, seam + 10)
     maxWidthPx = expanded ? 440 : 360
+    if (regionIdx === 1 && cyPct < 42) {
+      topPct = clamp(blockCy + (layout ? layout.imageHeightPct * 0.06 : 6), 8, 72)
+    }
+  }
+
+  // Скальский side-by-side: мелкая зона на архивной панели — плашка ближе к центру кадра
+  if (cardId === 'MOSCOW_004' && regionIdx === 3 && !expanded) {
+    leftPct = clamp(imageLeftPct + (layout ? layout.imageWidthPct * 0.22 : 22), imageLeftPct + 10, 48)
+    topPct = clamp(blockCy + (layout ? layout.imageHeightPct * 0.12 : 12), 12, 70)
   }
 
   return {
