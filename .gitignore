@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# generated slide PNGs for Word export
+docs/presentation/slide_images/
