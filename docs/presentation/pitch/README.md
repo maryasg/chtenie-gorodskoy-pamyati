@@ -36,5 +36,7 @@ copy "C:\Users\Marusia\Desktop\Cult Tech\!Проект Память стен\П�
 
 ## Связанные файлы
 
-- [`../Речь_презентация_Мария_технологии.docx`](../Речь_презентация_Мария_технологии.docx) — речь по слайдам
-- [`../generate_presentation_docx.py`](../generate_presentation_docx.py) — пересобрать Word после правок
+- [`../Речь_презентация_Мария_технологии.docx`](../Речь_презентация_Мария_технологии.docx) — речь по слайдам (книжная ориентация)
+- [`../Речь_презентация_Мария_горизонталь.docx`](../Речь_презентация_Мария_горизонталь.docx) — **слайд слева + речь справа** (альбомная)
+- [`../generate_presentation_docx.py`](../generate_presentation_docx.py) — пересобрать книжный Word
+- [`../generate_presentation_landscape_docx.py`](../generate_presentation_landscape_docx.py) — пересобрать горизонтальный Word
