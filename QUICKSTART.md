@@ -5,13 +5,13 @@
 Файл **`.env`** в корне проекта:
 
 ```
-C:\Users\Marusia\Projects\articles_KorolevSP\.env
+C:\Users\Marusia\Projects\maryasg-articles_KorolevSP\.env
 ```
 
 Создать из шаблона:
 
 ```bat
-cd C:\Users\Marusia\Projects\articles_KorolevSP
+cd C:\Users\Marusia\Projects\maryasg-articles_KorolevSP
 copy .env.example .env
 notepad .env
 ```
@@ -122,7 +122,7 @@ python generate.py --title "Отбеливание зубов: мифы и фа�
 ## 4. Первая пробная статья
 
 ```bat
-cd C:\Users\Marusia\Projects\articles_KorolevSP
+cd C:\Users\Marusia\Projects\maryasg-articles_KorolevSP
 .venv\Scripts\activate
 python generate.py --title "Кровоточивость дёсен: когда это уже заболевание" --skip-images
 ```

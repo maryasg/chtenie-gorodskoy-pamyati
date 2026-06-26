@@ -2,12 +2,12 @@
 
 Автоматическая генерация статей для ВКонтакте и Telegram и обложек 16:9 для **Королёвской стоматологической поликлиники**.
 
-Репозиторий: https://github.com/maryasg/articles_KorolevSP
+Репозиторий: https://github.com/maryasg/maryasg-articles_KorolevSP
 
 ## Куда положить на Windows
 
 ```
-C:\Users\Marusia\Projects\articles_KorolevSP
+C:\Users\Marusia\Projects\maryasg-articles_KorolevSP
 ```
 
 ## Что делает скрипт
