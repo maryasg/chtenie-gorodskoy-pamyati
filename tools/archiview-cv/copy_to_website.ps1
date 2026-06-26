@@ -582,13 +582,30 @@ if ($projDir) {
 }
 
 if ($manifestItems.Count -gt 0) {
+    $manifestPath = Join-Path $Web 'manifest.json'
+    $existingTimeLayers = $null
+    if (Test-Path -LiteralPath $manifestPath) {
+        try {
+            $existingManifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($null -ne $existingManifest.timeLayers) {
+                $existingTimeLayers = $existingManifest.timeLayers
+            }
+        } catch {
+            Write-Host 'WARN: could not read existing timeLayers from manifest.json'
+        }
+    }
+
     $manifest = [ordered]@{
         cardId = $CardId
         defaultComparisonId = $defaultCmpId
         comparisons = $manifestItems
         updatedAt = (Get-Date).ToUniversalTime().ToString('o')
     }
-    Write-JsonUtf8NoBom (Join-Path $Web 'manifest.json') $manifest
+    if ($null -ne $existingTimeLayers) {
+        $manifest['timeLayers'] = $existingTimeLayers
+        Write-Host "OK: kept existing timeLayers ($($existingTimeLayers.Count) layer(s))"
+    }
+    Write-JsonUtf8NoBom $manifestPath $manifest
     Write-Host "OK: manifest.json ($($manifestItems.Count) comparison(s))"
 }
 
