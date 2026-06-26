@@ -117,14 +117,9 @@ export function MapView() {
     BUILDINGS.forEach((b) => {
       const meta = MAP_STATUS_META[b.mapStatus]
       const marker = L.marker([b.lat, b.lng], { icon: coloredIcon(meta.marker) }).addTo(map)
-      marker.on('click', (event) => {
-        L.DomEvent.stopPropagation(event)
-        setOverlayId(b.id)
-      })
+      marker.on('click', () => setOverlayId(b.id))
       markers.set(b.id, marker)
     })
-
-    map.on('click', () => setOverlayId(null))
 
     fitAllBuildings(map)
 
