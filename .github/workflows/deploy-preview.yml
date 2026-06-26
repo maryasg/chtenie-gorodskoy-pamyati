@@ -124,3 +124,10 @@ jobs:
       - name: Deploy preview to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Retry deploy after Pages lock (attempt 2)
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 90
+      - name: Deploy preview to GitHub Pages (attempt 2)
+        id: deployment_retry
+        if: steps.deployment.outcome == 'failure'
+        uses: actions/deploy-pages@v4
