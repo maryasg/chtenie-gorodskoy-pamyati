@@ -11,7 +11,7 @@ export function MapPage() {
           Выберите здание на карте или в списке.
         </p>
       </header>
-      <div className="arch-section p-0 overflow-hidden">
+      <div className="arch-section p-0">
         <MapView />
       </div>
     </div>
