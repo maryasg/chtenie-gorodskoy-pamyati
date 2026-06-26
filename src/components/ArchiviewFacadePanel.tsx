@@ -333,11 +333,13 @@ export function ArchiviewFacadePanel({
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
   const isMobile = useMediaQuery('(max-width: 639px)')
   const useMobileFacadeChrome = isMobile && !embeddedAr && variant !== 'ar'
-  const useMobileKumaninyBadges =
-    useMobileFacadeChrome && assets.cardId === 'MOSCOW_001' && assets.comparisonId === 'cmp_005'
+  const useMobileNearRegionBadges =
+    useMobileFacadeChrome &&
+    ((assets.cardId === 'MOSCOW_001' && assets.comparisonId === 'cmp_005') ||
+      assets.cardId === 'MOSCOW_003')
   const useMobileBottomBadges =
     useMobileFacadeChrome &&
-    !useMobileKumaninyBadges &&
+    !useMobileNearRegionBadges &&
     assets.comparisonId !== 'cmp_009' &&
     assets.comparisonId !== 'cmp_008'
   const mobileBadgeClicks = isMobile && !embeddedAr && variant !== 'ar'
@@ -479,12 +481,12 @@ export function ArchiviewFacadePanel({
         assignMobileBottomBadgeLayouts(list)
       } else {
         assignBadgeLayouts(list, assets.cardId, assets.comparisonId, {
-          mobile: useMobileKumaninyBadges,
+          mobile: useMobileNearRegionBadges,
         })
       }
       setRegions(list)
     },
-    [assets.cardId, assets.comparisonId, useMobileBottomBadges, useMobileKumaninyBadges],
+    [assets.cardId, assets.comparisonId, useMobileBottomBadges, useMobileNearRegionBadges],
   )
 
   useEffect(() => {
@@ -495,12 +497,12 @@ export function ArchiviewFacadePanel({
         assignMobileBottomBadgeLayouts(next)
       } else {
         assignBadgeLayouts(next, assets.cardId, assets.comparisonId, {
-          mobile: useMobileKumaninyBadges,
+          mobile: useMobileNearRegionBadges,
         })
       }
       return next
     })
-  }, [useMobileBottomBadges, useMobileKumaninyBadges, assets.cardId, assets.comparisonId, regions.length])
+  }, [useMobileBottomBadges, useMobileNearRegionBadges, assets.cardId, assets.comparisonId, regions.length])
 
   const buildRegionsRectified = useCallback(
     (annotations: ArchiviewAnnotation[], width: number, height: number) => {

@@ -26,6 +26,10 @@ type CardBadgePrefs = {
   nudge?: Record<number, { dx: number; dy: number }>
   /** Номер по центру подсветки (напр. крупные зоны 1 и 9 у Куманиных на телефоне). */
   forceOnRegion?: number[]
+  /** Порядок выноски с фиксированной стороной (важно при соседних кружках, напр. 7–8–9). */
+  pinOrder?: number[]
+  /** Кружок может наезжать на зелёную заливку чужих зон. */
+  allowOverlapForeignPolygons?: boolean
 }
 
 /** Дом Ардовых / Куманиных: предпочтительная сторона выноски. */
@@ -61,6 +65,40 @@ const MOSCOW_001_PREFS: CardBadgePrefs = {
 
 const CARD_BADGE_PREFS: Record<string, CardBadgePrefs> = {
   MOSCOW_001: MOSCOW_001_PREFS,
+  MOSCOW_003: {
+    collisionRadius: 2.4,
+    allowOverlapForeignPolygons: true,
+    forceOnRegion: [6, 12],
+    side: {
+      1: 'topRight',
+      2: 'below',
+      3: 'above',
+      4: 'above',
+      5: 'below',
+      7: 'below',
+      8: 'below',
+      9: 'below',
+      10: 'above',
+      11: 'above',
+      13: 'above',
+      14: 'below',
+    },
+    pinOrder: [6, 12, 7, 8, 5, 14, 2, 9, 3, 4, 13, 10, 11, 1],
+    nudge: {
+      1: { dx: 0.9, dy: -0.45 },
+      2: { dx: 0, dy: 0.75 },
+      3: { dx: 0, dy: -0.85 },
+      4: { dx: 0.45, dy: -0.85 },
+      5: { dx: 0.35, dy: 0.55 },
+      7: { dx: -0.55, dy: 0.55 },
+      8: { dx: 0.45, dy: 0.55 },
+      9: { dx: 2.1, dy: 0.65 },
+      10: { dx: 0, dy: -0.75 },
+      11: { dx: 0, dy: -0.75 },
+      13: { dx: 0.35, dy: -0.7 },
+      14: { dx: 0.4, dy: 0.55 },
+    },
+  },
 }
 
 /** Второе сравнение Куманиных (1840→2026): номера над зоной, не на подсветке. */
@@ -114,9 +152,10 @@ function prefsForCard(cardId?: string, comparisonId?: string, mobile = false): C
   return CARD_BADGE_PREFS[cardId] ?? {}
 }
 
-/** Полоса номеров внизу кадра — не для Куманиных cmp_005. */
+/** Полоса номеров внизу кадра — не для Куманиных cmp_005 и Дома со зверями. */
 export function usesMobileBottomBadgeStrip(cardId?: string, comparisonId?: string): boolean {
   if (cardId === 'MOSCOW_001' && (!comparisonId || comparisonId === 'cmp_005')) return false
+  if (cardId === 'MOSCOW_003') return false
   return true
 }
 
@@ -173,8 +212,9 @@ function layoutOnSide(
   idx = 0,
   cardId?: string,
   comparisonId?: string,
+  mobile = false,
 ): BadgeLayout {
-  const { nudge: nudgeMap } = prefsForCard(cardId, comparisonId)
+  const { nudge: nudgeMap } = prefsForCard(cardId, comparisonId, mobile)
   const bbox = polygonBBox(polygon)
   const margin = badgeMargin(bbox)
   const midX = (bbox.minX + bbox.maxX) / 2
@@ -255,7 +295,7 @@ function candidateLayouts(
   const seen = new Set<string>()
   const layouts: BadgeLayout[] = []
   for (const side of sides) {
-    const layout = layoutOnSide(polygon, area, side, idx, cardId, comparisonId)
+    const layout = layoutOnSide(polygon, area, side, idx, cardId, comparisonId, mobile)
     const key = `${layout.badgeX.toFixed(1)}:${layout.badgeY.toFixed(1)}`
     if (seen.has(key)) continue
     seen.add(key)
@@ -302,9 +342,12 @@ function layoutValid(
   allowOnOwnRegion = false,
   mobile = false,
 ): boolean {
+  const prefs = prefsForCard(cardId, comparisonId, mobile)
   if (!allowOnOwnRegion && pointInPolygon([layout.badgeX, layout.badgeY], ownPolygon)) return false
   if (placed.some((other) => badgesOverlap(layout, other, cardId, comparisonId, mobile))) return false
-  if (badgeInsideForeignPolygon(layout, ownIdx, regions)) return false
+  if (!prefs.allowOverlapForeignPolygons && badgeInsideForeignPolygon(layout, ownIdx, regions)) {
+    return false
+  }
   return true
 }
 
@@ -334,7 +377,11 @@ function layoutScore(
             ? -12
             : preferred === 'right' && layout.badgeX > layout.anchorX
               ? -12
-              : 0
+              : preferred === 'topRight' &&
+                  layout.badgeX > layout.anchorX &&
+                  layout.badgeY < layout.anchorY
+                ? -12
+                : 0
   return lineLen * 14 + edgePenalty + preferredBonus + order * 0.2
 }
 
@@ -367,6 +414,13 @@ function nudgeLayout(
       ...layout,
       badgeX: clampPct(layout.badgeX + (attempt % 2 === 1 ? 1.2 : -1.2)),
       badgeY: clampPct(layout.badgeY - attempt * 0.65),
+    }
+  }
+  if (preferred === 'topRight') {
+    return {
+      ...layout,
+      badgeX: clampPct(layout.badgeX + attempt * 0.55),
+      badgeY: clampPct(layout.badgeY - attempt * 0.55),
     }
   }
   const angle = ((idx * 47 + attempt * 53) % 360) * (Math.PI / 180)
@@ -550,9 +604,17 @@ export function assignBadgeLayouts(
   forced.forEach(placeRegion)
 
   const fixedSide = new Set(Object.keys(prefs.side ?? {}).map(Number))
+  const pinOrder = prefs.pinOrder ?? []
   const pinned = [...regions]
     .filter((region) => !forceOnRegion.has(region.idx) && fixedSide.has(region.idx))
-    .sort((a, b) => a.areaPct - b.areaPct)
+    .sort((a, b) => {
+      const ai = pinOrder.indexOf(a.idx)
+      const bi = pinOrder.indexOf(b.idx)
+      if (ai >= 0 && bi >= 0) return ai - bi
+      if (ai >= 0) return -1
+      if (bi >= 0) return 1
+      return a.areaPct - b.areaPct
+    })
   pinned.forEach(placeRegion)
 
   const rest = [...regions]
