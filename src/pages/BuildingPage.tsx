@@ -304,13 +304,12 @@ export function BuildingPage() {
             </>
           )}
         </div>
+        <p className="mt-4 border-t border-arch-green/15 pt-4 text-sm leading-relaxed text-arch-ink/85">
+          {building.summary}
+        </p>
       </header>
 
       {building.verification && <BuildingVerificationBanner verification={building.verification} />}
-
-      <Section title="Главный тезис" kicker="Карточка здания">
-        <p className="text-sm leading-relaxed text-arch-ink/85">{building.summary}</p>
-      </Section>
 
       {displayAssets ? (
         <Section title="Фасад и подсветка" kicker="Archiview">
@@ -326,12 +325,6 @@ export function BuildingPage() {
       ) : (
         <Section title="Фасад и подсветка">
           <FacadeHotspotViewer building={building} />
-          <Link
-            to={`/building/${building.id}/ar`}
-            className="mt-3 inline-block text-sm font-medium text-arch-green underline"
-          >
-            Симуляция AR-preview →
-          </Link>
         </Section>
       )}
 
@@ -373,14 +366,6 @@ export function BuildingPage() {
             {timeLayersIntroText ? ` ${timeLayersIntroText}` : null}
           </p>
           <FacadeTimeLayers building={building} archiview={archiview ?? displayAssets} />
-          <p className="mt-4">
-            <Link
-              to={`/building/${building.id}/ar`}
-              className="inline-flex items-center gap-1 rounded-full border border-arch-line bg-arch-surface px-4 py-2 text-sm font-medium text-arch-green-deep hover:border-arch-green/40 hover:bg-arch-green-soft"
-            >
-              AR-preview: подсветка на полевом фото →
-            </Link>
-          </p>
         </Section>
       ) : null}
 
@@ -394,17 +379,6 @@ export function BuildingPage() {
           )}
           <SideBySidePhotoComparison assets={displayAssets} />
         </Section>
-      ) : null}
-
-      {displayAssets && isSideBySide ? (
-        <p>
-          <Link
-            to={`/building/${building.id}/ar`}
-            className="inline-flex items-center gap-1 rounded-full border border-arch-line bg-arch-surface px-4 py-2 text-sm font-medium text-arch-green-deep hover:border-arch-green/40 hover:bg-arch-green-soft"
-          >
-            AR-preview: подсветка на полевом фото →
-          </Link>
-        </p>
       ) : null}
 
       <Section title="Исторические слои">

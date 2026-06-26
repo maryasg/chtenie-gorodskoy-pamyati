@@ -127,8 +127,8 @@ export function tracePlatePlacement(
   // Ардовы: плашки #1 и #9 — как у #3, правее и шире
   if (cardId === 'MOSCOW_001' && (regionIdx === 1 || regionIdx === 9)) {
     const seam = hasSidebar ? imageRightPct : 100
-    leftPct = clamp(leftPct + (layout ? layout.imageWidthPct * 0.06 : 6), imageLeftPct + 14, seam + 5)
-    maxWidthPx = expanded ? 420 : 330
+    leftPct = clamp(blockCx + (layout ? layout.imageWidthPct * 0.1 : 10), imageLeftPct + 8, seam + 10)
+    maxWidthPx = expanded ? 440 : 360
   }
 
   return {

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
+import { createPortal } from 'react-dom'
+import { Link } from 'react-router-dom'
 import type { ArchiviewAnnotation, ArchiviewBuildingAssets } from '../data/explorer/archiviewAssets'
 import type { Building, MemoryTrace } from '../types/building'
 import {
@@ -16,6 +18,7 @@ import { ExpertTracePlate } from './ExpertTracePlate'
 import { FacadeBeforeAfterSlider } from './FacadeBeforeAfterSlider'
 import { tracePlatePlacement, type BlockLayoutMetrics } from '../lib/tracePlatePlacement'
 import {
+  blockPctToViewportPct,
   loadPlateDragPositions,
   savePlateDragPositions,
   type PlateDragMap,
@@ -677,46 +680,70 @@ export function ArchiviewFacadePanel({
     [assets.cardId],
   )
 
+  const [plateAutoViewport, setPlateAutoViewport] = useState<{ xPct: number; yPct: number } | null>(
+    null,
+  )
+
+  useLayoutEffect(() => {
+    if (!plateRegion || !platePlacement || plateDragPositions[plateRegion.idx]) {
+      setPlateAutoViewport(null)
+      return
+    }
+    const block = facadeBlockRef.current
+    const viewport = viewportRef.current
+    if (!block || !viewport) return
+    const blockRect = block.getBoundingClientRect()
+    if (blockRect.width < 1 || blockRect.height < 1) return
+    setPlateAutoViewport(
+      blockPctToViewportPct(platePlacement.leftPct, platePlacement.topPct, blockRect),
+    )
+  }, [plateDragPositions, platePlacement, plateRegion, blockLayout, zoom, pan.x, pan.y])
+
+  const plateViewportPosition = useMemo(() => {
+    if (!plateRegion || !platePlacement) return null
+    const saved = plateDragPositions[plateRegion.idx]
+    if (saved) {
+      return { xPct: saved.xPct, yPct: saved.yPct, isCustom: true }
+    }
+    if (plateAutoViewport) {
+      return { ...plateAutoViewport, isCustom: false }
+    }
+    return null
+  }, [plateAutoViewport, plateDragPositions, platePlacement, plateRegion])
+
   const handlePlateDragStart = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
-      if (!plateRegion || !platePlacement || !facadeBlockRef.current) return
+      if (!plateRegion || !platePlacement || !plateViewportPosition) return
       if (event.button !== 0) return
       event.preventDefault()
       event.stopPropagation()
-
-      const saved = plateDragPositions[plateRegion.idx]
-      const leftPct = saved?.leftPct ?? platePlacement.leftPct
-      const topPct = saved?.topPct ?? platePlacement.topPct
 
       plateDragSessionRef.current = {
         pointerId: event.pointerId,
         regionIdx: plateRegion.idx,
         startX: event.clientX,
         startY: event.clientY,
-        startLeftPct: leftPct,
-        startTopPct: topPct,
+        startLeftPct: plateViewportPosition.xPct,
+        startTopPct: plateViewportPosition.yPct,
         moved: false,
       }
       setIsPlateDragging(true)
       event.currentTarget.setPointerCapture(event.pointerId)
     },
-    [plateDragPositions, platePlacement, plateRegion],
+    [platePlacement, plateRegion, plateViewportPosition],
   )
 
   const handlePlateDragMove = useCallback((event: PointerEvent<HTMLDivElement>) => {
     const session = plateDragSessionRef.current
-    if (!session || session.pointerId !== event.pointerId || !facadeBlockRef.current) return
+    if (!session || session.pointerId !== event.pointerId) return
 
-    const blockRect = facadeBlockRef.current.getBoundingClientRect()
-    if (blockRect.width < 1 || blockRect.height < 1) return
-
-    const dxPct = ((event.clientX - session.startX) / blockRect.width) * 100
-    const dyPct = ((event.clientY - session.startY) / blockRect.height) * 100
-    if (Math.abs(dxPct) > 0.15 || Math.abs(dyPct) > 0.15) session.moved = true
+    const dxPct = ((event.clientX - session.startX) / window.innerWidth) * 100
+    const dyPct = ((event.clientY - session.startY) / window.innerHeight) * 100
+    if (Math.abs(dxPct) > 0.1 || Math.abs(dyPct) > 0.1) session.moved = true
 
     const nextPos = {
-      leftPct: clampPct(session.startLeftPct + dxPct, 4, 96),
-      topPct: clampPct(session.startTopPct + dyPct, 4, 94),
+      xPct: clampPct(session.startLeftPct + dxPct, 2, 98),
+      yPct: clampPct(session.startTopPct + dyPct, 2, 98),
     }
 
     setPlateDragPositions((prev) => ({
@@ -746,17 +773,6 @@ export function ArchiviewFacadePanel({
     },
     [assets.cardId],
   )
-
-  const plateScreenPosition = useMemo(() => {
-    if (!plateRegion || !platePlacement) return null
-    const saved = plateDragPositions[plateRegion.idx]
-    return {
-      leftPct: saved?.leftPct ?? platePlacement.leftPct,
-      topPct: saved?.topPct ?? platePlacement.topPct,
-      transform: saved ? 'translate(-50%, -50%)' : platePlacement.transform,
-      isCustom: Boolean(saved),
-    }
-  }, [plateDragPositions, platePlacement, plateRegion])
 
   useLayoutEffect(() => {
     const updateBlockLayout = () => {
@@ -944,7 +960,7 @@ export function ArchiviewFacadePanel({
       )}
 
       {imageOk && (
-        <div ref={facadeBlockRef} className="relative overflow-hidden">
+        <div ref={facadeBlockRef} className="relative overflow-visible">
           <div
             className={
               useSidebarLayout
@@ -1225,8 +1241,16 @@ export function ArchiviewFacadePanel({
           {useSidebarLayout ? (
             <>
               {regionList ? (
-                <div className="relative z-0 order-2 min-w-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:min-h-[min(78vh,820px)] lg:self-stretch">
+                <div className="relative z-0 order-2 flex min-w-0 flex-col lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:min-h-[min(78vh,820px)] lg:self-stretch">
                   {regionList}
+                  {building && !sideBySide ? (
+                    <Link
+                      to={`/building/${building.id}/ar`}
+                      className="mt-4 inline-flex items-center justify-center gap-1 rounded-full border border-arch-line bg-arch-surface px-4 py-2.5 text-sm font-medium text-arch-green-deep transition hover:border-arch-green/40 hover:bg-arch-green-soft"
+                    >
+                      AR-preview: подсветка на полевом фото →
+                    </Link>
+                  ) : null}
                 </div>
               ) : null}
             </>
@@ -1234,28 +1258,46 @@ export function ArchiviewFacadePanel({
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
               {comparisonBlock}
               {regionList ? (
-                <div className="w-full shrink-0 lg:w-72 xl:w-80">{regionList}</div>
+                <div className="flex w-full shrink-0 flex-col lg:w-72 xl:w-80">
+                  {regionList}
+                  {building && !sideBySide ? (
+                    <Link
+                      to={`/building/${building.id}/ar`}
+                      className="mt-4 inline-flex items-center justify-center gap-1 rounded-full border border-arch-line bg-arch-surface px-4 py-2.5 text-sm font-medium text-arch-green-deep transition hover:border-arch-green/40 hover:bg-arch-green-soft"
+                    >
+                      AR-preview: подсветка на полевом фото →
+                    </Link>
+                  ) : null}
+                </div>
               ) : null}
             </div>
           ) : null}
 
-          {plateRegion &&
-          platePlacement &&
-          plateScreenPosition &&
-          tracePlateContent &&
-          !(variant === 'ar' && plateExpanded) ? (
+          </div>
+
+        </div>
+      )}
+      {plateRegion &&
+      platePlacement &&
+      plateViewportPosition &&
+      tracePlateContent &&
+      !(variant === 'ar' && plateExpanded)
+        ? createPortal(
             <div
-              className={`absolute z-[60] ${TRACE_PLATE_SHELL_CLASS} ${
+              className={`fixed z-[9990] ${TRACE_PLATE_SHELL_CLASS} ${
                 plateExpanded
-                  ? 'pointer-events-auto max-w-[min(92%,420px)] sm:max-w-md'
-                  : 'pointer-events-auto max-w-[min(92%,280px)] rounded-lg shadow-xl backdrop-blur-md'
+                  ? 'pointer-events-auto'
+                  : 'pointer-events-auto rounded-lg shadow-xl backdrop-blur-md'
               } ${isPlateDragging ? 'select-none' : ''}`}
               style={{
-                left: `${plateScreenPosition.leftPct}%`,
-                top: `${plateScreenPosition.topPct}%`,
-                transform: plateScreenPosition.transform,
-                maxWidth: platePlacement.maxWidthPx,
-                width: plateExpanded ? undefined : `min(${platePlacement.maxWidthPx}px, 42vw)`,
+                left: `${plateViewportPosition.xPct}vw`,
+                top: `${plateViewportPosition.yPct}vh`,
+                transform: 'translate(-50%, -50%)',
+                maxWidth: plateExpanded
+                  ? 'min(440px, calc(100vw - 1.5rem))'
+                  : `min(${Math.max(platePlacement.maxWidthPx, 300)}px, calc(100vw - 1.5rem))`,
+                minWidth: plateExpanded ? 'min(300px, calc(100vw - 1.5rem))' : 'min(240px, calc(100vw - 1.5rem))',
+                width: plateExpanded ? 'min(440px, calc(100vw - 1.5rem))' : undefined,
                 backgroundColor: tracePlateBackground(plateExpanded),
               }}
               role={plateExpanded ? 'dialog' : undefined}
@@ -1264,45 +1306,43 @@ export function ArchiviewFacadePanel({
               onClick={plateExpanded ? (event) => event.stopPropagation() : undefined}
             >
               {!embeddedAr ? (
-              <div
-                className={`flex touch-none items-center gap-2 border-b border-arch-gold/35 bg-arch-green-deep/20 px-2.5 py-1.5 ${
-                  isPlateDragging ? 'cursor-grabbing' : 'cursor-grab'
-                }`}
-                aria-label="Перетащить карточку"
-                onPointerDown={handlePlateDragStart}
-                onPointerMove={handlePlateDragMove}
-                onPointerUp={handlePlateDragEnd}
-                onPointerCancel={handlePlateDragEnd}
-              >
-                <span className="text-xs tracking-widest text-arch-surface/45" aria-hidden>
-                  ⋮⋮
-                </span>
-                <span className="text-[10px] text-arch-surface/55">перетащите</span>
-                {plateScreenPosition.isCustom ? (
-                  <button
-                    type="button"
-                    className="ml-auto rounded px-1.5 py-0.5 text-[10px] font-medium text-arch-surface/70 transition hover:bg-arch-surface/10 hover:text-arch-surface"
-                    title="Вернуть автоматическую позицию"
-                    onPointerDown={(event) => event.stopPropagation()}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      resetPlateDragPosition(plateRegion.idx)
-                    }}
-                  >
-                    ↺ авто
-                  </button>
-                ) : null}
-              </div>
+                <div
+                  className={`flex touch-none items-center gap-2 border-b border-arch-gold/35 bg-arch-green-deep/20 px-2.5 py-1.5 ${
+                    isPlateDragging ? 'cursor-grabbing' : 'cursor-grab'
+                  }`}
+                  aria-label="Перетащить карточку"
+                  onPointerDown={handlePlateDragStart}
+                  onPointerMove={handlePlateDragMove}
+                  onPointerUp={handlePlateDragEnd}
+                  onPointerCancel={handlePlateDragEnd}
+                >
+                  <span className="text-xs tracking-widest text-arch-surface/45" aria-hidden>
+                    ⋮⋮
+                  </span>
+                  <span className="text-[10px] text-arch-surface/55">перетащите</span>
+                  {plateViewportPosition.isCustom ? (
+                    <button
+                      type="button"
+                      className="ml-auto rounded px-1.5 py-0.5 text-[10px] font-medium text-arch-surface/70 transition hover:bg-arch-surface/10 hover:text-arch-surface"
+                      title="Вернуть автоматическую позицию"
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        resetPlateDragPosition(plateRegion.idx)
+                      }}
+                    >
+                      ↺ авто
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
               <div className={plateExpanded ? 'px-5 py-4' : 'px-3 py-2.5 text-sm leading-snug'}>
                 {tracePlateContent}
               </div>
-            </div>
-          ) : null}
-          </div>
-
-        </div>
-      )}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   )
 }

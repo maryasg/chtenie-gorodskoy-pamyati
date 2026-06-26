@@ -5,6 +5,7 @@ export function BuildingVerificationBanner({ verification }: { verification: Bui
   const {
     historicalPhoto,
     historicalPhotoYear,
+    archivePhotoSources,
     modernPhotoYear,
     officialExpertise,
     confidenceNote,
@@ -13,14 +14,27 @@ export function BuildingVerificationBanner({ verification }: { verification: Bui
 
   const hasExpertise = (officialExpertise?.length ?? 0) > 0
   const hasNote = Boolean(confidenceNote?.trim())
+  const archiveSources = archivePhotoSources?.filter(Boolean) ?? []
 
-  if (!historicalPhoto && !hasExpertise && !hasNote) return null
+  if (!historicalPhoto && !hasExpertise && !hasNote && archiveSources.length === 0) return null
 
   return (
     <div className="rounded-xl border border-arch-green/25 bg-gradient-to-br from-arch-green-soft to-arch-surface p-4 shadow-sm">
       <p className="arch-kicker text-arch-green">Достоверность</p>
       <ul className="mt-2 space-y-2">
-        {historicalPhoto && (
+        {historicalPhoto && archiveSources.length > 0 ? (
+          <li className="text-sm text-arch-ink">
+            <span className="inline-flex rounded-full border border-arch-green/35 bg-arch-green-soft px-2.5 py-0.5 text-xs font-medium text-arch-green-deep">
+              Архивные материалы
+            </span>
+            <ul className="mt-2 list-inside list-disc space-y-0.5 text-arch-muted">
+              {archiveSources.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+              {modernPhotoYear ? <li>Съёмка {modernPhotoYear} (Archiview)</li> : null}
+            </ul>
+          </li>
+        ) : historicalPhoto ? (
           <li className="flex flex-wrap items-center gap-2 text-sm text-arch-ink">
             <span className="inline-flex rounded-full border border-arch-green/35 bg-arch-green-soft px-2.5 py-0.5 text-xs font-medium text-arch-green-deep">
               Есть исторический фотоматериал
@@ -32,7 +46,7 @@ export function BuildingVerificationBanner({ verification }: { verification: Bui
               </span>
             )}
           </li>
-        )}
+        ) : null}
         {officialExpertise?.map((item) => (
           <li key={item.url} className="flex flex-wrap items-center gap-2 text-sm">
             <span className="inline-flex rounded-full border border-blue-300 bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-900">
