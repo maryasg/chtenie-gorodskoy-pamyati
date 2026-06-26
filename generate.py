@@ -86,6 +86,7 @@ class TopicOutputs:
     tg_md: Path
     cover: Path
     prompt: Path
+    prompt_chatgpt: Path
     meta: Path
 
     @property
@@ -137,7 +138,8 @@ def build_outputs(
         vk_md=dest / f"{article}_{month}_{year}_ВК_{slug}.md",
         tg_md=dest / f"{article}_{month}_{year}_ТГМАКС_{slug}.md",
         cover=dest / f"{article}_{slug}.{image_ext}",
-        prompt=dest / f"{article}_{month}_{year}_промпт_{slug}.txt",
+        prompt=dest / f"{article}_{month}_{year}_промпт-картинка_{slug}.txt",
+        prompt_chatgpt=dest / f"{article}_{month}_{year}_ПРОМПТ-КАРТИНКА-ChatGPT_{slug}.txt",
         meta=dest / f"{article}_{month}_{year}_meta_{slug}.json",
     )
 
@@ -153,7 +155,8 @@ def find_outputs_by_number(month_folder: Path, number: str) -> TopicOutputs | No
     tg_md = tg_matches[0]
     cover_matches = sorted(month_folder.glob(f"{article}_*.*"))
     cover = next((p for p in cover_matches if p.suffix.lower() in {".png", ".jpg", ".jpeg"}), vk_md)
-    prompt_matches = sorted(month_folder.glob(f"{article}_*_промпт_*.txt"))
+    prompt_matches = sorted(month_folder.glob(f"{article}_*_промпт-картинка_*.txt"))
+    chatgpt_matches = sorted(month_folder.glob(f"{article}_*_ПРОМПТ-КАРТИНКА-ChatGPT_*.txt"))
     meta_matches = sorted(month_folder.glob(f"{article}_*_meta_*.json"))
     return TopicOutputs(
         month_dir=month_folder,
@@ -161,6 +164,7 @@ def find_outputs_by_number(month_folder: Path, number: str) -> TopicOutputs | No
         tg_md=tg_md,
         cover=cover if cover.suffix.lower() in {".png", ".jpg", ".jpeg"} else month_folder / f"{article}_cover.png",
         prompt=prompt_matches[0] if prompt_matches else month_folder / f"{article}_prompt.txt",
+        prompt_chatgpt=chatgpt_matches[0] if chatgpt_matches else month_folder / f"{article}_chatgpt.txt",
         meta=meta_matches[0] if meta_matches else month_folder / f"{article}_meta.json",
     )
 
@@ -203,11 +207,23 @@ def generate_article(
     return text.strip()
 
 
-def build_cover_prompt(telegram_text: str) -> str:
+def build_cover_prompt(vk_text: str) -> str:
     template = load_text(PROMPTS_DIR / "cover_template.txt")
     if "ТЕКСТ СТАТЬИ" not in template:
         raise RuntimeError("cover_template.txt must contain placeholder ТЕКСТ СТАТЬИ")
-    return template.replace("ТЕКСТ СТАТЬИ", telegram_text)
+    return template.replace("ТЕКСТ СТАТЬИ", vk_text)
+
+
+def format_chatgpt_image_file(cover_prompt: str, vk_filename: str) -> str:
+    """Один файл для копирования в веб-ChatGPT без API."""
+    return (
+        "Скопируйте в ChatGPT для генерации обложки 16:9.\n"
+        f"Статья ВК отдельно (для публикации): {vk_filename}\n"
+        "\n"
+        "----- КОПИРОВАТЬ ОТСЮДА -----\n"
+        f"{cover_prompt}\n"
+        "----- ДО СЮДА -----\n"
+    )
 
 
 def generate_cover_bytes(
@@ -277,9 +293,23 @@ def write_text_outputs(
     outputs.vk_md.write_text(vk_text + "\n", encoding="utf-8")
     outputs.tg_md.write_text(tg_text + "\n", encoding="utf-8")
     outputs.prompt.write_text(cover_prompt + "\n", encoding="utf-8")
+    outputs.prompt_chatgpt.write_text(
+        format_chatgpt_image_file(cover_prompt, outputs.vk_md.name) + "\n",
+        encoding="utf-8",
+    )
     if also_docx:
         write_docx(outputs.vk_docx, vk_text)
         write_docx(outputs.tg_docx, tg_text)
+
+
+def write_image_prompts(outputs: TopicOutputs, vk_text: str) -> str:
+    cover_prompt = build_cover_prompt(vk_text)
+    outputs.prompt.write_text(cover_prompt + "\n", encoding="utf-8")
+    outputs.prompt_chatgpt.write_text(
+        format_chatgpt_image_file(cover_prompt, outputs.vk_md.name) + "\n",
+        encoding="utf-8",
+    )
+    return cover_prompt
 
 
 def make_clients() -> tuple[OpenAI, OpenAI]:
@@ -342,23 +372,23 @@ def validate_article(text: str, platform: str, min_len: int, max_len: int) -> li
     return issues
 
 
-def validate_cover_prompt(prompt: str, telegram_text: str) -> list[str]:
+def validate_cover_prompt(prompt: str, vk_text: str) -> list[str]:
     issues: list[str] = []
-    if telegram_text not in prompt:
-        issues.append("cover prompt: не подставлен текст Telegram-статьи")
+    if vk_text not in prompt:
+        issues.append("cover prompt: не подставлен текст VK-статьи")
     if "ТЕКСТ СТАТЬИ" in prompt:
         issues.append("cover prompt: остался плейсхолдер ТЕКСТ СТАТЬИ")
-    if f"[{telegram_text}]" not in prompt:
+    if f"[{vk_text}]" not in prompt:
         issues.append("cover prompt: текст статьи должен быть в квадратных скобках [...]")
     if "стетоскоп" not in prompt.lower():
         issues.append("cover prompt: нет напоминания про отсутствие стетоскопов")
     return issues
 
 
-def validate_outputs(outputs: TopicOutputs, skip_image: bool) -> list[str]:
+def validate_outputs(outputs: TopicOutputs, skip_image: bool, vk_text: str | None = None) -> list[str]:
     issues: list[str] = []
 
-    for path in (outputs.vk_md, outputs.tg_md, outputs.prompt, outputs.meta):
+    for path in (outputs.vk_md, outputs.tg_md, outputs.prompt, outputs.prompt_chatgpt, outputs.meta):
         if not path.exists():
             issues.append(f"нет файла {path.name}")
 
@@ -371,11 +401,15 @@ def validate_outputs(outputs: TopicOutputs, skip_image: bool) -> list[str]:
     if outputs.tg_md.exists():
         issues.extend(validate_article(outputs.tg_md.read_text(encoding="utf-8"), "Telegram", 1200, 1500))
 
-    if outputs.tg_md.exists() and outputs.prompt.exists():
+    vk_for_prompt = vk_text
+    if vk_for_prompt is None and outputs.vk_md.exists():
+        vk_for_prompt = outputs.vk_md.read_text(encoding="utf-8").strip()
+
+    if vk_for_prompt and outputs.prompt.exists():
         issues.extend(
             validate_cover_prompt(
                 outputs.prompt.read_text(encoding="utf-8"),
-                outputs.tg_md.read_text(encoding="utf-8"),
+                vk_for_prompt,
             )
         )
 
@@ -422,6 +456,7 @@ def process_topic(
     also_docx: bool,
     skip_image: bool,
     images_only: bool,
+    prompts_only: bool,
     force: bool,
 ) -> list[str]:
     month = str(item["month"]).strip()
@@ -433,46 +468,77 @@ def process_topic(
     print(f"\n=== {month}/{number} — {title} ===")
     print(f"Папка: {outputs.month_dir}")
 
-    cover_exists = outputs.cover.exists()
+    file_names = {
+        "vk": outputs.vk_md.name,
+        "telegram": outputs.tg_md.name,
+        "prompt": outputs.prompt.name,
+        "prompt_chatgpt": outputs.prompt_chatgpt.name,
+        "cover": outputs.cover.name,
+    }
 
-    if images_only or (outputs.texts_exist and not skip_image and not cover_exists):
-        if not outputs.tg_md.exists():
+    if prompts_only:
+        if not outputs.vk_md.exists() and not force:
             found = find_outputs_by_number(outputs.month_dir, number)
             if found:
                 outputs = found
-            else:
-                print("Пропуск: нет Telegram-файла — сначала сгенерируйте тексты")
-                return [f"{number}: нет Telegram-файла для обложки"]
-
-        if images_only and cover_exists and not force:
-            print(f"Пропуск: {outputs.cover.name} уже есть (используйте --force)")
-            issues = validate_outputs(outputs, skip_image=False)
-            return issues
-
-        tg_text = outputs.tg_md.read_text(encoding="utf-8").strip()
-        if outputs.prompt.exists() and not force:
-            cover_prompt = outputs.prompt.read_text(encoding="utf-8").strip()
-        else:
-            cover_prompt = build_cover_prompt(tg_text)
-            outputs.prompt.write_text(cover_prompt + "\n", encoding="utf-8")
-
-        print(f"Генерация обложки ({image_model}, {image_size}) -> {outputs.cover.name}")
-        image_bytes = generate_cover_bytes(image_client, image_model, image_size, cover_prompt)
-        save_cover_image(image_bytes, outputs.cover, image_ext)
-
-        issues = validate_outputs(outputs, skip_image=False)
+        if not outputs.vk_md.exists():
+            print("Пропуск: нет VK-статьи — сначала сгенерируйте тексты")
+            return [f"{number}: нет VK-статьи для промпта картинки"]
+        if outputs.prompt_chatgpt.exists() and not force:
+            print("Пропуск: промпт уже есть (используйте --force)")
+            return []
+        vk_text = outputs.vk_md.read_text(encoding="utf-8").strip()
+        write_image_prompts(outputs, vk_text)
+        print(f"  {outputs.prompt.name}")
+        print(f"  {outputs.prompt_chatgpt.name}")
+        issues = validate_outputs(outputs, skip_image=True, vk_text=vk_text)
         save_meta(
             outputs.meta,
             month=month,
             number=number,
             title=title,
             year=year,
-            files={
-                "vk": outputs.vk_md.name,
-                "telegram": outputs.tg_md.name,
-                "cover": outputs.cover.name,
-                "prompt": outputs.prompt.name,
-            },
+            files=file_names,
+            generated_at=generated_at,
+            text_model=text_model,
+            image_model=None,
+            validation_issues=issues,
+        )
+        return issues
+
+    cover_exists = outputs.cover.exists()
+
+    if images_only or (outputs.texts_exist and not skip_image and not cover_exists):
+        if not outputs.vk_md.exists():
+            found = find_outputs_by_number(outputs.month_dir, number)
+            if found:
+                outputs = found
+            else:
+                print("Пропуск: нет VK-статьи — сначала сгенерируйте тексты")
+                return [f"{number}: нет VK-статьи для обложки"]
+
+        if images_only and cover_exists and not force:
+            print(f"Пропуск: {outputs.cover.name} уже есть (используйте --force)")
+            return validate_outputs(outputs, skip_image=False)
+
+        vk_text = outputs.vk_md.read_text(encoding="utf-8").strip()
+        if outputs.prompt.exists() and not force:
+            cover_prompt = outputs.prompt.read_text(encoding="utf-8").strip()
+        else:
+            cover_prompt = write_image_prompts(outputs, vk_text)
+
+        print(f"Генерация обложки ({image_model}, {image_size}) -> {outputs.cover.name}")
+        image_bytes = generate_cover_bytes(image_client, image_model, image_size, cover_prompt)
+        save_cover_image(image_bytes, outputs.cover, image_ext)
+
+        issues = validate_outputs(outputs, skip_image=False, vk_text=vk_text)
+        save_meta(
+            outputs.meta,
+            month=month,
+            number=number,
+            title=title,
+            year=year,
+            files=file_names,
             generated_at=generated_at,
             text_model=text_model,
             image_model=image_model,
@@ -486,10 +552,10 @@ def process_topic(
             print("Проверка качества: OK")
         return issues
 
-    if not force and outputs.texts_exist:
-        print("Пропуск: файлы уже есть (используйте --force или --images-only)")
-        issues = validate_outputs(outputs, skip_image=skip_image)
-        return issues
+    if not force and outputs.texts_exist and outputs.prompt_chatgpt.exists():
+        print("Пропуск: файлы уже есть (используйте --force)")
+        vk_text = outputs.vk_md.read_text(encoding="utf-8").strip() if outputs.vk_md.exists() else None
+        return validate_outputs(outputs, skip_image=skip_image, vk_text=vk_text)
 
     vk_prompt = load_text(PROMPTS_DIR / "vk_system.txt")
     tg_prompt = load_text(PROMPTS_DIR / "telegram_system.txt")
@@ -500,10 +566,11 @@ def process_topic(
     print("Генерация Telegram...")
     tg_text = generate_article(text_client, text_model, tg_prompt, title, vk_text=vk_text)
 
-    cover_prompt = build_cover_prompt(tg_text)
+    cover_prompt = build_cover_prompt(vk_text)
     write_text_outputs(outputs, vk_text, tg_text, cover_prompt, also_docx)
     print(f"  {outputs.vk_md.name}")
     print(f"  {outputs.tg_md.name}")
+    print(f"  {outputs.prompt_chatgpt.name}")
     if also_docx:
         print(f"  {outputs.vk_docx.name}")
         print(f"  {outputs.tg_docx.name}")
@@ -513,19 +580,14 @@ def process_topic(
         image_bytes = generate_cover_bytes(image_client, image_model, image_size, cover_prompt)
         save_cover_image(image_bytes, outputs.cover, image_ext)
 
-    issues = validate_outputs(outputs, skip_image=skip_image)
+    issues = validate_outputs(outputs, skip_image=skip_image, vk_text=vk_text)
     save_meta(
         outputs.meta,
         month=month,
         number=number,
         title=title,
         year=year,
-        files={
-            "vk": outputs.vk_md.name,
-            "telegram": outputs.tg_md.name,
-            "cover": outputs.cover.name,
-            "prompt": outputs.prompt.name,
-        },
+        files=file_names,
         generated_at=generated_at,
         text_model=text_model,
         image_model=None if skip_image else image_model,
@@ -552,7 +614,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--filter-month", metavar="МЕСЯЦ", help="Только темы этого месяца из плана")
     parser.add_argument("--year", help="Год в имени файла (по умолчанию: OUTPUT_YEAR или текущий)")
     parser.add_argument("--skip-images", action="store_true", help="Без обложки")
-    parser.add_argument("--images-only", action="store_true", help="Только обложки")
+    parser.add_argument("--images-only", action="store_true", help="Только обложки через API")
+    parser.add_argument("--prompts-only", action="store_true", help="Только промпты для ChatGPT (без API картинок)")
     parser.add_argument("--also-docx", action="store_true", help="Дополнительно сохранить .docx для Word")
     parser.add_argument("--force", action="store_true", help="Перегенерировать даже если файлы есть")
     return parser.parse_args()
@@ -582,6 +645,10 @@ def main() -> int:
 
     if args.images_only and args.skip_images:
         print("Ошибка: нельзя одновременно --images-only и --skip-images", file=sys.stderr)
+        return 1
+
+    if args.prompts_only and args.images_only:
+        print("Ошибка: нельзя одновременно --prompts-only и --images-only", file=sys.stderr)
         return 1
 
     try:
@@ -625,8 +692,9 @@ def main() -> int:
             image_size=image_size,
             image_ext=image_ext,
             also_docx=also_docx,
-            skip_image=args.skip_images,
+            skip_image=args.skip_images or args.prompts_only,
             images_only=args.images_only,
+            prompts_only=args.prompts_only,
             force=args.force,
         )
         all_issues.extend(issues)
