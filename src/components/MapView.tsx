@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import L from 'leaflet'
 import { Link } from 'react-router-dom'
 import { BUILDINGS } from '../data/buildings'
@@ -39,11 +40,67 @@ function fitAllBuildings(map: L.Map) {
   })
 }
 
+function MapBuildingOverlay({ building, onClose }: { building: Building; onClose: () => void }) {
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-[10000] flex items-end justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={`map-building-${building.id}`}
+    >
+      <button
+        type="button"
+        className="absolute inset-0 bg-arch-ink/45"
+        aria-label="Закрыть карточку"
+        onClick={onClose}
+      />
+      <div className="relative z-10 w-full max-w-md rounded-2xl border border-arch-line bg-arch-surface p-4 shadow-2xl sm:max-w-lg">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Закрыть"
+          className="absolute right-3 top-3 rounded-md px-2 py-1 text-sm font-semibold text-arch-muted transition hover:bg-arch-surface-2 hover:text-arch-ink"
+        >
+          ✕
+        </button>
+        <h3 id={`map-building-${building.id}`} className="pr-8 text-base font-semibold text-arch-green-deep">
+          {building.name}
+        </h3>
+        <p className="mt-1 text-xs text-arch-muted">{building.address}</p>
+        <p className="mt-3 text-sm leading-relaxed text-arch-ink/80">{traceSummary(building)}</p>
+        <Link
+          to={`/building/${building.id}`}
+          className="mt-4 inline-flex rounded-full bg-arch-green-deep px-4 py-2 text-sm font-medium text-arch-surface transition hover:opacity-90"
+        >
+          Открыть карточку
+        </Link>
+      </div>
+    </div>
+  )
+}
+
 export function MapView() {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const markersRef = useRef<Map<string, L.Marker>>(new Map())
-  const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [highlightedId, setHighlightedId] = useState<string | null>(null)
+  const [overlayId, setOverlayId] = useState<string | null>(null)
+
+  const activeId = overlayId ?? highlightedId
+  const overlayBuilding = overlayId ? BUILDINGS.find((b) => b.id === overlayId) : undefined
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
@@ -60,12 +117,14 @@ export function MapView() {
     BUILDINGS.forEach((b) => {
       const meta = MAP_STATUS_META[b.mapStatus]
       const marker = L.marker([b.lat, b.lng], { icon: coloredIcon(meta.marker) }).addTo(map)
-      marker.bindPopup(
-        `<strong>${b.name}</strong><br/><span style="font-size:12px;color:#444">${traceSummary(b)}</span><br/><a href="${import.meta.env.BASE_URL}building/${b.id}">Открыть карточку</a>`,
-        { closeButton: true },
-      )
+      marker.on('click', (event) => {
+        L.DomEvent.stopPropagation(event)
+        setOverlayId(b.id)
+      })
       markers.set(b.id, marker)
     })
+
+    map.on('click', () => setOverlayId(null))
 
     fitAllBuildings(map)
 
@@ -115,20 +174,19 @@ export function MapView() {
       const b = BUILDINGS.find((x) => x.id === id)
       if (!b) return
       const meta = MAP_STATUS_META[b.mapStatus]
-      const active = id === hoveredId
+      const active = id === activeId
       marker.setIcon(coloredIcon(meta.marker, active ? 1.45 : 1))
       if (active) {
-        marker.openPopup()
         mapRef.current?.panTo([b.lat, b.lng], { animate: true, duration: 0.35 })
       }
     })
-  }, [hoveredId])
+  }, [activeId])
 
   return (
     <div className="space-y-4">
       <div
         ref={containerRef}
-        className="h-[420px] w-full rounded-xl border border-arch-line shadow-sm data-[zoom-active=true]:ring-2 data-[zoom-active=true]:ring-arch-green/40"
+        className="h-[420px] w-full overflow-hidden rounded-xl border border-arch-line shadow-sm data-[zoom-active=true]:ring-2 data-[zoom-active=true]:ring-arch-green/40"
       />
       <div className="flex flex-wrap gap-3 text-sm">
         {MAP_LEGEND_STATUSES.map((key) => {
@@ -146,20 +204,21 @@ export function MapView() {
       </div>
       <p className="text-xs text-arch-muted">
         Колёсико мыши прокручивает страницу. Чтобы приблизить карту — сначала кликните по ней, затем
-        крутите колёсико. Наведите на карточку здания ниже — на карте подсветится точка и названия
-        следов.
+        крутите колёсико. Нажмите на точку на карте или на карточку здания ниже — откроется краткое
+        описание следов.
       </p>
       <ul className="grid gap-2 sm:grid-cols-2 sm:items-stretch">
         {BUILDINGS.map((b) => (
           <li key={b.id} className="flex min-h-0">
-            <Link
-              to={`/building/${b.id}`}
-              onMouseEnter={() => setHoveredId(b.id)}
-              onMouseLeave={() => setHoveredId(null)}
-              onFocus={() => setHoveredId(b.id)}
-              onBlur={() => setHoveredId(null)}
-              className={`flex h-full w-full flex-col rounded-xl border p-3 transition ${
-                hoveredId === b.id
+            <button
+              type="button"
+              onMouseEnter={() => setHighlightedId(b.id)}
+              onMouseLeave={() => setHighlightedId(null)}
+              onFocus={() => setHighlightedId(b.id)}
+              onBlur={() => setHighlightedId(null)}
+              onClick={() => setOverlayId(b.id)}
+              className={`flex h-full w-full flex-col rounded-xl border p-3 text-left transition ${
+                activeId === b.id
                   ? 'border-arch-gold bg-arch-green-soft shadow-sm'
                   : 'border-arch-line bg-arch-surface hover:border-arch-green/40 hover:bg-arch-surface-2/60'
               }`}
@@ -167,10 +226,23 @@ export function MapView() {
               <span className="font-medium text-arch-green-deep">{b.name}</span>
               <span className="mt-1 block text-xs text-arch-muted">{b.address}</span>
               <span className="mt-2 block flex-1 text-xs text-arch-ink/70">{traceSummary(b)}</span>
-            </Link>
+              <Link
+                to={`/building/${b.id}`}
+                onClick={(event) => event.stopPropagation()}
+                className="mt-3 inline-flex text-xs font-medium text-arch-green underline decoration-arch-green/30"
+              >
+                Открыть карточку →
+              </Link>
+            </button>
           </li>
         ))}
       </ul>
+      {overlayBuilding
+        ? createPortal(
+            <MapBuildingOverlay building={overlayBuilding} onClose={() => setOverlayId(null)} />,
+            document.body,
+          )
+        : null}
     </div>
   )
 }
