@@ -69,6 +69,8 @@ export interface OfficialExpertise {
 export interface BuildingVerification {
   historicalPhoto: boolean
   historicalPhotoYear?: string
+  /** Архивные материалы для блока «Достоверность» (план, фото по годам) */
+  archivePhotoSources?: string[]
   modernPhotoYear?: string
   officialExpertise?: OfficialExpertise[]
   /** Обоснование выбора статусов достоверности (без перечисления ссылок — они в «Источниках»). */
