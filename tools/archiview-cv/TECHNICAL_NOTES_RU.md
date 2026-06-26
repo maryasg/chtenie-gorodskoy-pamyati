@@ -1,6 +1,6 @@
 # Archiview + сайт — технические заметки (для агентов и разработчиков)
 
-Обновлено: **2026-06-20**. Дополняет `README_v16_ru.md` (Maria) и `ПРОДОЛЖИТЬ_РАБОТУ.md` (handoff в новый чат).
+Обновлено: **2026-06-26**. Дополняет `README_v16_ru.md` (Maria) и `ПРОДОЛЖИТЬ_РАБОТУ.md` (handoff в новый чат).
 
 ---
 
@@ -184,3 +184,15 @@ public/explorer/MOSCOW_001/manifest.json
 | compare→markup | Автосохранение 05 при смене overlay на вкладке 3 |
 | corner picker | zoom/pan в окне углов |
 | photo lock | Нельзя менять фото если есть разметка/выпрямление |
+| moscow003 plates | Зоны плашек, badge pins, layout |
+| trace plate style | Единое зелёное «стекло», ~55% opacity |
+| time layers | Наложение слоёв времени, autoplay (Ардовы) |
+| draggable plates | `ExpertTracePlate` + `tracePlateDragStorage` |
+| AR simulation | MOSCOW_003: modern-source, rectified fallback |
+| method page | Читаемый заголовок на `/method` |
+
+### Репозиторий сайта vs стоматология
+
+С июня 2026 генератор статей поликлиники (**VK / Telegram / промпты обложек**) вынесен в  
+`github.com/maryasg/maryasg-articles_KorolevSP`.  
+Папка `ksp-content-generator/` удалена из `chtenie-gorodskoy-pamyati`, чтобы не смешивать проекты.

@@ -21,6 +21,10 @@ This is a **Vite + React 19 + TypeScript + Tailwind v4** single-page app (no bac
 - Site facade: `ArchiviewFacadePanel` uses `marked-facade.png` (06) with hover-only curator plaques; multi-comparison via `public/explorer/*/manifest.json`.
 - Full agent context: `tools/archiview-cv/TECHNICAL_NOTES_RU.md` and repo root `ПРОДОЛЖИТЬ_РАБОТУ.md`.
 
+### Unrelated projects (do not mix with this repo)
+
+- **Dental clinic article generator** lives in a separate repository: `maryasg/maryasg-articles_KorolevSP` on the user's PC at `maryasg-articles_KorolevSP`. It was briefly added as `ksp-content-generator/` here and removed — do not restore it into this site repo.
+
 ### Archiview CV (`tools/archiview-cv/`) — Windows + Cyrillic
 
 Maria uses **cmd on Windows**; Desktop paths include Cyrillic (`Проект Память стен`).
