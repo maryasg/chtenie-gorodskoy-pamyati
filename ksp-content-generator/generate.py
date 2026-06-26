@@ -449,6 +449,15 @@ def parse_args() -> argparse.Namespace:
         help="Generate only one topic number, e.g. 03",
     )
     parser.add_argument(
+        "--title",
+        help='Любая тема без content_plan.json, например: "Кровоточивость дёсен"',
+    )
+    parser.add_argument(
+        "--month",
+        default="май",
+        help="Месяц для папки output при --title (по умолчанию: май)",
+    )
+    parser.add_argument(
         "--skip-images",
         action="store_true",
         help="Generate texts and prompt only, without cover image",
@@ -503,14 +512,19 @@ def main() -> int:
     print(f"Тексты API: {base_url}")
     print(f"Картинки API: {image_base}")
     print(f"Тексты: {text_model} | Картинки: {image_model}")
-    plan = load_plan(args.plan)
 
-    if args.number:
-        wanted = args.number.strip().zfill(2)
-        plan = [item for item in plan if str(item.get("number", "")).strip().zfill(2) == wanted]
-        if not plan:
-            print(f"Тема с номером {wanted} не найдена в {args.plan}", file=sys.stderr)
-            return 1
+    if args.title:
+        number = (args.number or "99").strip().zfill(2)
+        plan = [{"month": args.month.strip(), "number": number, "title": args.title.strip()}]
+        print(f"Режим одной темы: {args.title.strip()}")
+    else:
+        plan = load_plan(args.plan)
+        if args.number:
+            wanted = args.number.strip().zfill(2)
+            plan = [item for item in plan if str(item.get("number", "")).strip().zfill(2) == wanted]
+            if not plan:
+                print(f"Тема с номером {wanted} не найдена в {args.plan}", file=sys.stderr)
+                return 1
 
     all_issues: list[str] = []
     for item in plan:
