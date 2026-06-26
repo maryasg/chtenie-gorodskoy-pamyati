@@ -24,6 +24,8 @@ type CardBadgePrefs = {
   collisionRadius?: number
   side?: Record<number, PlacementSide>
   nudge?: Record<number, { dx: number; dy: number }>
+  /** Номер по центру подсветки (напр. крупные зоны 1 и 9 у Куманиных на телефоне). */
+  forceOnRegion?: number[]
 }
 
 /** Дом Ардовых / Куманиных: предпочтительная сторона выноски. */
@@ -72,21 +74,50 @@ const MOSCOW_001_CMP_009_PREFS: CardBadgePrefs = {
   },
 }
 
+/** Куманины cmp_005 на телефоне: номера у своих зон, не полосой внизу. */
+const MOSCOW_001_CMP_005_MOBILE_PREFS: CardBadgePrefs = {
+  collisionRadius: 2.65,
+  forceOnRegion: [1, 9],
+  side: {
+    3: 'right',
+    4: 'right',
+    5: 'left',
+    7: 'left',
+  },
+  nudge: {
+    3: { dx: 0.35, dy: 0.05 },
+    4: { dx: 2.4, dy: -0.6 },
+    5: { dx: -1.6, dy: 0 },
+    7: { dx: -2.0, dy: -1.5 },
+  },
+}
+
 const COMPARISON_BADGE_PREFS: Record<string, CardBadgePrefs> = {
   'MOSCOW_001:cmp_009': MOSCOW_001_CMP_009_PREFS,
   'MOSCOW_001:cmp_008': {
     side: { 1: 'above', 2: 'above' },
     nudge: { 1: { dx: 0, dy: -1.4 }, 2: { dx: 0.6, dy: -1.4 } },
   },
+  'MOSCOW_001:cmp_005:mobile': MOSCOW_001_CMP_005_MOBILE_PREFS,
 }
 
-function prefsForCard(cardId?: string, comparisonId?: string): CardBadgePrefs {
+function prefsForCard(cardId?: string, comparisonId?: string, mobile = false): CardBadgePrefs {
   if (cardId && comparisonId) {
+    if (mobile) {
+      const mobileKey = `${cardId}:${comparisonId}:mobile`
+      if (COMPARISON_BADGE_PREFS[mobileKey]) return COMPARISON_BADGE_PREFS[mobileKey]
+    }
     const comparisonKey = `${cardId}:${comparisonId}`
     if (COMPARISON_BADGE_PREFS[comparisonKey]) return COMPARISON_BADGE_PREFS[comparisonKey]
   }
   if (!cardId) return {}
   return CARD_BADGE_PREFS[cardId] ?? {}
+}
+
+/** Полоса номеров внизу кадра — не для Куманиных cmp_005. */
+export function usesMobileBottomBadgeStrip(cardId?: string, comparisonId?: string): boolean {
+  if (cardId === 'MOSCOW_001' && (!comparisonId || comparisonId === 'cmp_005')) return false
+  return true
 }
 
 function badgesAlwaysOutside(cardId?: string, comparisonId?: string): boolean {
@@ -213,8 +244,9 @@ function candidateLayouts(
   idx: number,
   cardId?: string,
   comparisonId?: string,
+  mobile = false,
 ): BadgeLayout[] {
-  const { side: sideMap } = prefsForCard(cardId, comparisonId)
+  const { side: sideMap } = prefsForCard(cardId, comparisonId, mobile)
   const preferred = sideMap?.[idx]
   const sides = preferred
     ? [preferred, ...defaultSideOrder(polygon).filter((side) => side !== preferred)]
@@ -237,8 +269,9 @@ function badgesOverlap(
   b: BadgeLayout,
   cardId?: string,
   comparisonId?: string,
+  mobile = false,
 ): boolean {
-  const { collisionRadius } = prefsForCard(cardId, comparisonId)
+  const { collisionRadius } = prefsForCard(cardId, comparisonId, mobile)
   const radius = collisionRadius ?? BADGE_COLLISION_RADIUS
   const dx = a.badgeX - b.badgeX
   const dy = a.badgeY - b.badgeY
@@ -266,9 +299,11 @@ function layoutValid(
   regions: RegionForBadgeLayout[],
   cardId?: string,
   comparisonId?: string,
+  allowOnOwnRegion = false,
+  mobile = false,
 ): boolean {
-  if (pointInPolygon([layout.badgeX, layout.badgeY], ownPolygon)) return false
-  if (placed.some((other) => badgesOverlap(layout, other, cardId, comparisonId))) return false
+  if (!allowOnOwnRegion && pointInPolygon([layout.badgeX, layout.badgeY], ownPolygon)) return false
+  if (placed.some((other) => badgesOverlap(layout, other, cardId, comparisonId, mobile))) return false
   if (badgeInsideForeignPolygon(layout, ownIdx, regions)) return false
   return true
 }
@@ -279,8 +314,9 @@ function layoutScore(
   order: number,
   cardId?: string,
   comparisonId?: string,
+  mobile = false,
 ): number {
-  const { side: sideMap } = prefsForCard(cardId, comparisonId)
+  const { side: sideMap } = prefsForCard(cardId, comparisonId, mobile)
   const lineLen =
     (layout.badgeX - layout.anchorX) ** 2 + (layout.badgeY - layout.anchorY) ** 2
   const edgePenalty = layout.badgeY < 8 ? 40 : layout.badgeY > 94 ? 25 : 0
@@ -308,8 +344,9 @@ function nudgeLayout(
   idx: number,
   cardId?: string,
   comparisonId?: string,
+  mobile = false,
 ): BadgeLayout {
-  const { side: sideMap } = prefsForCard(cardId, comparisonId)
+  const { side: sideMap } = prefsForCard(cardId, comparisonId, mobile)
   const preferred = sideMap?.[idx]
   if (preferred === 'below') {
     return {
@@ -377,15 +414,19 @@ export function assignBadgeLayouts(
   regions: RegionForBadgeLayout[],
   cardId?: string,
   comparisonId?: string,
+  options?: { mobile?: boolean },
 ): void {
+  const mobile = options?.mobile ?? false
+  const prefs = prefsForCard(cardId, comparisonId, mobile)
+  const forceOnRegion = new Set(prefs.forceOnRegion ?? [])
   const placed: BadgeLayout[] = []
-  const sorted = [...regions].sort((a, b) => a.areaPct - b.areaPct)
   const alwaysOutside = badgesAlwaysOutside(cardId, comparisonId)
 
-  for (const region of sorted) {
+  const placeRegion = (region: RegionForBadgeLayout) => {
     const bbox = polygonBBox(region.polygonPct)
+    const onRegion = forceOnRegion.has(region.idx)
 
-    if (regionFitsBadgeInside(bbox, region.areaPct) && !alwaysOutside) {
+    if (onRegion) {
       const centered: BadgeLayout = {
         anchorX: region.badgeLayout.anchorX,
         anchorY: region.badgeLayout.anchorY,
@@ -394,11 +435,48 @@ export function assignBadgeLayouts(
         callout: false,
       }
       if (
-        layoutValid(centered, region.idx, region.polygonPct, placed, regions, cardId, comparisonId)
+        layoutValid(
+          centered,
+          region.idx,
+          region.polygonPct,
+          placed,
+          regions,
+          cardId,
+          comparisonId,
+          true,
+          mobile,
+        )
       ) {
         region.badgeLayout = centered
         placed.push(centered)
-        continue
+        return
+      }
+    }
+
+    if (regionFitsBadgeInside(bbox, region.areaPct) && !alwaysOutside && !onRegion) {
+      const centered: BadgeLayout = {
+        anchorX: region.badgeLayout.anchorX,
+        anchorY: region.badgeLayout.anchorY,
+        badgeX: region.badgeLayout.anchorX,
+        badgeY: region.badgeLayout.anchorY,
+        callout: false,
+      }
+      if (
+        layoutValid(
+          centered,
+          region.idx,
+          region.polygonPct,
+          placed,
+          regions,
+          cardId,
+          comparisonId,
+          false,
+          mobile,
+        )
+      ) {
+        region.badgeLayout = centered
+        placed.push(centered)
+        return
       }
     }
 
@@ -408,15 +486,28 @@ export function assignBadgeLayouts(
       region.idx,
       cardId,
       comparisonId,
+      mobile,
     )
     let chosen: BadgeLayout | null = null
     let bestScore = Number.POSITIVE_INFINITY
 
     candidates.forEach((candidate, order) => {
-      if (!layoutValid(candidate, region.idx, region.polygonPct, placed, regions, cardId, comparisonId)) {
+      if (
+        !layoutValid(
+          candidate,
+          region.idx,
+          region.polygonPct,
+          placed,
+          regions,
+          cardId,
+          comparisonId,
+          false,
+          mobile,
+        )
+      ) {
         return
       }
-      const score = layoutScore(candidate, region.idx, order, cardId, comparisonId)
+      const score = layoutScore(candidate, region.idx, order, cardId, comparisonId, mobile)
       if (score < bestScore) {
         bestScore = score
         chosen = candidate
@@ -429,8 +520,20 @@ export function assignBadgeLayouts(
         computeBadgeLayout(region.polygonPct, region.areaPct, region.idx, cardId, comparisonId)
       chosen = seed
       for (let attempt = 0; attempt < 28; attempt += 1) {
-        const nudged = nudgeLayout(seed, attempt, region.idx, cardId, comparisonId)
-        if (layoutValid(nudged, region.idx, region.polygonPct, placed, regions, cardId, comparisonId)) {
+        const nudged = nudgeLayout(seed, attempt, region.idx, cardId, comparisonId, mobile)
+        if (
+          layoutValid(
+            nudged,
+            region.idx,
+            region.polygonPct,
+            placed,
+            regions,
+            cardId,
+            comparisonId,
+            false,
+            mobile,
+          )
+        ) {
           chosen = nudged
           break
         }
@@ -440,6 +543,22 @@ export function assignBadgeLayouts(
     region.badgeLayout = { ...chosen, callout: true }
     placed.push(chosen)
   }
+
+  const forced = [...regions]
+    .filter((region) => forceOnRegion.has(region.idx))
+    .sort((a, b) => b.areaPct - a.areaPct)
+  forced.forEach(placeRegion)
+
+  const fixedSide = new Set(Object.keys(prefs.side ?? {}).map(Number))
+  const pinned = [...regions]
+    .filter((region) => !forceOnRegion.has(region.idx) && fixedSide.has(region.idx))
+    .sort((a, b) => a.areaPct - b.areaPct)
+  pinned.forEach(placeRegion)
+
+  const rest = [...regions]
+    .filter((region) => !forceOnRegion.has(region.idx) && !fixedSide.has(region.idx))
+    .sort((a, b) => a.areaPct - b.areaPct)
+  rest.forEach(placeRegion)
 }
 
 /** Мобильный фасад: все номера внизу кадра, выноски к центрам зон. */

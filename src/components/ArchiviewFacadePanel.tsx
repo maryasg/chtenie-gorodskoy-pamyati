@@ -330,8 +330,13 @@ export function ArchiviewFacadePanel({
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
   const isMobile = useMediaQuery('(max-width: 639px)')
   const useMobileFacadeChrome = isMobile && !embeddedAr && variant !== 'ar'
+  const useMobileKumaninyBadges =
+    useMobileFacadeChrome && assets.cardId === 'MOSCOW_001' && assets.comparisonId === 'cmp_005'
   const useMobileBottomBadges =
-    useMobileFacadeChrome && assets.comparisonId !== 'cmp_009' && assets.comparisonId !== 'cmp_008'
+    useMobileFacadeChrome &&
+    !useMobileKumaninyBadges &&
+    assets.comparisonId !== 'cmp_009' &&
+    assets.comparisonId !== 'cmp_008'
   const mobileBadgeClicks = isMobile && !embeddedAr && variant !== 'ar'
   const [imgSize, setImgSize] = useState({ w: 1, h: 1 })
   const [sideBySide, setSideBySide] = useState(false)
@@ -470,11 +475,13 @@ export function ArchiviewFacadePanel({
       if (useMobileBottomBadges) {
         assignMobileBottomBadgeLayouts(list)
       } else {
-        assignBadgeLayouts(list, assets.cardId, assets.comparisonId)
+        assignBadgeLayouts(list, assets.cardId, assets.comparisonId, {
+          mobile: useMobileKumaninyBadges,
+        })
       }
       setRegions(list)
     },
-    [assets.cardId, assets.comparisonId, useMobileBottomBadges],
+    [assets.cardId, assets.comparisonId, useMobileBottomBadges, useMobileKumaninyBadges],
   )
 
   useEffect(() => {
@@ -484,11 +491,13 @@ export function ArchiviewFacadePanel({
       if (useMobileBottomBadges) {
         assignMobileBottomBadgeLayouts(next)
       } else {
-        assignBadgeLayouts(next, assets.cardId, assets.comparisonId)
+        assignBadgeLayouts(next, assets.cardId, assets.comparisonId, {
+          mobile: useMobileKumaninyBadges,
+        })
       }
       return next
     })
-  }, [useMobileBottomBadges, assets.cardId, assets.comparisonId, regions.length])
+  }, [useMobileBottomBadges, useMobileKumaninyBadges, assets.cardId, assets.comparisonId, regions.length])
 
   const buildRegionsRectified = useCallback(
     (annotations: ArchiviewAnnotation[], width: number, height: number) => {
@@ -1370,7 +1379,7 @@ export function ArchiviewFacadePanel({
                   {regionsBadges.map((r) => {
                     const on = hoverIdx === r.idx || selectedIdx === r.idx
                     const color = CLASS_COLORS[r.cls] ?? '#444'
-                    const size = useMobileBottomBadges ? (on ? 32 : 28) : on ? 26 : 22
+                    const size = mobileBadgeClicks ? (on ? 32 : 28) : on ? 26 : 22
                     const { badgeX, badgeY } = r.badgeLayout
                     return (
                       <button
