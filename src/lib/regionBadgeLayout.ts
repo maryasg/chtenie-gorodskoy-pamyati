@@ -99,6 +99,21 @@ const CARD_BADGE_PREFS: Record<string, CardBadgePrefs> = {
       14: { dx: 0.4, dy: 0.55 },
     },
   },
+  MOSCOW_004: {
+    collisionRadius: 2.3,
+    allowOverlapForeignPolygons: true,
+    side: {
+      1: 'above',
+      2: 'above',
+      3: 'above',
+    },
+    pinOrder: [3, 2, 1],
+    nudge: {
+      1: { dx: 1.4, dy: -1.05 },
+      2: { dx: -1.5, dy: -1.0 },
+      3: { dx: 0.9, dy: -1.25 },
+    },
+  },
 }
 
 /** Второе сравнение Куманиных (1840→2026): номера над зоной, не на подсветке. */
@@ -152,10 +167,11 @@ function prefsForCard(cardId?: string, comparisonId?: string, mobile = false): C
   return CARD_BADGE_PREFS[cardId] ?? {}
 }
 
-/** Полоса номеров внизу кадра — не для Куманиных cmp_005 и Дома со зверями. */
+/** Полоса номеров внизу кадра — не для Куманиных, Дома со зверями и Фалькевича. */
 export function usesMobileBottomBadgeStrip(cardId?: string, comparisonId?: string): boolean {
   if (cardId === 'MOSCOW_001' && (!comparisonId || comparisonId === 'cmp_005')) return false
   if (cardId === 'MOSCOW_003') return false
+  if (cardId === 'MOSCOW_004') return false
   return true
 }
 
