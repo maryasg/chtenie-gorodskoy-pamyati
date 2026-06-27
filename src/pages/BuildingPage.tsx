@@ -15,6 +15,7 @@ import {
 } from '../data/explorer/explorerManifest'
 import { ArchiviewComparisonPicker } from '../components/ArchiviewComparisonPicker'
 import { splitTraceMessage } from '../lib/traceMessage'
+import { getNextTourNavLink } from '../lib/tourNavigation'
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Building, MemoryTrace } from '../types/building'
@@ -277,16 +278,26 @@ export function BuildingPage() {
 
   const isSideBySide = displayAssets?.labelingLayout === 'side_by_side'
   const timeLayersIntroText = timeLayersIntro(building.cardId)
+  const nextTourStop = getNextTourNavLink(building.id)
 
   return (
     <div className="space-y-6">
       <header className="arch-section border-arch-green/20 bg-gradient-to-br from-arch-green-soft to-arch-surface">
-        <Link
-          to="/"
-          className="text-sm font-medium text-arch-green-light hover:text-arch-green-deep"
-        >
-          ← Москва
-        </Link>
+        <div className="flex items-center justify-between gap-4">
+          <Link
+            to="/"
+            className="text-sm font-medium text-arch-green-light transition hover:text-arch-green-deep"
+          >
+            ← Москва
+          </Link>
+          <Link
+            to={nextTourStop.to}
+            aria-label={nextTourStop.ariaLabel}
+            className="text-sm font-medium text-arch-green-light transition hover:text-arch-green-deep"
+          >
+            {nextTourStop.label}
+          </Link>
+        </div>
         <div className="mt-3">
           <h1 className="text-2xl font-semibold tracking-tight text-arch-green-deep">{building.name}</h1>
         </div>
