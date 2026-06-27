@@ -49,6 +49,64 @@ body::before {
   font-family: inherit;
 }
 
+.arch-map-popup .leaflet-popup-content-wrapper {
+  border-radius: 0.875rem;
+  border: 1px solid var(--color-arch-line);
+  background: var(--color-arch-surface);
+  box-shadow: 0 8px 24px rgba(16, 16, 15, 0.14);
+}
+
+.arch-map-popup .leaflet-popup-content {
+  margin: 0.75rem 0.9rem;
+  line-height: 1.45;
+}
+
+.arch-map-popup .leaflet-popup-tip {
+  background: var(--color-arch-surface);
+  border: 1px solid var(--color-arch-line);
+  box-shadow: none;
+}
+
+.arch-map-popup-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.arch-map-popup-title {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-arch-green-deep);
+}
+
+.arch-map-popup-address {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--color-arch-muted);
+}
+
+.arch-map-popup-summary {
+  margin: 0.15rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--color-arch-ink);
+}
+
+.arch-map-popup-link {
+  margin-top: 0.35rem;
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-arch-green);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-arch-green) 35%, transparent);
+}
+
+.arch-map-popup-link:hover {
+  color: var(--color-arch-green-deep);
+}
+
 /* Утилиты карточек (секции здания) */
 .arch-section {
   border-radius: 1.25rem;
