@@ -95,6 +95,8 @@ def main() -> None:
     export_slide_images()
 
     doc = Document()
+    doc.core_properties.author = "user"
+    doc.core_properties.last_modified_by = "user"
     set_landscape(doc.sections[0])
 
     title = doc.add_heading("Речь Maria · слайды 13–17", level=0)
