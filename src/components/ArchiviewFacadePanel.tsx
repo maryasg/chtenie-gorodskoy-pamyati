@@ -142,6 +142,42 @@ const ZOOM_MIN = 1
 const ZOOM_MAX = 4
 const ZOOM_STEP = 0.35
 
+/** Доля ширины фото — как BADGE_DIAMETER_PCT в regionBadgeLayout (2.6). */
+const MOBILE_BADGE_WIDTH_RATIO = 0.0275
+const MOBILE_BADGE_WIDTH_RATIO_ACTIVE = 0.0315
+
+type FacadeBadgeMetrics = {
+  size: number
+  fontSize: number
+  borderWidth: number
+  ringWidth: number
+}
+
+function facadeBadgeMetrics(
+  facadeImageWidth: number,
+  active: boolean,
+  twoDigit: boolean,
+  scaleWithFacade: boolean,
+): FacadeBadgeMetrics {
+  if (!scaleWithFacade) {
+    const size = active ? 26 : 22
+    return {
+      size,
+      fontSize: twoDigit ? 11 : 12,
+      borderWidth: 2,
+      ringWidth: 2,
+    }
+  }
+  const ratio = active ? MOBILE_BADGE_WIDTH_RATIO_ACTIVE : MOBILE_BADGE_WIDTH_RATIO
+  const size = Math.max(14, Math.round(facadeImageWidth * ratio))
+  return {
+    size,
+    fontSize: Math.max(8, Math.round(size * (twoDigit ? 0.36 : 0.4))),
+    borderWidth: Math.max(1, Math.round(size * 0.09)),
+    ringWidth: Math.max(1, Math.round(size * 0.08)),
+  }
+}
+
 type Pan = { x: number; y: number }
 
 function clampPct(value: number, min: number, max: number): number {
@@ -332,6 +368,9 @@ export function ArchiviewFacadePanel({
   )
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
   const isMobile = useMediaQuery('(max-width: 639px)')
+  const embeddedArMobileBelow = embeddedAr && isMobile
+  const [internalBelowPhotoHost, setInternalBelowPhotoHost] = useState<HTMLDivElement | null>(null)
+  const belowPhotoPlateHost = mobileArPlateHost ?? internalBelowPhotoHost
   const useMobileFacadeChrome = isMobile && !embeddedAr && variant !== 'ar'
   const useMobileNearRegionBadges =
     useMobileFacadeChrome &&
@@ -355,6 +394,7 @@ export function ArchiviewFacadePanel({
   const imageRef = useRef<HTMLImageElement>(null)
   const facadeBlockRef = useRef<HTMLDivElement>(null)
   const [blockLayout, setBlockLayout] = useState<BlockLayoutMetrics | null>(null)
+  const [facadeImageWidth, setFacadeImageWidth] = useState(0)
   const [plateDragPositions, setPlateDragPositions] = useState<PlateDragMap>({})
   const [isPlateDragging, setIsPlateDragging] = useState(false)
   const plateDragSessionRef = useRef<{
@@ -920,6 +960,22 @@ export function ArchiviewFacadePanel({
     }
   }, [zoom, pan.x, pan.y, imgSize.w, imgSize.h, displayImageUrl, regions.length, useSidebarLayout])
 
+  useLayoutEffect(() => {
+    const img = imageRef.current
+    if (!img) {
+      setFacadeImageWidth(0)
+      return
+    }
+    const update = () => {
+      const width = img.getBoundingClientRect().width
+      setFacadeImageWidth((prev) => (Math.abs(prev - width) < 0.5 ? prev : width))
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(img)
+    return () => ro.disconnect()
+  }, [displayImageUrl, imgSize.w, imgSize.h, zoom, pan.x, pan.y, sideBySide, imageOk])
+
   /** Small regions (e.g. #6, #9) must paint above large overlaps (#12) for clicks — render largest first, smallest last in SVG. */
   const regionsForHit = useMemo(
     () => [...regions].sort((a, b) => polygonAreaAbs(b.polygonPct) - polygonAreaAbs(a.polygonPct)),
@@ -930,6 +986,8 @@ export function ArchiviewFacadePanel({
     () => [...regions].sort((a, b) => polygonAreaAbs(b.polygonPct) - polygonAreaAbs(a.polygonPct)),
     [regions],
   )
+
+  const scaleBadgesWithFacade = mobileBadgeClicks
 
   const tracePlateContent = plateRegion ? (
     <ExpertTracePlate
@@ -974,7 +1032,11 @@ export function ArchiviewFacadePanel({
   }, [embeddedAr, isMobile, plateExpanded, platePlacement, plateRegion])
 
   const showEmbeddedMobileBelowPlate = Boolean(
-    embeddedAr && isMobile && plateExpanded && plateRegion && tracePlateContent && mobileArPlateHost,
+    embeddedArMobileBelow &&
+      plateExpanded &&
+      plateRegion &&
+      tracePlateContent &&
+      belowPhotoPlateHost,
   )
 
   const showMobilePortal =
@@ -1102,7 +1164,7 @@ export function ArchiviewFacadePanel({
     ) : null
 
   return (
-    <div className={embeddedAr ? 'h-full space-y-0' : 'space-y-3'}>
+    <div className={embeddedAr ? (embeddedArMobileBelow ? 'space-y-0' : 'h-full space-y-0') : 'space-y-3'}>
       {!hideIntro && variant === 'default' ? (
         <p className="text-sm text-arch-muted">
           {sideBySide ? (
@@ -1167,7 +1229,13 @@ export function ArchiviewFacadePanel({
       {imageOk && (
         <div
           ref={facadeBlockRef}
-          className={`relative ${embeddedAr ? 'h-full min-h-0 overflow-hidden' : 'overflow-visible'}`}
+          className={`relative ${
+            embeddedAr
+              ? embeddedArMobileBelow
+                ? 'overflow-visible'
+                : 'h-full min-h-0 overflow-hidden'
+              : 'overflow-visible'
+          }`}
         >
           <div
             className={
@@ -1176,7 +1244,9 @@ export function ArchiviewFacadePanel({
                   ? 'flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_17rem] lg:grid-rows-[auto_auto] xl:grid-cols-[minmax(0,1fr)_20rem] lg:items-start'
                   : 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_17rem] xl:grid-cols-[minmax(0,1fr)_20rem] lg:items-start'
                 : embeddedAr
-                  ? 'flex h-full min-h-0 flex-col'
+                  ? embeddedArMobileBelow
+                    ? 'flex w-full flex-col'
+                    : 'flex h-full min-h-0 flex-col'
                   : 'flex flex-col gap-4'
             }
           >
@@ -1187,11 +1257,13 @@ export function ArchiviewFacadePanel({
                   ? 'relative order-1 flex min-w-0 flex-col gap-4 overflow-visible lg:col-start-1 lg:row-start-1'
                   : 'relative order-1 flex min-w-0 flex-col gap-4 overflow-visible lg:col-start-1 lg:row-start-1 lg:row-span-2'
                 : embeddedAr
-                  ? 'relative flex h-full min-h-0 min-w-0 w-full flex-col'
+                  ? embeddedArMobileBelow
+                    ? 'relative flex w-full min-w-0 flex-col'
+                    : 'relative flex h-full min-h-0 min-w-0 w-full flex-col'
                   : 'relative min-w-0 w-full overflow-visible'
             }
           >
-          <div className={embeddedAr ? 'relative min-h-0 min-w-0 flex-1' : 'relative min-w-0 shrink-0'}>
+          <div className={embeddedAr && !embeddedArMobileBelow ? 'relative min-h-0 min-w-0 flex-1' : 'relative min-w-0 shrink-0 w-full'}>
             <div
               ref={viewportRef}
               className={`relative w-full ${
@@ -1199,16 +1271,22 @@ export function ArchiviewFacadePanel({
               } ${
                 variant === 'ar'
                   ? embeddedAr
-                    ? 'h-full bg-arch-green-deep'
+                    ? embeddedArMobileBelow
+                      ? 'bg-arch-green-deep'
+                      : 'h-full bg-arch-green-deep'
                     : 'rounded-lg border border-arch-surface/15 bg-arch-green-deep/80'
                   : 'rounded-xl border border-arch-line bg-arch-surface-2/20'
               } ${
                 zoom > ZOOM_MIN
                   ? embeddedAr
-                    ? 'h-full max-h-none overflow-hidden'
+                    ? embeddedArMobileBelow
+                      ? 'overflow-hidden'
+                      : 'h-full max-h-none overflow-hidden'
                     : 'max-h-[min(78vh,820px)] overflow-hidden'
                   : embeddedAr
-                    ? 'h-full overflow-x-hidden overflow-y-auto [overflow-anchor:none]'
+                    ? embeddedArMobileBelow
+                      ? 'overflow-hidden'
+                      : 'h-full overflow-x-hidden overflow-y-auto [overflow-anchor:none]'
                     : 'overflow-hidden'
               } ${zoom > ZOOM_MIN ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
               onMouseLeave={() => setHoverRegion(null)}
@@ -1398,7 +1476,12 @@ export function ArchiviewFacadePanel({
                   {regionsBadges.map((r) => {
                     const on = hoverIdx === r.idx || selectedIdx === r.idx
                     const color = CLASS_COLORS[r.cls] ?? '#444'
-                    const size = mobileBadgeClicks ? (on ? 32 : 28) : on ? 26 : 22
+                    const badge = facadeBadgeMetrics(
+                      facadeImageWidth || 320,
+                      on,
+                      r.idx >= 10,
+                      scaleBadgesWithFacade,
+                    )
                     const { badgeX, badgeY } = r.badgeLayout
                     return (
                       <button
@@ -1413,21 +1496,22 @@ export function ArchiviewFacadePanel({
                           event.stopPropagation()
                           setSelectedIdx((current) => (current === r.idx ? null : r.idx))
                         }}
-                        className={`absolute flex items-center justify-center rounded-full border-2 font-bold leading-none text-white shadow-md ${
+                        className={`absolute flex items-center justify-center rounded-full border-solid font-bold leading-none text-white shadow-md ${
                           mobileBadgeClicks ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none'
-                        } ${on ? 'border-white ring-2 ring-white/90' : 'border-white'}`}
+                        } border-white`}
                         style={{
                           left: `${badgeX}%`,
                           top: `${badgeY}%`,
-                          width: size,
-                          height: size,
-                          marginLeft: -size / 2,
-                          marginTop: -size / 2,
+                          width: badge.size,
+                          height: badge.size,
+                          marginLeft: -badge.size / 2,
+                          marginTop: -badge.size / 2,
                           backgroundColor: color,
-                          fontSize: r.idx >= 10 ? 11 : 12,
+                          fontSize: badge.fontSize,
+                          borderWidth: badge.borderWidth,
                           boxShadow: on
-                            ? `0 0 0 2px ${color}88, 0 2px 8px rgba(0,0,0,0.35)`
-                            : '0 0 0 1px rgba(0,0,0,0.2)',
+                            ? `0 0 0 ${badge.ringWidth}px rgba(255,255,255,0.9), 0 0 0 ${badge.ringWidth + badge.borderWidth}px ${color}88, 0 ${Math.max(1, Math.round(badge.size * 0.08))}px ${Math.max(2, Math.round(badge.size * 0.22))}px rgba(0,0,0,0.35)`
+                            : `0 0 0 ${Math.max(1, Math.round(badge.borderWidth * 0.5))}px rgba(0,0,0,0.2)`,
                         }}
                       >
                         {r.idx}
@@ -1462,6 +1546,12 @@ export function ArchiviewFacadePanel({
               </div>
 
             </div>
+            {embeddedArMobileBelow ? (
+              <div
+                ref={setInternalBelowPhotoHost}
+                className="shrink-0 border-t border-arch-surface/10 bg-arch-green-deep px-3 py-2 empty:hidden"
+              />
+            ) : null}
             {sideBySide && regionList ? (
               <div className="w-full pt-2">{regionList}</div>
             ) : null}
@@ -1536,7 +1626,7 @@ export function ArchiviewFacadePanel({
 
         </div>
       )}
-      {showEmbeddedMobileBelowPlate && mobileArPlateHost
+      {showEmbeddedMobileBelowPlate && belowPhotoPlateHost
         ? createPortal(
             <div
               className={`${TRACE_PLATE_SHELL_CLASS} pointer-events-auto overflow-hidden shadow-2xl backdrop-blur-xl`}
@@ -1545,9 +1635,9 @@ export function ArchiviewFacadePanel({
               aria-modal="true"
               aria-label={`Экспертная заметка ${plateRegion!.idx}`}
             >
-              <div className="max-h-[min(42vh,300px)] overflow-y-auto px-4 py-3">{tracePlateContent}</div>
+              <div className="max-h-[min(38vh,260px)] overflow-y-auto px-4 py-3">{tracePlateContent}</div>
             </div>,
-            mobileArPlateHost,
+            belowPhotoPlateHost,
           )
         : null}
       {showPlatePortal && platePortalStyle
