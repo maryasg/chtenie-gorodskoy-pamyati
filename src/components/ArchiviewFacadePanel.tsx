@@ -25,6 +25,7 @@ import {
 } from '../lib/tracePlateDragStorage'
 import {
   TRACE_PLATE_SHELL_CLASS,
+  TRACE_PLATE_SCROLL_CLASS,
   tracePlateBackground,
 } from '../lib/tracePlateStyle'
 import { computeBadgeLayout, assignBadgeLayouts, assignMobileBottomBadgeLayouts, type BadgeLayout } from '../lib/regionBadgeLayout'
@@ -1632,7 +1633,7 @@ export function ArchiviewFacadePanel({
               aria-modal="true"
               aria-label={`Экспертная заметка ${plateRegion!.idx}`}
             >
-              <div className="max-h-[min(38vh,260px)] overflow-y-auto px-4 py-3">{tracePlateContent}</div>
+              <div className={`max-h-[min(38vh,260px)] overflow-y-auto px-4 py-3 ${TRACE_PLATE_SCROLL_CLASS}`}>{tracePlateContent}</div>
             </div>,
             belowPhotoPlateHost,
           )
@@ -1692,7 +1693,7 @@ export function ArchiviewFacadePanel({
                 <div
                   className={
                     plateExpanded
-                      ? 'max-h-[min(70dvh,420px)] overflow-y-auto px-5 py-4'
+                      ? `max-h-[min(70dvh,420px)] overflow-y-auto px-5 py-4 ${TRACE_PLATE_SCROLL_CLASS}`
                       : 'px-3 py-2.5 text-sm leading-snug'
                   }
                 >
