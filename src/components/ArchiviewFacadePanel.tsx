@@ -332,6 +332,9 @@ export function ArchiviewFacadePanel({
   )
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null)
   const isMobile = useMediaQuery('(max-width: 639px)')
+  const embeddedArMobileBelow = embeddedAr && isMobile
+  const [internalBelowPhotoHost, setInternalBelowPhotoHost] = useState<HTMLDivElement | null>(null)
+  const belowPhotoPlateHost = mobileArPlateHost ?? internalBelowPhotoHost
   const useMobileFacadeChrome = isMobile && !embeddedAr && variant !== 'ar'
   const useMobileNearRegionBadges =
     useMobileFacadeChrome &&
@@ -974,7 +977,11 @@ export function ArchiviewFacadePanel({
   }, [embeddedAr, isMobile, plateExpanded, platePlacement, plateRegion])
 
   const showEmbeddedMobileBelowPlate = Boolean(
-    embeddedAr && isMobile && plateExpanded && plateRegion && tracePlateContent && mobileArPlateHost,
+    embeddedArMobileBelow &&
+      plateExpanded &&
+      plateRegion &&
+      tracePlateContent &&
+      belowPhotoPlateHost,
   )
 
   const showMobilePortal =
@@ -1102,7 +1109,7 @@ export function ArchiviewFacadePanel({
     ) : null
 
   return (
-    <div className={embeddedAr ? 'h-full space-y-0' : 'space-y-3'}>
+    <div className={embeddedAr ? (embeddedArMobileBelow ? 'space-y-0' : 'h-full space-y-0') : 'space-y-3'}>
       {!hideIntro && variant === 'default' ? (
         <p className="text-sm text-arch-muted">
           {sideBySide ? (
@@ -1167,14 +1174,22 @@ export function ArchiviewFacadePanel({
       {imageOk && (
         <div
           ref={facadeBlockRef}
-          className={`relative ${embeddedAr ? 'h-full min-h-0 overflow-hidden' : 'overflow-visible'}`}
+          className={`relative ${
+            embeddedAr
+              ? embeddedArMobileBelow
+                ? 'overflow-visible'
+                : 'h-full min-h-0 overflow-hidden'
+              : 'overflow-visible'
+          }`}
         >
           <div
             className={
               useSidebarLayout
                 ? 'flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_17rem] lg:grid-rows-[auto_auto] xl:grid-cols-[minmax(0,1fr)_20rem] lg:items-start'
                 : embeddedAr
-                  ? 'flex h-full min-h-0 flex-col'
+                  ? embeddedArMobileBelow
+                    ? 'flex w-full flex-col'
+                    : 'flex h-full min-h-0 flex-col'
                   : 'flex flex-col gap-4'
             }
           >
@@ -1183,11 +1198,13 @@ export function ArchiviewFacadePanel({
               useSidebarLayout
                 ? 'relative order-1 flex min-w-0 flex-col gap-4 overflow-visible lg:col-start-1 lg:row-start-1'
                 : embeddedAr
-                  ? 'relative flex h-full min-h-0 min-w-0 w-full flex-col'
+                  ? embeddedArMobileBelow
+                    ? 'relative flex w-full min-w-0 flex-col'
+                    : 'relative flex h-full min-h-0 min-w-0 w-full flex-col'
                   : 'relative min-w-0 w-full overflow-visible'
             }
           >
-          <div className={embeddedAr ? 'relative min-h-0 min-w-0 flex-1' : 'relative min-w-0 shrink-0'}>
+          <div className={embeddedAr && !embeddedArMobileBelow ? 'relative min-h-0 min-w-0 flex-1' : 'relative min-w-0 shrink-0 w-full'}>
             <div
               ref={viewportRef}
               className={`relative w-full ${
@@ -1195,16 +1212,22 @@ export function ArchiviewFacadePanel({
               } ${
                 variant === 'ar'
                   ? embeddedAr
-                    ? 'h-full bg-arch-green-deep'
+                    ? embeddedArMobileBelow
+                      ? 'bg-arch-green-deep'
+                      : 'h-full bg-arch-green-deep'
                     : 'rounded-lg border border-arch-surface/15 bg-arch-green-deep/80'
                   : 'rounded-xl border border-arch-line bg-arch-surface-2/20'
               } ${
                 zoom > ZOOM_MIN
                   ? embeddedAr
-                    ? 'h-full max-h-none overflow-hidden'
+                    ? embeddedArMobileBelow
+                      ? 'overflow-hidden'
+                      : 'h-full max-h-none overflow-hidden'
                     : 'max-h-[min(78vh,820px)] overflow-hidden'
                   : embeddedAr
-                    ? 'h-full overflow-x-hidden overflow-y-auto [overflow-anchor:none]'
+                    ? embeddedArMobileBelow
+                      ? 'overflow-hidden'
+                      : 'h-full overflow-x-hidden overflow-y-auto [overflow-anchor:none]'
                     : 'overflow-hidden'
               } ${zoom > ZOOM_MIN ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : ''}`}
               onMouseLeave={() => setHoverRegion(null)}
@@ -1455,6 +1478,12 @@ export function ArchiviewFacadePanel({
               </div>
 
             </div>
+            {embeddedArMobileBelow ? (
+              <div
+                ref={setInternalBelowPhotoHost}
+                className="shrink-0 border-t border-arch-surface/10 bg-arch-green-deep px-3 py-2 empty:hidden"
+              />
+            ) : null}
             {sideBySide && regionList ? (
               <div className="w-full pt-2">{regionList}</div>
             ) : null}
@@ -1511,7 +1540,7 @@ export function ArchiviewFacadePanel({
 
         </div>
       )}
-      {showEmbeddedMobileBelowPlate && mobileArPlateHost
+      {showEmbeddedMobileBelowPlate && belowPhotoPlateHost
         ? createPortal(
             <div
               className={`${TRACE_PLATE_SHELL_CLASS} pointer-events-auto overflow-hidden shadow-2xl backdrop-blur-xl`}
@@ -1520,9 +1549,9 @@ export function ArchiviewFacadePanel({
               aria-modal="true"
               aria-label={`Экспертная заметка ${plateRegion!.idx}`}
             >
-              <div className="max-h-[min(42vh,300px)] overflow-y-auto px-4 py-3">{tracePlateContent}</div>
+              <div className="max-h-[min(38vh,260px)] overflow-y-auto px-4 py-3">{tracePlateContent}</div>
             </div>,
-            mobileArPlateHost,
+            belowPhotoPlateHost,
           )
         : null}
       {showPlatePortal && platePortalStyle
