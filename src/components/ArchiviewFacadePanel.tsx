@@ -998,28 +998,19 @@ export function ArchiviewFacadePanel({
       comment={plateRegion.comment}
       verification={building?.verification}
       expanded={plateExpanded}
-      compact={embeddedAr || platePlacement?.compact}
+      compact={embeddedAr ? !plateExpanded : Boolean(platePlacement?.compact)}
       onClose={plateExpanded ? () => setSelectedIdx(null) : undefined}
     />
   ) : null
 
   const embeddedPlateLayout = useMemo(() => {
-    if (!embeddedAr || !plateRegion) return null
-    if (isMobile && plateExpanded) return null
+    if (!embeddedAr || !plateRegion || plateExpanded) return null
     if (isMobile) {
       return {
         left: '50%',
         top: '50%',
         transform: 'translate(-50%, -50%)',
         maxWidth: 'calc(100% - 1rem)',
-      }
-    }
-    if (plateExpanded) {
-      return {
-        left: '50%',
-        top: '50%',
-        transform: 'translate(-50%, -50%)',
-        maxWidth: 'min(92%, 300px)',
       }
     }
     if (!platePlacement) return null
@@ -1039,6 +1030,10 @@ export function ArchiviewFacadePanel({
       belowPhotoPlateHost,
   )
 
+  const showArDesktopExpandedPortal = Boolean(
+    embeddedAr && !isMobile && plateExpanded && plateRegion && tracePlateContent,
+  )
+
   const showMobilePortal =
     isMobile &&
     Boolean(plateRegion && platePlacement && tracePlateContent) &&
@@ -1046,6 +1041,17 @@ export function ArchiviewFacadePanel({
     !showEmbeddedMobileBelowPlate
 
   const platePortalStyle = useMemo(() => {
+    if (showArDesktopExpandedPortal) {
+      return {
+        left: '50%',
+        top: '50%',
+        transform: 'translate(-50%, -50%)' as const,
+        maxWidth: 'min(440px, calc(100vw - 1.5rem))',
+        minWidth: 'min(300px, calc(100vw - 1.5rem))',
+        width: 'min(440px, calc(100vw - 1.5rem))' as const,
+        backgroundColor: tracePlateBackground(true),
+      }
+    }
     if (!platePlacement) return null
     const shared = {
       transform: 'translate(-50%, -50%)' as const,
@@ -1069,7 +1075,7 @@ export function ArchiviewFacadePanel({
       top: `${plateViewportPosition.yPct}vh`,
       ...shared,
     }
-  }, [isMobile, plateExpanded, platePlacement, plateViewportPosition])
+  }, [isMobile, plateExpanded, platePlacement, plateViewportPosition, showArDesktopExpandedPortal])
 
   const showDesktopPortal =
     !isMobile &&
@@ -1077,7 +1083,7 @@ export function ArchiviewFacadePanel({
     Boolean(plateRegion && platePlacement && plateViewportPosition && tracePlateContent) &&
     !(variant === 'ar' && plateExpanded)
 
-  const showPlatePortal = showMobilePortal || showDesktopPortal
+  const showPlatePortal = showMobilePortal || showDesktopPortal || showArDesktopExpandedPortal
 
   const comparisonBlock =
     !sideBySide && variant === 'default' ? (
@@ -1520,27 +1526,19 @@ export function ArchiviewFacadePanel({
                   })}
                 </div>
               ) : null}
-              {embeddedAr && plateRegion && tracePlateContent && embeddedPlateLayout && !(isMobile && plateExpanded) ? (
+              {embeddedAr && plateRegion && tracePlateContent && embeddedPlateLayout ? (
                 <div
-                  className={`absolute z-50 ${TRACE_PLATE_SHELL_CLASS} overflow-hidden shadow-2xl backdrop-blur-xl ${
-                    plateExpanded ? 'pointer-events-auto' : 'pointer-events-none'
-                  }`}
+                  className={`absolute z-50 ${TRACE_PLATE_SHELL_CLASS} overflow-hidden shadow-2xl backdrop-blur-xl pointer-events-none`}
                   style={{
                     left: embeddedPlateLayout.left,
                     top: embeddedPlateLayout.top,
                     transform: embeddedPlateLayout.transform,
                     maxWidth: embeddedPlateLayout.maxWidth,
-                    width: plateExpanded ? embeddedPlateLayout.maxWidth : undefined,
-                    backgroundColor: tracePlateBackground(plateExpanded),
+                    backgroundColor: tracePlateBackground(false),
                   }}
-                  role={plateExpanded ? 'dialog' : undefined}
-                  aria-modal={plateExpanded ? true : undefined}
                   aria-label={`Экспертная заметка ${plateRegion.idx}`}
-                  onClick={plateExpanded ? (event) => event.stopPropagation() : undefined}
                 >
-                  <div className={plateExpanded ? 'max-h-[min(52vh,320px)] overflow-y-auto px-4 py-3' : 'px-3 py-2 text-sm leading-snug'}>
-                    {tracePlateContent}
-                  </div>
+                  <div className="px-3 py-2 text-sm leading-snug">{tracePlateContent}</div>
                 </div>
               ) : null}
               </div>
@@ -1642,7 +1640,7 @@ export function ArchiviewFacadePanel({
       {showPlatePortal && platePortalStyle
         ? createPortal(
             <>
-              {plateExpanded && isMobile ? (
+              {plateExpanded && (isMobile || showArDesktopExpandedPortal) ? (
                 <button
                   type="button"
                   className="fixed inset-0 z-[9989] border-0 bg-arch-ink/45 p-0"
