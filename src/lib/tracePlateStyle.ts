@@ -5,6 +5,8 @@ export const TRACE_PLATE_HOVER_GLASS_BG = 'rgba(18, 53, 40, 0.65)'
 export const TRACE_PLATE_SHELL_CLASS =
   'overflow-hidden rounded-2xl border border-arch-gold/60 text-left text-sm leading-relaxed text-arch-surface shadow-2xl backdrop-blur-xl'
 
+export const TRACE_PLATE_SCROLL_CLASS = 'arch-trace-plate-scroll'
+
 export function tracePlateBackground(expanded: boolean): string {
   return expanded ? TRACE_PLATE_GLASS_BG : TRACE_PLATE_HOVER_GLASS_BG
 }

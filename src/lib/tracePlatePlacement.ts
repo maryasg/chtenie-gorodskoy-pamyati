@@ -132,7 +132,7 @@ export function tracePlatePlacement(
   const regionSmall = span <= 7.5
 
   const { blockCx, blockCy, imageRightPct, imageLeftPct } = imageToBlock(cxPct, cyPct, layout)
-  const hasSidebar = sidebarLayout && layout && imageRightPct < 98
+  const hasSidebar = sidebarLayout && Boolean(layout)
 
   const aspectRatio = cyPct > 58 || cyPct < 28 ? 0.75 : cxPct < 38 ? 1.33 : 0.75
 

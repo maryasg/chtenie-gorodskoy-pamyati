@@ -107,6 +107,29 @@ body::before {
   color: var(--color-arch-green-deep);
 }
 
+/* Тонкая полупрозрачная прокрутка в карточках артефактов (фасад + AR) */
+.arch-trace-plate-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(251, 250, 247, 0.32) transparent;
+}
+
+.arch-trace-plate-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.arch-trace-plate-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.arch-trace-plate-scroll::-webkit-scrollbar-thumb {
+  background: rgba(251, 250, 247, 0.28);
+  border-radius: 9999px;
+}
+
+.arch-trace-plate-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(251, 250, 247, 0.42);
+}
+
 .arch-map-marker-preview {
   position: relative;
   border-radius: 0.875rem;
