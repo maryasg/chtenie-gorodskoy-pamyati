@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import type { ArchiviewAnnotation, ArchiviewBuildingAssets } from '../data/explorer/archiviewAssets'
@@ -158,6 +158,71 @@ function facadeBadgeMetrics(
     borderWidth: Math.max(1, Math.round(size * 0.09)),
     ringWidth: Math.max(1, Math.round(size * 0.08)),
   }
+}
+
+function FacadeLayerToggleButton({
+  active,
+  label,
+  title,
+  onClick,
+  children,
+}: {
+  active: boolean
+  label: string
+  title: string
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      aria-pressed={!active}
+      title={title}
+      className={`flex h-8 w-8 items-center justify-center rounded-md transition ${
+        active
+          ? 'text-arch-green-deep hover:bg-arch-green-soft'
+          : 'bg-arch-green-soft text-arch-green-deep ring-1 ring-inset ring-arch-green/25'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function FacadeBadgesToggleIcon({ hidden }: { hidden: boolean }) {
+  if (hidden) {
+    return (
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+        <circle cx="12" cy="12" r="3" />
+        <path d="m3 3 18 18" strokeLinecap="round" />
+      </svg>
+    )
+  }
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  )
+}
+
+function FacadeHighlightsToggleIcon({ hidden }: { hidden: boolean }) {
+  if (hidden) {
+    return (
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+        <rect x="4" y="6" width="16" height="12" rx="1.5" />
+        <path d="m4 6 16 16" strokeLinecap="round" />
+      </svg>
+    )
+  }
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <rect x="4" y="6" width="16" height="12" rx="1.5" />
+    </svg>
+  )
 }
 
 type Pan = { x: number; y: number }
@@ -372,6 +437,8 @@ export function ArchiviewFacadePanel({
   const [zoom, setZoom] = useState(ZOOM_MIN)
   const [pan, setPan] = useState<Pan>({ x: 0, y: 0 })
   const [isPanning, setIsPanning] = useState(false)
+  const [showRegionHighlights, setShowRegionHighlights] = useState(true)
+  const [showRegionBadges, setShowRegionBadges] = useState(true)
   const viewportRef = useRef<HTMLDivElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
   const facadeBlockRef = useRef<HTMLDivElement>(null)
@@ -759,6 +826,11 @@ export function ArchiviewFacadePanel({
     }
     setPlateDragPositions(loadPlateDragPositions(assets.cardId))
   }, [assets.cardId])
+
+  useEffect(() => {
+    setShowRegionHighlights(true)
+    setShowRegionBadges(true)
+  }, [assets.cardId, assets.comparisonId])
 
   const resetPlateDragPosition = useCallback(
     (regionIdx: number) => {
@@ -1341,6 +1413,35 @@ export function ArchiviewFacadePanel({
               </div>
               ) : null}
 
+              {regions.length > 0 ? (
+                <div
+                  data-facade-layer-toolbar
+                  className="absolute bottom-2 right-2 z-40 flex items-center gap-1 rounded-lg border border-arch-line/80 bg-arch-surface/95 p-1 shadow-md backdrop-blur-sm"
+                  role="toolbar"
+                  aria-label="Слои подсветки"
+                  onPointerDown={(event) => event.stopPropagation()}
+                >
+                  {variant !== 'ar' ? (
+                    <FacadeLayerToggleButton
+                      active={showRegionBadges}
+                      label={showRegionBadges ? 'Скрыть номера зон' : 'Показать номера зон'}
+                      title={showRegionBadges ? 'Скрыть номера зон' : 'Показать номера зон'}
+                      onClick={() => setShowRegionBadges((current) => !current)}
+                    >
+                      <FacadeBadgesToggleIcon hidden={!showRegionBadges} />
+                    </FacadeLayerToggleButton>
+                  ) : null}
+                  <FacadeLayerToggleButton
+                    active={showRegionHighlights}
+                    label={showRegionHighlights ? 'Скрыть подсветку зон' : 'Показать подсветку зон'}
+                    title={showRegionHighlights ? 'Скрыть подсветку зон' : 'Показать подсветку зон'}
+                    onClick={() => setShowRegionHighlights((current) => !current)}
+                  >
+                    <FacadeHighlightsToggleIcon hidden={!showRegionHighlights} />
+                  </FacadeLayerToggleButton>
+                </div>
+              ) : null}
+
               {variant === 'ar' && imageKind === 'rectified' && !(embeddedAr && isMobile) ? (
                 <div className="pointer-events-none absolute inset-x-0 top-0 z-30 border-b border-amber-400/40 bg-amber-950/75 px-3 py-1.5 text-center text-[11px] leading-snug text-amber-100/95">
                   Исходное фото ещё не на сайте — показано выпрямленное. Экспортируйте{' '}
@@ -1375,7 +1476,7 @@ export function ArchiviewFacadePanel({
                       : 'h-auto w-auto max-w-full max-h-[min(78vh,820px)] rounded-xl'
                   }`}
                 />
-                {regions.length > 0 && (
+                {regions.length > 0 && showRegionHighlights ? (
                 <svg
                   className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
                   viewBox="0 0 100 100"
@@ -1397,7 +1498,7 @@ export function ArchiviewFacadePanel({
                     )
                   })}
                 </svg>
-              )}
+              ) : null}
               {regions.length > 0 && (
                 <svg
                   className="absolute inset-0 z-10 h-full w-full touch-manipulation overflow-visible"
@@ -1438,7 +1539,7 @@ export function ArchiviewFacadePanel({
                     : null}
                 </svg>
               )}
-              {regions.length > 0 && variant !== 'ar' ? (
+              {regions.length > 0 && variant !== 'ar' && showRegionBadges ? (
                 <div
                   className={`absolute inset-0 z-20 overflow-visible ${useMobileFacadeChrome ? '' : 'pointer-events-none'}`}
                   aria-hidden={!useMobileFacadeChrome}
