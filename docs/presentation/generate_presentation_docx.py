@@ -73,6 +73,8 @@ def add_appendix(doc, title, on_screen=None, speech=None, notes=None):
 
 def main():
     doc = Document()
+    doc.core_properties.author = "user"
+    doc.core_properties.last_modified_by = "user"
 
     section = doc.sections[0]
     section.top_margin = Cm(2)
