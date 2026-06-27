@@ -215,6 +215,13 @@ export function tracePlatePlacement(
     topPct = clamp(blockCy + (layout ? layout.imageHeightPct * 0.12 : 12), 12, 70)
   }
 
+  // Куманины: превью зон 8 и 9 — по центру зелёной подсветки, не у стыка с сайдбаром
+  if (cardId === 'MOSCOW_001' && (regionIdx === 8 || regionIdx === 9) && !expanded) {
+    leftPct = clamp(blockCx, imageLeftPct + 10, imageRightPct - 6)
+    topPct = clamp(blockCy, 10, 82)
+    transform = 'translate(-50%, -50%)'
+  }
+
   return {
     leftPct,
     topPct,
