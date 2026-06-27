@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import L from 'leaflet'
 import { Link } from 'react-router-dom'
 import { BUILDINGS } from '../data/buildings'
@@ -12,6 +13,8 @@ import shadow from 'leaflet/dist/images/marker-shadow.png'
 // @ts-expect-error leaflet default icon paths
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({ iconRetinaUrl: iconRetina, iconUrl: icon, shadowUrl: shadow })
+
+type PopupAnchor = { x: number; y: number; placeBelow: boolean }
 
 function coloredIcon(color: string, scale = 1) {
   const hit = 30
@@ -31,16 +34,6 @@ function traceSummary(b: Building): string {
   return titles.join(' · ') + more
 }
 
-function buildingPopupHtml(b: Building): string {
-  const href = `${import.meta.env.BASE_URL}building/${b.id}`
-  return `<div class="arch-map-popup-inner">
-    <strong class="arch-map-popup-title">${b.name}</strong>
-    <span class="arch-map-popup-address">${b.address}</span>
-    <p class="arch-map-popup-summary">${traceSummary(b)}</p>
-    <a class="arch-map-popup-link" href="${href}">Открыть карточку →</a>
-  </div>`
-}
-
 function fitAllBuildings(map: L.Map) {
   const bounds = L.latLngBounds(BUILDINGS.map((b) => [b.lat, b.lng] as L.LatLngTuple))
   const narrow = window.innerWidth < 640
@@ -50,11 +43,91 @@ function fitAllBuildings(map: L.Map) {
   })
 }
 
+function MapMarkerPreview({
+  building,
+  anchor,
+  onKeepOpen,
+  onScheduleClose,
+}: {
+  building: Building
+  anchor: PopupAnchor
+  onKeepOpen: () => void
+  onScheduleClose: () => void
+}) {
+  return createPortal(
+    <div className="pointer-events-none fixed inset-0 z-[10000]" aria-hidden>
+      <div
+        className={`arch-map-marker-preview pointer-events-auto absolute w-[min(300px,calc(100vw-1.5rem))] ${
+          anchor.placeBelow ? 'arch-map-marker-preview--below' : ''
+        }`}
+        style={{
+          left: anchor.x,
+          top: anchor.y,
+          transform: anchor.placeBelow
+            ? 'translate(-50%, 14px)'
+            : 'translate(-50%, calc(-100% - 14px))',
+        }}
+        onMouseEnter={onKeepOpen}
+        onMouseLeave={onScheduleClose}
+        role="tooltip"
+        id={`map-preview-${building.id}`}
+      >
+        <h3 className="arch-map-popup-title">{building.name}</h3>
+        <span className="arch-map-popup-address">{building.address}</span>
+        <p className="arch-map-popup-summary">{traceSummary(building)}</p>
+        <Link to={`/building/${building.id}`} className="arch-map-popup-link">
+          Открыть карточку →
+        </Link>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
 export function MapView() {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const markersRef = useRef<Map<string, L.Marker>>(new Map())
+  const hoverClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [popupAnchor, setPopupAnchor] = useState<PopupAnchor | null>(null)
+
+  const cancelHoverClear = useCallback(() => {
+    if (hoverClearTimerRef.current) {
+      clearTimeout(hoverClearTimerRef.current)
+      hoverClearTimerRef.current = null
+    }
+  }, [])
+
+  const scheduleHoverClear = useCallback(() => {
+    cancelHoverClear()
+    hoverClearTimerRef.current = setTimeout(() => setHoveredId(null), 140)
+  }, [cancelHoverClear])
+
+  const updatePopupAnchor = useCallback(() => {
+    if (!hoveredId || !mapRef.current || !containerRef.current) {
+      setPopupAnchor(null)
+      return
+    }
+    const building = BUILDINGS.find((b) => b.id === hoveredId)
+    if (!building) {
+      setPopupAnchor(null)
+      return
+    }
+
+    const point = mapRef.current.latLngToContainerPoint([building.lat, building.lng])
+    const rect = containerRef.current.getBoundingClientRect()
+    const cardHalf = 150
+    const x = Math.min(
+      Math.max(rect.left + point.x, cardHalf + 12),
+      window.innerWidth - cardHalf - 12,
+    )
+    const y = rect.top + point.y
+    const headerBottom = document.querySelector('header')?.getBoundingClientRect().bottom ?? 72
+    const placeBelow = y - 168 < headerBottom + 8
+
+    setPopupAnchor({ x, y, placeBelow })
+  }, [hoveredId])
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
@@ -75,22 +148,14 @@ export function MapView() {
         riseOnHover: true,
       }).addTo(map)
 
-      marker.bindPopup(buildingPopupHtml(b), {
-        closeButton: true,
-        className: 'arch-map-popup',
-        maxWidth: 300,
-        minWidth: 220,
-        offset: [0, -2],
-        autoPan: false,
-      })
-
-      marker.on('mouseover', () => setHoveredId(b.id))
-      marker.on('mouseout', () => {
-        setHoveredId((current) => (current === b.id ? null : current))
-      })
-      marker.on('click', () => {
+      marker.on('mouseover', () => {
+        cancelHoverClear()
         setHoveredId(b.id)
-        marker.openPopup()
+      })
+      marker.on('mouseout', scheduleHoverClear)
+      marker.on('click', () => {
+        cancelHoverClear()
+        setHoveredId(b.id)
       })
 
       markers.set(b.id, marker)
@@ -137,7 +202,7 @@ export function MapView() {
       mapRef.current = null
       markers.clear()
     }
-  }, [])
+  }, [cancelHoverClear, scheduleHoverClear])
 
   useEffect(() => {
     markersRef.current.forEach((marker, id) => {
@@ -146,11 +211,33 @@ export function MapView() {
       const meta = MAP_STATUS_META[b.mapStatus]
       const active = id === hoveredId
       marker.setIcon(coloredIcon(meta.marker, active ? 1.45 : 1))
-      if (active) {
-        marker.openPopup()
-      }
     })
   }, [hoveredId])
+
+  useEffect(() => {
+    updatePopupAnchor()
+    const map = mapRef.current
+    if (!map) return undefined
+
+    const onMapChange = () => updatePopupAnchor()
+    map.on('move zoom zoomend moveend resize', onMapChange)
+    window.addEventListener('scroll', onMapChange, true)
+    window.addEventListener('resize', onMapChange)
+    return () => {
+      map.off('move zoom zoomend moveend resize', onMapChange)
+      window.removeEventListener('scroll', onMapChange, true)
+      window.removeEventListener('resize', onMapChange)
+    }
+  }, [hoveredId, updatePopupAnchor])
+
+  useEffect(
+    () => () => {
+      if (hoverClearTimerRef.current) clearTimeout(hoverClearTimerRef.current)
+    },
+    [],
+  )
+
+  const previewBuilding = hoveredId ? BUILDINGS.find((b) => b.id === hoveredId) : undefined
 
   return (
     <div className="space-y-4">
@@ -182,10 +269,16 @@ export function MapView() {
           <li key={b.id} className="flex min-h-0">
             <Link
               to={`/building/${b.id}`}
-              onMouseEnter={() => setHoveredId(b.id)}
-              onMouseLeave={() => setHoveredId(null)}
-              onFocus={() => setHoveredId(b.id)}
-              onBlur={() => setHoveredId(null)}
+              onMouseEnter={() => {
+                cancelHoverClear()
+                setHoveredId(b.id)
+              }}
+              onMouseLeave={scheduleHoverClear}
+              onFocus={() => {
+                cancelHoverClear()
+                setHoveredId(b.id)
+              }}
+              onBlur={scheduleHoverClear}
               className={`flex h-full w-full flex-col rounded-xl border p-3 transition ${
                 hoveredId === b.id
                   ? 'border-arch-gold bg-arch-green-soft shadow-sm'
@@ -199,6 +292,14 @@ export function MapView() {
           </li>
         ))}
       </ul>
+      {previewBuilding && popupAnchor ? (
+        <MapMarkerPreview
+          building={previewBuilding}
+          anchor={popupAnchor}
+          onKeepOpen={cancelHoverClear}
+          onScheduleClose={scheduleHoverClear}
+        />
+      ) : null}
     </div>
   )
 }

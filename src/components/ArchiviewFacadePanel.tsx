@@ -394,6 +394,7 @@ export function ArchiviewFacadePanel({
   const viewportRef = useRef<HTMLDivElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
   const facadeBlockRef = useRef<HTMLDivElement>(null)
+  const facadeColumnRef = useRef<HTMLDivElement>(null)
   const [blockLayout, setBlockLayout] = useState<BlockLayoutMetrics | null>(null)
   const [facadeImageWidth, setFacadeImageWidth] = useState(0)
   const [plateDragPositions, setPlateDragPositions] = useState<PlateDragMap>({})
@@ -749,6 +750,8 @@ export function ArchiviewFacadePanel({
   /** Overlay на карточке: слева фасад + слайдер, справа список следов сверху. */
   const useSidebarLayout = !embeddedAr && !sideBySide && variant === 'default'
 
+  const plateLayoutBlockRef = useSidebarLayout ? facadeColumnRef : facadeBlockRef
+
   const platePlacement = useMemo(() => {
     if (!plateRegion) return null
     const xs = plateRegion.polygonPct.map((p) => p[0])
@@ -806,7 +809,7 @@ export function ArchiviewFacadePanel({
       setPlateAutoViewport(null)
       return
     }
-    const block = facadeBlockRef.current
+    const block = plateLayoutBlockRef.current
     if (!block) return
     const blockRect = block.getBoundingClientRect()
     if (blockRect.width < 1 || blockRect.height < 1) return
@@ -916,7 +919,7 @@ export function ArchiviewFacadePanel({
 
   useLayoutEffect(() => {
     const measureBlockLayout = () => {
-      const block = facadeBlockRef.current
+      const block = plateLayoutBlockRef.current
       const viewport = viewportRef.current
       if (!block || !viewport) {
         setBlockLayout((prev) => (prev === null ? prev : null))
@@ -944,7 +947,7 @@ export function ArchiviewFacadePanel({
 
     measureBlockLayout()
     const ro = new ResizeObserver(updateBlockLayout)
-    const block = facadeBlockRef.current
+    const block = plateLayoutBlockRef.current
     const viewport = viewportRef.current
     if (block) ro.observe(block)
     if (viewport) ro.observe(viewport)
@@ -1258,6 +1261,7 @@ export function ArchiviewFacadePanel({
             }
           >
           <div
+            ref={useSidebarLayout ? facadeColumnRef : undefined}
             className={
               useSidebarLayout
                 ? isMobile

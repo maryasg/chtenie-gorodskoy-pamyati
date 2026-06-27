@@ -130,6 +130,37 @@ body::before {
   background: rgba(251, 250, 247, 0.42);
 }
 
+.arch-map-marker-preview {
+  position: relative;
+  border-radius: 0.875rem;
+  border: 1px solid var(--color-arch-line);
+  background: var(--color-arch-surface);
+  padding: 0.75rem 0.9rem;
+  box-shadow: 0 10px 28px rgba(16, 16, 15, 0.18);
+}
+
+.arch-map-marker-preview::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  width: 12px;
+  height: 12px;
+  transform: translateX(-50%) rotate(45deg);
+  background: var(--color-arch-surface);
+  border-right: 1px solid var(--color-arch-line);
+  border-bottom: 1px solid var(--color-arch-line);
+}
+
+.arch-map-marker-preview--below::after {
+  top: -7px;
+  bottom: auto;
+  border-right: 0;
+  border-bottom: 0;
+  border-top: 1px solid var(--color-arch-line);
+  border-left: 1px solid var(--color-arch-line);
+}
+
 /* Утилиты карточек (секции здания) */
 .arch-section {
   border-radius: 1.25rem;
