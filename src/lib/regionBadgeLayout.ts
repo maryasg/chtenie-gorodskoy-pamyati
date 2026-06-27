@@ -35,6 +35,7 @@ type CardBadgePrefs = {
 /** Дом Ардовых / Куманиных: предпочтительная сторона выноски. */
 const MOSCOW_001_PREFS: CardBadgePrefs = {
   collisionRadius: 2.65,
+  forceOnRegion: [1],
   side: {
     1: 'above',
     2: 'left',
@@ -65,6 +66,9 @@ const MOSCOW_001_PREFS: CardBadgePrefs = {
 
 const CARD_BADGE_PREFS: Record<string, CardBadgePrefs> = {
   MOSCOW_001: MOSCOW_001_PREFS,
+  MOSCOW_002: {
+    forceOnRegion: [1],
+  },
   MOSCOW_003: {
     collisionRadius: 2.4,
     allowOverlapForeignPolygons: true,
@@ -87,11 +91,11 @@ const CARD_BADGE_PREFS: Record<string, CardBadgePrefs> = {
     nudge: {
       1: { dx: 0.9, dy: -0.45 },
       2: { dx: 0, dy: 0.75 },
-      3: { dx: 0, dy: -0.85 },
+      3: { dx: 0, dy: -1.45 },
       4: { dx: 0.45, dy: -0.85 },
-      5: { dx: 0.35, dy: 0.55 },
-      7: { dx: -0.55, dy: 0.55 },
-      8: { dx: 0.45, dy: 0.55 },
+      5: { dx: 0.35, dy: 1.15 },
+      7: { dx: -0.55, dy: 1.15 },
+      8: { dx: 0.45, dy: 1.15 },
       9: { dx: 2.1, dy: 0.65 },
       10: { dx: 0, dy: -0.75 },
       11: { dx: 0, dy: -0.75 },

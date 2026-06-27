@@ -28,28 +28,9 @@ import {
   TRACE_PLATE_SCROLL_CLASS,
   tracePlateBackground,
 } from '../lib/tracePlateStyle'
+import { archiviewClassColor } from '../lib/archiviewClassColors'
 import { computeBadgeLayout, assignBadgeLayouts, assignMobileBottomBadgeLayouts, type BadgeLayout } from '../lib/regionBadgeLayout'
 import { useMediaQuery } from '../lib/useMediaQuery'
-
-const CLASS_COLORS: Record<string, string> = {
-  added_floor: '#00aa00',
-  extension: '#ff8c00',
-  filled_window: '#0078d7',
-  new_window: '#00aaaa',
-  lost_balcony: '#b850b0',
-  new_balcony: '#d08a00',
-  changed_entrance: '#786cff',
-  lost_decor: '#aa50ff',
-  historical_signage: '#2896c8',
-  lost_signage: '#c83c78',
-  signage_rediscovered: '#ffc800',
-  restored_signage: '#3cc83c',
-  new_signage: '#ff8200',
-  memorial_plaque: '#a07850',
-  technical_artifact: '#7a8a00',
-  other_artifact: '#8a8a00',
-  check_manually: '#b000b0',
-}
 
 /** Окна и узкие проёмы: без сплошной заливки-квадрата — только контур и кружок. */
 const COMPACT_REGION_AREA = 90
@@ -1001,6 +982,7 @@ export function ArchiviewFacadePanel({
       trace={plateRegion.trace}
       comment={plateRegion.comment}
       verification={building?.verification}
+      regionClass={plateRegion.cls}
       expanded={plateExpanded}
       compact={embeddedAr ? !plateExpanded : Boolean(platePlacement?.compact)}
       onClose={plateExpanded ? () => setSelectedIdx(null) : undefined}
@@ -1116,7 +1098,7 @@ export function ArchiviewFacadePanel({
       >
         {regions.map((r) => {
           const on = hoverIdx === r.idx
-          const color = CLASS_COLORS[r.cls] ?? '#444'
+          const color = archiviewClassColor(r.cls)
           return (
             <li key={r.idx} className={sideBySide ? 'min-w-0' : undefined}>
               <button
@@ -1402,7 +1384,7 @@ export function ArchiviewFacadePanel({
                 >
                   {regions.map((r) => {
                     const on = hoverIdx === r.idx || selectedIdx === r.idx
-                    const color = CLASS_COLORS[r.cls] ?? '#444'
+                    const color = archiviewClassColor(r.cls)
                     const style = regionPolygonStyle(color, r.areaPct, on, variant === 'ar', useMobileFacadeChrome)
                     return (
                       <polygon
@@ -1469,7 +1451,7 @@ export function ArchiviewFacadePanel({
                     {regionsBadges.map((r) => {
                       if (!useMobileBottomBadges && !r.badgeLayout.callout) return null
                       const on = hoverIdx === r.idx || selectedIdx === r.idx
-                      const color = CLASS_COLORS[r.cls] ?? '#444'
+                      const color = archiviewClassColor(r.cls)
                       return (
                         <line
                           key={`callout-${r.idx}`}
@@ -1486,7 +1468,7 @@ export function ArchiviewFacadePanel({
                   </svg>
                   {regionsBadges.map((r) => {
                     const on = hoverIdx === r.idx || selectedIdx === r.idx
-                    const color = CLASS_COLORS[r.cls] ?? '#444'
+                    const color = archiviewClassColor(r.cls)
                     const badge = facadeBadgeMetrics(
                       facadeImageWidth || 320,
                       on,

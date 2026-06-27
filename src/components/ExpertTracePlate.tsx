@@ -1,5 +1,6 @@
 import type { BuildingVerification, MemoryTrace } from '../types/building'
 import { getConfidenceInfo } from '../data/confidenceGuide'
+import { archiviewClassColor } from '../lib/archiviewClassColors'
 import { describeConfidenceBasis, traceConfidenceSourceLine } from '../lib/traceConfidence'
 import { ConfidenceBadge } from './ConfidenceBadge'
 import { splitTraceMessage } from '../lib/traceMessage'
@@ -11,6 +12,8 @@ type Props = {
   trace?: MemoryTrace
   comment?: string
   verification?: BuildingVerification
+  /** Класс зоны Archiview — цвет кружка как на фасаде и в списке */
+  regionClass?: string
   /** Полная карточка (по клику) или краткий превью (при наведении) */
   expanded: boolean
   /** Компактная карточка (верхние зоны фасада — не заезжает под меню) */
@@ -26,11 +29,13 @@ export function ExpertTracePlate({
   trace,
   comment,
   verification,
+  regionClass,
   expanded,
   compact = false,
   onClose,
   className = '',
 }: Props) {
+  const badgeColor = archiviewClassColor(regionClass)
   const confidence = trace?.confidence
   const confidenceInfo = confidence ? getConfidenceInfo(confidence) : null
   const message = trace?.userMessage ?? comment ?? ''
@@ -46,9 +51,10 @@ export function ExpertTracePlate({
     <div className={className}>
       <div className="flex items-start gap-2.5">
         <span
-          className={`mt-0.5 inline-flex shrink-0 items-center justify-center rounded-full bg-arch-gold font-bold text-arch-green-deep ${
+          className={`mt-0.5 inline-flex shrink-0 items-center justify-center rounded-full font-bold text-white ${
             expanded ? 'h-6 w-6 text-[13px]' : 'h-5 w-5 text-[11px]'
           }`}
+          style={{ backgroundColor: badgeColor }}
         >
           {idx}
         </span>
