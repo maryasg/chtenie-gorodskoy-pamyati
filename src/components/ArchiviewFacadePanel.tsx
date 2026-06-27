@@ -1242,7 +1242,7 @@ export function ArchiviewFacadePanel({
               useSidebarLayout
                 ? isMobile
                   ? 'flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_17rem] lg:grid-rows-[auto_auto] xl:grid-cols-[minmax(0,1fr)_20rem] lg:items-start'
-                  : 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_17rem] xl:grid-cols-[minmax(0,1fr)_20rem] lg:items-start'
+                  : 'grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_17rem] xl:grid-cols-[minmax(0,1fr)_20rem] md:items-start'
                 : embeddedAr
                   ? embeddedArMobileBelow
                     ? 'flex w-full flex-col'
@@ -1255,7 +1255,7 @@ export function ArchiviewFacadePanel({
               useSidebarLayout
                 ? isMobile
                   ? 'relative order-1 flex min-w-0 flex-col gap-4 overflow-visible lg:col-start-1 lg:row-start-1'
-                  : 'relative order-1 flex min-w-0 flex-col gap-4 overflow-visible lg:col-start-1 lg:row-start-1 lg:row-span-2'
+                  : 'relative order-1 flex min-w-0 flex-col gap-4 overflow-visible md:col-start-1 md:row-start-1 md:row-span-2'
                 : embeddedAr
                   ? embeddedArMobileBelow
                     ? 'relative flex w-full min-w-0 flex-col'
@@ -1560,6 +1560,7 @@ export function ArchiviewFacadePanel({
               <div className="relative z-0 min-w-0">{comparisonBlock}</div>
             ) : null}
           </div>
+          </div>
 
           {useSidebarLayout && isMobile && regionList ? (
             <div className="relative z-0 order-2 flex min-w-0 flex-col lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:min-h-[min(78vh,820px)] lg:self-stretch">
@@ -1580,7 +1581,7 @@ export function ArchiviewFacadePanel({
           ) : null}
 
           {useSidebarLayout && !isMobile && regionList ? (
-            <div className="relative z-0 order-2 flex min-w-0 flex-col lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:min-h-[min(78vh,820px)] lg:self-stretch">
+            <div className="relative z-0 order-2 flex min-w-0 flex-col md:col-start-2 md:row-start-1 md:row-span-2 md:min-h-[min(78vh,820px)] md:self-stretch">
               {regionList}
               {building && !sideBySide ? (
                 <Link
@@ -1621,8 +1622,6 @@ export function ArchiviewFacadePanel({
               ) : null}
             </div>
           ) : null}
-
-          </div>
 
         </div>
       )}
