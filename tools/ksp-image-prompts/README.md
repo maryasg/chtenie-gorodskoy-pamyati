@@ -7,6 +7,20 @@
 
 ## Быстрый старт (Windows)
 
+**Плоские файлы за месяц (ВК + Telegram + картинки):**
+
+```bat
+cd C:\Users\Marusia\Projects\maryasg-articles_KorolevSP
+СОБРАТЬ_ПЛОСКИЕ_ФАЙЛЫ.bat июнь
+```
+
+Или из репозитория сайта:
+
+```bat
+cd C:\Users\Marusia\Projects\chtenie-gorodskoy-pamyati\tools\ksp-image-prompts
+СОБРАТЬ_ПЛОСКИЕ_ФАЙЛЫ.bat июнь
+```
+
 1. Обновите **сайт** из GitHub (`git pull` в `chtenie-gorodskoy-pamyati`).
 2. Запустите из cmd:
 

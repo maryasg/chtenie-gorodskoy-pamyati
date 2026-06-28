@@ -473,6 +473,42 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def months_for_pack(args: argparse.Namespace, plan: list[dict]) -> list[str]:
+    if args.images_only:
+        return []
+    if args.filter_month:
+        return [args.filter_month.strip()]
+    plan_path = args.plan
+    if plan_path.name not in ("content_plan.json", "all.json") and plan_path.suffix == ".json":
+        return [plan_path.stem]
+    if args.title:
+        return [args.month.strip()]
+    months = sorted({str(item.get("month", "")).strip() for item in plan if item.get("month")})
+    return months if len(months) == 1 else []
+
+
+def pack_after_generate(args: argparse.Namespace, plan: list[dict]) -> None:
+    from pack_month import pack_month as run_pack_month
+
+    for month in months_for_pack(args, plan):
+        plan_path = args.plan
+        month_plan = ROOT / "content_plan" / f"{month}.json"
+        if month_plan.is_file():
+            plan_path = month_plan
+        if not plan_path.is_file():
+            print(f"\nПропуск плоских файлов: нет плана для «{month}»")
+            continue
+        print(f"\n=== Плоские файлы: {month} ===")
+        packed, total, missing = run_pack_month(
+            month=month,
+            plan_path=plan_path,
+            output_root=args.output,
+        )
+        print(f"Готово: {packed} из {total} в {args.output / month}")
+        if packed:
+            print("Примеры: месяц01_{0}_..._вк.rtf, ..._телеграм.txt".format(month))
+
+
 def main() -> int:
     load_dotenv(ROOT / ".env")
     args = parse_args()
@@ -550,6 +586,10 @@ def main() -> int:
     print("\n=== Итог ===")
     print(f"Тем обработано: {len(plan)}")
     print(f"Замечаний проверки: {len(all_issues)}")
+
+    if not args.images_only:
+        pack_after_generate(args, plan)
+
     return 0 if not all_issues else 2
 
 

@@ -18,6 +18,7 @@ copy /Y "%SRC%export_docx.py" "%DST%\"
 copy /Y "%SRC%export_docx.bat" "%DST%\"
 copy /Y "%SRC%pack_month.py" "%DST%\"
 copy /Y "%SRC%pack_month.bat" "%DST%\"
+copy /Y "%SRC%СОБРАТЬ_ПЛОСКИЕ_ФАЙЛЫ.bat" "%DST%\"
 copy /Y "%SRC%generate.py" "%DST%\"
 copy /Y "%SRC%requirements.txt" "%DST%\"
 copy /Y "%SRC%ИНСТРУКЦИЯ.md" "%DST%\"
@@ -33,6 +34,9 @@ echo Готово. Собираю 121 промпт...
 cd /d "%DST%"
 call build_image_prompts.bat --force
 
+echo.
+echo Для плоских файлов за месяц запустите:
+echo   СОБРАТЬ_ПЛОСКИЕ_ФАЙЛЫ.bat июнь
 echo.
 echo Промпты в папке: %DST%\image_prompts\
 pause
