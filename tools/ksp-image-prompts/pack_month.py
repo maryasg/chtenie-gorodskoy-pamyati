@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Собрать плоские файлы за месяц: месяц01_июнь.rtf, .ARTICLE, картинка_месяц01_июнь.png."""
+"""Собрать плоские файлы: месяц01_июнь_как-остановить_вк.rtf, ..._телеграм.txt."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -61,8 +62,54 @@ def load_plan_items(plan_path: Path, month: str) -> list[dict]:
     return items
 
 
-def flat_base(number: str, month: str) -> str:
-    return f"месяц{number.zfill(2)}_{month}"
+INVALID_FILENAME_CHARS = re.compile(r'[\\/:*?"<>|]+')
+WORD_SPLIT = re.compile(r"[\s,;—–\-]+")
+
+
+def resolve_title(topic_folder: Path, plan_title: str) -> str:
+    """Заголовок из статьи (# в .md), иначе из плана."""
+    for md_name in ("vk.md", "telegram.md"):
+        md_path = topic_folder / md_name
+        if not md_path.exists():
+            continue
+        for line in md_path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                heading = stripped.lstrip("#").strip()
+                if heading:
+                    return heading
+    return plan_title
+
+
+def title_suffix(title: str, words: int = 2, max_len: int = 40) -> str:
+    """Первые слова заголовка по-русски для хвоста имени файла."""
+    tokens = [token for token in WORD_SPLIT.split(title.strip()) if token]
+    snippet = tokens[:words]
+    if not snippet:
+        return ""
+    text = "-".join(snippet).lower()
+    text = INVALID_FILENAME_CHARS.sub("", text)
+    if len(text) > max_len:
+        text = text[:max_len].rstrip("-")
+    return text
+
+
+def flat_base(number: str, month: str, title: str = "") -> str:
+    core = f"месяц{number.zfill(2)}_{month}"
+    suffix = title_suffix(title)
+    return f"{core}_{suffix}" if suffix else core
+
+
+def cleanup_old_flat_files(flat_dir: Path, number: str, month: str) -> None:
+    """Удалить старые плоские файлы этой статьи (в т.ч. .ARTICLE)."""
+    prefix = f"месяц{number.zfill(2)}_{month}"
+    img_prefix = f"картинка_{prefix}"
+    for path in list(flat_dir.iterdir()):
+        if not path.is_file():
+            continue
+        name = path.name
+        if name.startswith(prefix) or name.startswith(img_prefix):
+            path.unlink()
 
 
 def write_article_list(items: list[dict], dest: Path, month: str) -> Path:
@@ -102,13 +149,15 @@ def pack_month(
 
     for item in items:
         number = str(item["number"]).strip().zfill(2)
-        title = str(item["title"]).strip()
-        base = flat_base(number, month)
+        plan_title = str(item["title"]).strip()
 
         topic_folder = find_topic_folder(month_output, number) if month_output.is_dir() else None
         if topic_folder is None:
-            missing.append(f"{number}: нет папки в {month_output} — {title}")
+            missing.append(f"{number}: нет папки в {month_output} — {plan_title}")
             continue
+
+        title = resolve_title(topic_folder, plan_title)
+        base = flat_base(number, month, title)
 
         vk_md = topic_folder / "vk.md"
         tg_md = topic_folder / "telegram.md"
@@ -118,8 +167,13 @@ def pack_month(
             missing.append(f"{number}: нет vk.md/telegram.md в {topic_folder.name}")
             continue
 
-        write_rtf(vk_md.read_text(encoding="utf-8"), flat_dir / f"{base}.rtf")
-        shutil.copyfile(tg_md, flat_dir / f"{base}.ARTICLE")
+        cleanup_old_flat_files(flat_dir, number, month)
+
+        write_rtf(vk_md.read_text(encoding="utf-8"), flat_dir / f"{base}_вк.rtf")
+        (flat_dir / f"{base}_телеграм.txt").write_text(
+            tg_md.read_text(encoding="utf-8").strip() + "\n",
+            encoding="utf-8",
+        )
 
         image_dst = flat_dir / f"картинка_{base}.png"
         if cover_src.exists():
@@ -128,14 +182,14 @@ def pack_month(
             missing.append(f"{number}: нет cover.png — скопированы только тексты")
 
         packed += 1
-        print(f"{number} -> {base}.*")
+        print(f"{number} -> {base}_вк.rtf, {base}_телеграм.txt")
 
     return packed, len(items), missing
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Плоские файлы в папке месяца: месяц01_июнь.rtf, .ARTICLE, картинка_месяц01_июнь.png",
+        description="Плоские файлы: месяц01_июнь_<слова>_вк.rtf, ..._телеграм.txt, картинка_....png",
     )
     parser.add_argument("month", help="Месяц, например: июнь")
     parser.add_argument(
