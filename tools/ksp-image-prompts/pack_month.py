@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Собрать плоские файлы за месяц: месяц01_июнь.rtf, .txt, картинка_месяц01_июнь.png."""
+"""Собрать плоские файлы за месяц: месяц01_июнь_как-остановить-кровоточивость.rtf и т.д."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -61,8 +62,27 @@ def load_plan_items(plan_path: Path, month: str) -> list[dict]:
     return items
 
 
-def flat_base(number: str, month: str) -> str:
-    return f"месяц{number.zfill(2)}_{month}"
+INVALID_FILENAME_CHARS = re.compile(r'[\\/:*?"<>|]+')
+WORD_SPLIT = re.compile(r"[\s,;—–\-]+")
+
+
+def title_suffix(title: str, words: int = 3, max_len: int = 48) -> str:
+    """Первые слова заголовка по-русски для хвоста имени файла."""
+    tokens = [token for token in WORD_SPLIT.split(title.strip()) if token]
+    snippet = tokens[:words]
+    if not snippet:
+        return ""
+    text = "-".join(snippet).lower()
+    text = INVALID_FILENAME_CHARS.sub("", text)
+    if len(text) > max_len:
+        text = text[:max_len].rstrip("-")
+    return text
+
+
+def flat_base(number: str, month: str, title: str = "") -> str:
+    core = f"месяц{number.zfill(2)}_{month}"
+    suffix = title_suffix(title)
+    return f"{core}_{suffix}" if suffix else core
 
 
 def write_article_list(items: list[dict], dest: Path, month: str) -> Path:
@@ -103,7 +123,7 @@ def pack_month(
     for item in items:
         number = str(item["number"]).strip().zfill(2)
         title = str(item["title"]).strip()
-        base = flat_base(number, month)
+        base = flat_base(number, month, title)
 
         topic_folder = find_topic_folder(month_output, number) if month_output.is_dir() else None
         if topic_folder is None:
@@ -135,7 +155,7 @@ def pack_month(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Плоские файлы в папке месяца: месяц01_июнь.rtf, .txt, картинка_месяц01_июнь.png",
+        description="Плоские файлы: месяц01_июнь_<первые-слова-заголовка>.rtf / .txt / картинка_....png",
     )
     parser.add_argument("month", help="Месяц, например: июнь")
     parser.add_argument(
