@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Собрать плоские файлы за месяц: месяц01_июнь.rtf, .ARTICLE, картинка_месяц01_июнь.png."""
+"""Собрать плоские файлы за месяц: месяц01_июнь.rtf, .txt, картинка_месяц01_июнь.png."""
 
 from __future__ import annotations
 
@@ -119,7 +119,7 @@ def pack_month(
             continue
 
         write_rtf(vk_md.read_text(encoding="utf-8"), flat_dir / f"{base}.rtf")
-        shutil.copyfile(tg_md, flat_dir / f"{base}.ARTICLE")
+        shutil.copyfile(tg_md, flat_dir / f"{base}.txt")
 
         image_dst = flat_dir / f"картинка_{base}.png"
         if cover_src.exists():
@@ -135,7 +135,7 @@ def pack_month(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Плоские файлы в папке месяца: месяц01_июнь.rtf, .ARTICLE, картинка_месяц01_июнь.png",
+        description="Плоские файлы в папке месяца: месяц01_июнь.rtf, .txt, картинка_месяц01_июнь.png",
     )
     parser.add_argument("month", help="Месяц, например: июнь")
     parser.add_argument(
