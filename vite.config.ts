@@ -1,8 +1,11 @@
-﻿import { copyFileSync } from "node:fs"
+﻿import { copyFileSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { defineConfig } from "vite"
 import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
+
+/** GitHub Pages отдаёт index.html только из папки маршрута — без этого /v2/ даёт 404 */
+const SPA_FALLBACK_PATHS = ["v2", "v2/map", "method", "tour", "explorer", "building"]
 
 export default defineConfig({
   base: "/chtenie-gorodskoy-pamyati/",
@@ -10,11 +13,16 @@ export default defineConfig({
     react(),
     tailwindcss(),
     {
-      // GitHub Pages: прямые ссылки (/building/...) отдают 404.html = тот же SPA
       name: "github-pages-spa-fallback",
       closeBundle() {
         const out = join(__dirname, "dist")
-        copyFileSync(join(out, "index.html"), join(out, "404.html"))
+        const index = join(out, "index.html")
+        copyFileSync(index, join(out, "404.html"))
+        for (const route of SPA_FALLBACK_PATHS) {
+          const dir = join(out, route)
+          mkdirSync(dir, { recursive: true })
+          copyFileSync(index, join(dir, "index.html"))
+        }
       },
     },
   ],
