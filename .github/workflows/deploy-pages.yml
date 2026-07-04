@@ -9,6 +9,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  pull-requests: read
 
 concurrency:
   group: pages-deploy
@@ -19,15 +20,73 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: main-src
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
-      - run: npm ci
-      - run: npm run build
+          cache-dependency-path: main-src/package-lock.json
+
+      - name: Build main site
+        working-directory: main-src
+        run: |
+          npm ci
+          npm run build
+
+      - name: Stage main site root
+        run: |
+          mkdir -p site
+          cp -a main-src/dist/. site/
+          touch site/.nojekyll
+
+      - name: Bundle open cursor PR previews
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repo_name="${{ github.event.repository.name }}"
+          mapfile -t rows < <(gh pr list --repo "${{ github.repository }}" --state open \
+            --json number,headRefName \
+            --jq -r '.[] | select(.headRefName|startswith("cursor/")) | "\(.number)\t\(.headRefName)"')
+
+          if [ "${#rows[@]}" -eq 0 ]; then
+            echo "No open cursor PR previews to bundle."
+            exit 0
+          fi
+
+          for row in "${rows[@]}"; do
+            number="${row%%$'\t'*}"
+            branch="${row#*$'\t'}"
+            preview_path="pr-preview/pr-${number}"
+            base="/${repo_name}/${preview_path}/"
+            echo "Building preview for PR #${number} (${branch})"
+
+            rm -rf preview-src
+            git clone --depth 1 --branch "$branch" \
+              "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" \
+              preview-src
+
+            (
+              cd preview-src
+              npm ci
+              npm run build -- --base="${base}"
+            )
+
+            mkdir -p "site/${preview_path}"
+            cp -a preview-src/dist/. "site/${preview_path}/"
+            cat > "site/${preview_path}/PREVIEW.txt" <<EOF
+          Preview source: ${branch}
+          Preview URL: https://${{ github.repository_owner }}.github.io/${repo_name}/${preview_path}/
+          EOF
+
+            rm -rf preview-src
+          done
+
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: site
 
   deploy:
     needs: build
