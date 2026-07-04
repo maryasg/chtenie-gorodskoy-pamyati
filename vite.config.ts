@@ -3,9 +3,17 @@ import { join } from "node:path"
 import { defineConfig } from "vite"
 import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
+import { BUILDINGS } from "./src/data/buildings"
 
-/** GitHub Pages отдаёт index.html только из папки маршрута — без этого /v2/ даёт 404 */
-const SPA_FALLBACK_PATHS = ["v2", "v2/map", "method", "tour", "explorer", "building"]
+const SPA_FALLBACK_PATHS = [
+  "v2",
+  "v2/map",
+  "method",
+  "tour",
+  "explorer",
+  "building",
+  ...BUILDINGS.map((b) => `v2/building/${b.id}`),
+]
 
 export default defineConfig({
   base: "/chtenie-gorodskoy-pamyati/",

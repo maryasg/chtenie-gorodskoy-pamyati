@@ -15,7 +15,7 @@ export function MapPageV2() {
         </Link>
       </div>
       <div className="v2-card overflow-hidden p-0">
-        <MapView />
+        <MapView buildingTo={(id) => `/v2/building/${id}`} />
       </div>
     </div>
   )

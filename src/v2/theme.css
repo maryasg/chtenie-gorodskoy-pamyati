@@ -113,3 +113,25 @@
   font-style: italic;
   font-weight: 400;
 }
+
+.v2-building .border-arch-line {
+  border-color: var(--color-v2-line);
+}
+
+.v2-building .text-arch-muted {
+  color: var(--color-v2-muted);
+}
+
+.v2-building .text-arch-green-deep,
+.v2-building .text-arch-ink {
+  color: var(--color-v2-ink);
+}
+
+.v2-building .border-arch-green-light {
+  border-color: var(--color-v2-line);
+  background: var(--color-v2-red);
+}
+
+.v2-building .bg-arch-green-light {
+  background: var(--color-v2-red);
+}

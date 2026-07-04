@@ -104,7 +104,7 @@ export function HomeV2() {
             return (
               <Link
                 key={building.id}
-                to={`/building/${building.id}`}
+                to={`/v2/building/${building.id}`}
                 className="v2-card group overflow-hidden transition hover:shadow-md"
               >
                 {img ? (

@@ -11,6 +11,7 @@ import { TourPage } from './pages/TourPage'
 import { LayoutV2 } from './v2/LayoutV2'
 import { HomeV2 } from './v2/pages/HomeV2'
 import { MapPageV2 } from './v2/pages/MapPageV2'
+import { BuildingPageV2 } from './v2/pages/BuildingPageV2'
 
 function LegacyCuratorRedirect() {
   const { id } = useParams<{ id: string }>()
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="v2" element={<LayoutV2 />}>
           <Route index element={<HomeV2 />} />
           <Route path="map" element={<MapPageV2 />} />
+          <Route path="building/:id" element={<BuildingPageV2 />} />
         </Route>
         <Route element={<Layout />}>
           <Route index element={<MapPage />} />
