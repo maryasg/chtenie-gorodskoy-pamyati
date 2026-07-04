@@ -1,33 +1,115 @@
-/* v2 design tokens — separate from arch-* so v1 stays untouched */
+/* v2 — стилистика по референсу Lovable (ARCHITECT preview) */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 @theme {
-  --color-v2-bg: #faf9f7;
+  --color-v2-bg: #f9f7f4;
   --color-v2-surface: #ffffff;
-  --color-v2-surface-muted: #f3f1ed;
-  --color-v2-ink: #1a1a1a;
-  --color-v2-muted: #6b6560;
-  --color-v2-line: #e8e4de;
-  --color-v2-accent: #2f5d50;
-  --color-v2-accent-soft: #e8f0ec;
-  --font-v2: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --color-v2-surface-muted: #f3f2ef;
+  --color-v2-ink: #000000;
+  --color-v2-muted: #6d6d6d;
+  --color-v2-line: #e7e7e6;
+  --color-v2-red: #ef4444;
+  --color-v2-blue: #3b82f6;
+  --color-v2-footer: #000000;
+  --font-v2: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
 
 .v2-root {
   font-family: var(--font-v2);
   color: var(--color-v2-ink);
   background: var(--color-v2-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.v2-container {
+  margin-inline: auto;
+  width: min(100% - 2rem, 72rem);
+}
+
+.v2-kicker {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-v2-red);
+}
+
+.v2-section-title {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .v2-card {
   border-radius: 1rem;
   border: 1px solid var(--color-v2-line);
   background: var(--color-v2-surface);
-  box-shadow: 0 1px 2px rgba(26, 26, 26, 0.04);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
-.v2-kicker {
-  font-size: 0.65rem;
+.v2-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  background: var(--color-v2-blue);
+  padding: 0.625rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #fff;
+  transition: opacity 0.15s ease;
+}
+
+.v2-btn-primary:hover {
+  opacity: 0.92;
+}
+
+.v2-btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-v2-line);
+  background: var(--color-v2-surface);
+  padding: 0.625rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-v2-ink);
+  transition: background 0.15s ease;
+}
+
+.v2-btn-outline:hover {
+  background: var(--color-v2-surface-muted);
+}
+
+.v2-btn-dark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.375rem;
+  background: var(--color-v2-footer);
+  padding: 0.5rem 1rem;
+  font-size: 0.6875rem;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--color-v2-accent);
+  color: #fff;
+  transition: opacity 0.15s ease;
+}
+
+.v2-btn-dark:hover {
+  opacity: 0.88;
+}
+
+.v2-hero-title {
+  font-size: clamp(2.5rem, 7vw, 4.25rem);
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+.v2-hero-title em {
+  font-style: italic;
+  font-weight: 400;
 }

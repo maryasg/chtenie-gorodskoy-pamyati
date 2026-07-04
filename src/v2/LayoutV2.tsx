@@ -1,50 +1,42 @@
-import { useEffect, useState } from 'react'
-import { Link, Outlet, useLocation } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, Outlet } from 'react-router-dom'
 
 const NAV = [
-  { to: '/v2', label: 'Главная', end: true },
   { to: '/v2/map', label: 'Карта' },
+  { to: '/v2#method', label: 'Метод' },
+  { to: '/v2#objects', label: 'Объекты' },
 ]
 
 export function LayoutV2() {
-  const { pathname } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
-
-  useEffect(() => {
-    setMenuOpen(false)
-  }, [pathname])
+  const closeMenu = () => setMenuOpen(false)
 
   return (
     <div className="v2-root flex min-h-screen flex-col">
-      <div className="border-b border-v2-line bg-v2-surface/90 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3">
-          <Link to="/v2" className="min-w-0">
-            <span className="v2-kicker block">Новый дизайн · preview</span>
-            <span className="block truncate text-sm font-semibold tracking-tight sm:text-base">
-              Чтение городской памяти
+      <header className="sticky top-0 z-30 border-b border-v2-line/80 bg-v2-bg/90 backdrop-blur-md">
+        <div className="v2-container flex items-center justify-between gap-4 py-4">
+          <Link to="/v2" className="min-w-0" onClick={closeMenu}>
+            <span className="block text-xs font-bold tracking-[0.2em] text-v2-ink sm:text-sm">
+              ПАМЯТЬ СТЕН
             </span>
           </Link>
 
-          <nav className="hidden items-center gap-1 sm:flex">
-            {NAV.map(({ to, label, end }) => {
-              const active = end ? pathname === to : pathname.startsWith(to)
-              return (
-                <Link
-                  key={to}
-                  to={to}
-                  className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
-                    active
-                      ? 'bg-v2-accent text-white'
-                      : 'text-v2-muted hover:bg-v2-surface-muted hover:text-v2-ink'
-                  }`}
-                >
-                  {label}
-                </Link>
-              )
-            })}
+          <nav className="hidden items-center gap-6 md:flex">
+            {NAV.map(({ to, label }) => (
+              <Link
+                key={to}
+                to={to}
+                className="text-[11px] font-semibold tracking-[0.14em] text-v2-muted uppercase transition hover:text-v2-ink"
+              >
+                {label}
+              </Link>
+            ))}
+            <Link to="/v2/map" className="v2-btn-dark">
+              Открыть карту
+            </Link>
             <Link
               to="/"
-              className="ml-2 rounded-full border border-v2-line px-3 py-1.5 text-sm text-v2-muted transition hover:text-v2-ink"
+              className="text-[11px] tracking-wide text-v2-muted uppercase hover:text-v2-ink"
             >
               Текущий сайт
             </Link>
@@ -55,38 +47,37 @@ export function LayoutV2() {
             aria-expanded={menuOpen}
             aria-label="Меню"
             onClick={() => setMenuOpen((open) => !open)}
-            className="rounded-lg border border-v2-line px-3 py-1.5 text-sm sm:hidden"
+            className="rounded-md border border-v2-line px-3 py-1.5 text-xs font-medium md:hidden"
           >
             Меню
           </button>
         </div>
 
         {menuOpen ? (
-          <nav className="border-t border-v2-line px-4 py-2 sm:hidden">
-            <div className="flex flex-col gap-1">
-              {NAV.map(({ to, label, end }) => {
-                const active = end ? pathname === to : pathname.startsWith(to)
-                return (
-                  <Link
-                    key={to}
-                    to={to}
-                    className={`rounded-lg px-3 py-2 text-sm ${
-                      active ? 'bg-v2-accent-soft text-v2-accent' : 'text-v2-ink'
-                    }`}
-                  >
-                    {label}
-                  </Link>
-                )
-              })}
-              <Link to="/" className="rounded-lg px-3 py-2 text-sm text-v2-muted">
+          <nav className="border-t border-v2-line px-4 py-3 md:hidden">
+            <div className="flex flex-col gap-2">
+              {NAV.map(({ to, label }) => (
+                <Link
+                  key={to}
+                  to={to}
+                  onClick={closeMenu}
+                  className="rounded-lg px-3 py-2 text-sm font-medium text-v2-ink"
+                >
+                  {label}
+                </Link>
+              ))}
+              <Link to="/v2/map" onClick={closeMenu} className="v2-btn-dark w-fit">
+                Открыть карту
+              </Link>
+              <Link to="/" onClick={closeMenu} className="px-3 py-2 text-sm text-v2-muted">
                 Текущий сайт
               </Link>
             </div>
           </nav>
         ) : null}
-      </div>
+      </header>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
+      <main className="flex-1">
         <Outlet />
       </main>
     </div>
