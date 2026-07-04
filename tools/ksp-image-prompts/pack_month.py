@@ -216,6 +216,8 @@ def main() -> int:
         print(f"Нет плана: {plan_path}")
         return 1
 
+    flat_dir = args.dest or (args.output / month)
+
     packed, total, missing = pack_month(
         month=month,
         plan_path=plan_path,
@@ -230,6 +232,13 @@ def main() -> int:
         return 0
 
     print(f"Собрано: {packed} из {total}")
+    if packed:
+        print()
+        print(f"Папка: {flat_dir.resolve()}")
+        print("Файлы:")
+        print(f"  месяц01_{month}_<слова>_вк.rtf")
+        print(f"  месяц01_{month}_<слова>_телеграм.txt")
+        print(f"  картинка_месяц01_{month}_<слова>.png")
     if missing:
         print()
         print("Замечания:")
@@ -237,10 +246,21 @@ def main() -> int:
             print(f"  - {line}")
         if packed == 0:
             print()
-            print("Сначала сгенерируйте тексты:")
+            print("=" * 50)
+            print("ПЛОСКИХ ФАЙЛОВ НЕТ — сначала нужны статьи в подпапках.")
+            print()
+            print("В output\\{0}\\ должны быть папки вида:".format(month))
+            print("  output\\{0}\\01-kak-...\\vk.md".format(month))
+            print("  output\\{0}\\01-kak-...\\telegram.md".format(month))
+            print()
+            print("Промпты в image_prompts\\{0}\\ — это НЕ статьи.".format(month))
+            print()
+            print("Сгенерируйте тексты:")
             print(f"  python generate.py --plan content_plan\\{month}.json --skip-images")
-            print("Затем снова:")
-            print(f"  pack_month.bat {month}")
+            print()
+            print("Или одной командой (из папки статей):")
+            print(f"  СОБРАТЬ_ПЛОСКИЕ_ФАЙЛЫ.bat {month}")
+            print("=" * 50)
             return 1
     return 0
 
