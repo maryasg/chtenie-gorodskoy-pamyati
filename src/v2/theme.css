@@ -1,0 +1,33 @@
+/* v2 design tokens — separate from arch-* so v1 stays untouched */
+@theme {
+  --color-v2-bg: #faf9f7;
+  --color-v2-surface: #ffffff;
+  --color-v2-surface-muted: #f3f1ed;
+  --color-v2-ink: #1a1a1a;
+  --color-v2-muted: #6b6560;
+  --color-v2-line: #e8e4de;
+  --color-v2-accent: #2f5d50;
+  --color-v2-accent-soft: #e8f0ec;
+  --font-v2: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+.v2-root {
+  font-family: var(--font-v2);
+  color: var(--color-v2-ink);
+  background: var(--color-v2-bg);
+}
+
+.v2-card {
+  border-radius: 1rem;
+  border: 1px solid var(--color-v2-line);
+  background: var(--color-v2-surface);
+  box-shadow: 0 1px 2px rgba(26, 26, 26, 0.04);
+}
+
+.v2-kicker {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-v2-accent);
+}
