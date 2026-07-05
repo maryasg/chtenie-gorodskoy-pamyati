@@ -16,29 +16,20 @@ export function LayoutV2() {
       <header className="sticky top-0 z-30 border-b border-v2-line/80 bg-v2-bg/90 backdrop-blur-md">
         <div className="v2-container flex items-center justify-between gap-4 py-4">
           <Link to="/v2" className="min-w-0" onClick={closeMenu}>
-            <span className="block text-xs font-bold tracking-[0.2em] text-v2-ink sm:text-sm">
-              ПАМЯТЬ СТЕН
-            </span>
+            <span className="v2-mono-sm font-semibold text-v2-ink">Память стен</span>
           </Link>
 
           <nav className="hidden items-center gap-6 md:flex">
             {NAV.map(({ to, label }) => (
-              <Link
-                key={to}
-                to={to}
-                className="text-[11px] font-semibold tracking-[0.14em] text-v2-muted uppercase transition hover:text-v2-ink"
-              >
+              <Link key={to} to={to} className="v2-mono-xs text-v2-muted transition hover:text-v2-ink">
                 {label}
               </Link>
             ))}
             <Link to="/v2/map" className="v2-btn-dark">
-              Открыть карту
+              Карта
             </Link>
-            <Link
-              to="/"
-              className="text-[11px] tracking-wide text-v2-muted uppercase hover:text-v2-ink"
-            >
-              Текущий сайт
+            <Link to="/" className="v2-mono-xs text-v2-muted hover:text-v2-ink">
+              Текущий
             </Link>
           </nav>
 
@@ -47,7 +38,7 @@ export function LayoutV2() {
             aria-expanded={menuOpen}
             aria-label="Меню"
             onClick={() => setMenuOpen((open) => !open)}
-            className="rounded-md border border-v2-line px-3 py-1.5 text-xs font-medium md:hidden"
+            className="border border-v2-line px-3 py-1.5 v2-mono-xs md:hidden"
           >
             Меню
           </button>

@@ -1,7 +1,6 @@
 import { Link, useParams } from 'react-router-dom'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { getBuildingById } from '../../data/buildings'
-import { ConfidenceBadge } from '../../components/ConfidenceBadge'
 import { ArchiviewFacadePanel } from '../../components/ArchiviewFacadePanel'
 import { FacadeTimeLayers } from '../../components/FacadeTimeLayers'
 import { FacadeHotspotViewer } from '../../components/FacadeHotspotViewer'
@@ -19,6 +18,10 @@ import { getNextTourNavLink } from '../../lib/tourNavigation'
 import type { Building, BuildingVerification, MemoryTrace } from '../../types/building'
 import type { ArchiviewBuildingAssets } from '../../data/explorer/archiviewAssets'
 import { V2Section } from '../components/V2Section'
+import { V2Plate, V2Manifest } from '../components/V2Plate'
+import { V2ConfidenceBadge } from '../components/V2ConfidenceBadge'
+import { V2SquareMark } from '../components/V2SquareMark'
+import { V2_CONFIDENCE_DOT } from '../lib/confidenceColors'
 
 function timeLayersIntro(cardId?: string): string {
   if (cardId === 'MOSCOW_003') {
@@ -52,16 +55,13 @@ function hasPendingExpertCheck(building: Building): boolean {
   )
 }
 
-function V2Pill({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'green' | 'amber' }) {
-  const tones = {
-    neutral: 'border-v2-line bg-v2-surface-muted text-v2-muted',
-    green: 'border-emerald-200 bg-emerald-50 text-emerald-900',
-    amber: 'border-amber-200 bg-amber-50 text-amber-900',
-  }
+function V2StatusPlate({ code, title, active = true }: { code: string; title: string; active?: boolean }) {
   return (
-    <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-semibold tracking-wide uppercase ${tones[tone]}`}>
-      {children}
-    </span>
+    <div className="inline-flex items-center gap-2 border border-v2-line bg-v2-surface px-2.5 py-1.5">
+      <V2SquareMark active={active} />
+      <span className="v2-mono-xs text-v2-ink">{code}</span>
+      <span className="text-[11px] text-v2-muted normal-case">{title}</span>
+    </div>
   )
 }
 
@@ -85,11 +85,17 @@ function BuildingStatusChips({
 
   return (
     <div className="mt-4 flex flex-wrap gap-2">
-      {hasVerification && <V2Pill tone="green">Проверено источниками</V2Pill>}
-      {hasFieldObservation && <V2Pill tone="green">Полевое исследование</V2Pill>}
-      {needsCheck && <V2Pill tone="amber">На проверке у эксперта</V2Pill>}
+      {hasVerification && <V2StatusPlate code="SRC" title="Проверено источниками" />}
+      {hasFieldObservation && <V2StatusPlate code="FLD" title="Полевое исследование" />}
+      {needsCheck && (
+        <V2StatusPlate code="REV" title="На проверке" active={false} />
+      )}
       {building.cardStatus === 'pilot_in_progress' && (
-        <V2Pill>Пилот v{building.cardVersion ?? '0.1'}</V2Pill>
+        <V2StatusPlate
+          code={`V${building.cardVersion ?? '0.1'}`}
+          title="Пилот"
+          active={false}
+        />
       )}
     </div>
   )
@@ -113,47 +119,59 @@ function VerificationBannerV2({ verification }: { verification: BuildingVerifica
   if (!historicalPhoto && !hasExpertise && !hasNote && archiveSources.length === 0) return null
 
   return (
-    <div className="v2-card border-v2-red/20 bg-v2-surface p-5">
-      <p className="v2-kicker">Достоверность</p>
-      <ul className="mt-3 space-y-3 text-sm text-v2-muted">
+    <V2Manifest kicker="Confidence" title="Достоверность" className="normal-case">
+      <ul>
         {historicalPhoto && archiveSources.length > 0 ? (
-          <li>
-            <V2Pill tone="green">Архивные фотоматериалы</V2Pill>
-            <p className="mt-2 leading-relaxed">
-              {[
-                ...archiveSources,
-                ...(modernPhotoYear ? [`Съёмка ${modernPhotoYear} (Archiview)`] : []),
-              ].join(', ')}
-            </p>
-          </li>
+          <V2Plate
+            code="ARC"
+            title="Архивные фотоматериалы"
+            description={[
+              ...archiveSources,
+              ...(modernPhotoYear ? [`Съёмка ${modernPhotoYear} (Archiview)`] : []),
+            ].join(', ')}
+            markColor={V2_CONFIDENCE_DOT.confirmed}
+            active
+          />
         ) : historicalPhoto ? (
-          <li className="flex flex-wrap items-center gap-2">
-            <V2Pill tone="green">Есть исторический фотоматериал</V2Pill>
-            {historicalPhotoYear && (
-              <span>
-                архив {historicalPhotoYear}
-                {modernPhotoYear ? ` · съёмка ${modernPhotoYear}` : ''}
-              </span>
-            )}
-          </li>
+          <V2Plate
+            code="ARC"
+            title="Исторический фотоматериал"
+            description={[
+              historicalPhotoYear ? `архив ${historicalPhotoYear}` : null,
+              modernPhotoYear ? `съёмка ${modernPhotoYear}` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+            markColor={V2_CONFIDENCE_DOT.confirmed}
+            active
+          />
         ) : null}
         {officialExpertise?.map((item) => (
-          <li key={item.url} className="flex flex-wrap items-center gap-2">
-            <V2Pill>С официальной экспертизой</V2Pill>
-            <a href={item.url} target="_blank" rel="noreferrer" className="text-v2-blue underline">
-              {item.title}
-            </a>
-          </li>
+          <V2Plate
+            key={item.url}
+            code="EXP"
+            title="Официальная экспертиза"
+            description={
+              <a href={item.url} target="_blank" rel="noreferrer" className="v2-btn-text normal-case">
+                {item.title} →
+              </a>
+            }
+            markColor={V2_CONFIDENCE_DOT.confirmed}
+          />
         ))}
-        {hasNote && <li className="leading-relaxed">{confidenceNote}</li>}
-        {overallConfidence && (
-          <li className="flex items-center gap-2">
-            <span className="text-v2-ink">Общая оценка:</span>
-            <ConfidenceBadge level={overallConfidence} />
-          </li>
-        )}
+        {hasNote ? (
+          <V2Plate code="NOTE" title="Примечание" description={confidenceNote!} markColor={V2_CONFIDENCE_DOT.probable} />
+        ) : null}
+        {overallConfidence ? (
+          <V2Plate
+            code="LVL"
+            title="Общая оценка"
+            description={<V2ConfidenceBadge level={overallConfidence} />}
+            markColor={V2_CONFIDENCE_DOT[overallConfidence]}
+          />
+        ) : null}
       </ul>
-    </div>
+    </V2Manifest>
   )
 }
 
@@ -162,7 +180,7 @@ function MemoryTraceImage({ trace }: { trace: MemoryTrace }) {
   if (!trace.imagePath || hidden) return null
 
   return (
-    <figure className="mt-3 overflow-hidden rounded-lg border border-v2-line bg-v2-surface-muted">
+    <figure className="mt-3 overflow-hidden border border-v2-line bg-v2-surface-muted">
       <img
         src={publicAssetUrl(trace.imagePath)}
         alt={trace.imageCaption ?? trace.title}
@@ -314,30 +332,28 @@ export function BuildingPageV2() {
   return (
     <div className="v2-building pb-16">
       <div className="v2-container space-y-6 py-8 sm:py-10">
-        <header className="v2-card p-6 sm:p-8">
+        <header className="v2-panel px-4 py-6 sm:px-6 sm:py-8">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <Link to="/v2/map" className="text-sm font-medium text-v2-muted transition hover:text-v2-ink">
+            <Link to="/v2/map" className="v2-btn-text">
               ← Карта
             </Link>
             <Link
               to={nextTourStop.to}
               aria-label={nextTourStop.ariaLabel}
-              className="text-sm font-medium text-v2-muted transition hover:text-v2-ink"
+              className="v2-btn-text"
             >
               {nextTourStop.label}
             </Link>
           </div>
 
-          {building.cardId ? <p className="v2-kicker mt-6">{building.cardId}</p> : null}
-          <h1 className="mt-2 text-2xl leading-tight font-semibold tracking-tight sm:text-3xl">
-            {building.name}
-          </h1>
-          <p className="mt-2 text-sm text-v2-muted">{building.address}</p>
-          <p className="mt-4 text-base leading-relaxed text-v2-ink">{building.headline}</p>
+          {building.cardId ? <p className="v2-kicker mt-6">REF · {building.cardId}</p> : null}
+          <h1 className="v2-display mt-2 text-3xl leading-tight sm:text-4xl">{building.name}</h1>
+          <p className="v2-mono-xs mt-3 text-v2-muted normal-case">{building.address}</p>
+          <p className="mt-4 text-sm leading-relaxed text-v2-muted normal-case">{building.headline}</p>
 
           <BuildingStatusChips building={building} modernPhotoYear={archiview?.modernPhotoYear} />
 
-          <div className="mt-4 flex flex-wrap gap-2 text-sm text-v2-muted">
+          <div className="mt-4 flex flex-wrap gap-2 text-sm text-v2-muted normal-case">
             <span>{building.style}</span>
             <span>·</span>
             <span>{building.yearBuilt}</span>
@@ -357,20 +373,20 @@ export function BuildingPageV2() {
         {building.verification && <VerificationBannerV2 verification={building.verification} />}
 
         {displayAssets ? (
-          <section className="v2-card overflow-hidden">
-            <div className="space-y-4 px-5 pt-5 sm:px-6">
-              <div>
-                <p className="v2-kicker">Archiview</p>
-                <h2 className="v2-section-title mt-1">Фасад и подсветка</h2>
-              </div>
-              {manifest && manifest.comparisons.length > 1 ? (
+          <section className="v2-panel overflow-hidden">
+            <header className="border-b border-v2-line px-4 py-4 sm:px-5">
+              <p className="v2-kicker">Archiview</p>
+              <h2 className="v2-section-title mt-1">Фасад и подсветка</h2>
+            </header>
+            {manifest && manifest.comparisons.length > 1 ? (
+              <div className="border-b border-v2-line px-4 py-3 sm:px-5">
                 <ArchiviewComparisonPicker
                   manifest={manifest}
                   selectedId={selectedComparisonId}
                   onSelect={setSelectedComparisonId}
                 />
-              ) : null}
-            </div>
+              </div>
+            ) : null}
             <ArchiviewFacadePanel assets={displayAssets} building={building} />
           </section>
         ) : (
@@ -379,36 +395,46 @@ export function BuildingPageV2() {
           </V2Section>
         )}
 
-        <V2Section title="Что видно на фасаде">
-          <ul className="space-y-3">
-            {building.memoryTraces.map((t) => {
-              const { body, source } = splitTraceMessage(t.userMessage)
-              return (
-                <li
-                  key={t.id}
-                  className="rounded-lg border border-v2-line bg-v2-surface-muted/60 p-4"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="font-medium text-v2-ink">{t.title}</h3>
-                    <ConfidenceBadge level={t.confidence} />
-                    <span className="text-xs text-v2-muted">{t.period}</span>
-                  </div>
-                  <p className="mt-2 text-sm leading-relaxed text-v2-muted">{body}</p>
-                  {source ? (
-                    <p className="mt-2 text-xs text-v2-muted">Источник: {source}</p>
-                  ) : null}
-                  <MemoryTraceImage trace={t} />
-                </li>
-              )
-            })}
-          </ul>
+        <V2Manifest
+          kicker="Layer manifest"
+          title="Что видно на фасаде"
+          count={`${building.memoryTraces.length} ELEMENTS`}
+        >
+          {building.memoryTraces.map((t, index) => {
+            const { body, source } = splitTraceMessage(t.userMessage)
+            const code = `T${String(index + 1).padStart(2, '0')}`
+            return (
+              <V2Plate
+                key={t.id}
+                code={code}
+                title={t.title}
+                description={body}
+                meta={t.period}
+                markColor={V2_CONFIDENCE_DOT[t.confidence]}
+                active={t.confidence === 'confirmed'}
+              >
+                {source ? (
+                  <p className="text-xs text-v2-muted">Источник: {source}</p>
+                ) : null}
+                <div className="mt-2">
+                  <V2ConfidenceBadge level={t.confidence} />
+                </div>
+                <MemoryTraceImage trace={t} />
+              </V2Plate>
+            )
+          })}
           {hasPendingExpertCheck(building) && (
-            <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-              Версии со статусом «Требует проверки» нужно сверить с архивными фотографиями,
-              источниками и/или натурным осмотром эксперта.
-            </p>
+            <div className="v2-plate-row">
+              <div className="flex gap-3">
+                <V2SquareMark innerColor={V2_CONFIDENCE_DOT.needs_verification} />
+                <p className="text-sm leading-relaxed text-v2-muted normal-case">
+                  Версии со статусом «Требует проверки» нужно сверить с архивными фотографиями,
+                  источниками и/или натурным осмотром эксперта.
+                </p>
+              </div>
+            </div>
           )}
-        </V2Section>
+        </V2Manifest>
 
         {displayAssets && !isSideBySide ? (
           <V2Section title="Слои времени" kicker="Archiview">
@@ -437,17 +463,23 @@ export function BuildingPageV2() {
         </V2Section>
 
         {building.artifacts.length > 0 && (
-          <V2Section title="Сохранившиеся элементы">
-            <ul className="space-y-2">
-              {building.artifacts.map((a) => (
-                <li key={a.id} className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="font-medium text-v2-ink">{a.title}</span>
-                  <ConfidenceBadge level={a.confidence} />
-                  <span className="text-v2-muted">{a.period}</span>
-                </li>
-              ))}
-            </ul>
-          </V2Section>
+          <V2Manifest
+            kicker="Artifacts"
+            title="Сохранившиеся элементы"
+            count={`${building.artifacts.length} ITEMS`}
+          >
+            {building.artifacts.map((a, index) => (
+              <V2Plate
+                key={a.id}
+                code={`A${String(index + 1).padStart(2, '0')}`}
+                title={a.title}
+                meta={a.period}
+                markColor={V2_CONFIDENCE_DOT[a.confidence]}
+              >
+                <V2ConfidenceBadge level={a.confidence} />
+              </V2Plate>
+            ))}
+          </V2Manifest>
         )}
 
         <MaterialsAndSources building={building} />

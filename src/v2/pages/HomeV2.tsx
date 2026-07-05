@@ -1,30 +1,35 @@
 import { Link } from 'react-router-dom'
 import { BUILDINGS } from '../../data/buildings'
+import { V2Plate, V2Manifest } from '../components/V2Plate'
+import { V2SquareMark } from '../components/V2SquareMark'
 
 const METHOD_STEPS = [
   {
     num: '01',
+    code: 'SCN',
     title: 'Собрать пару',
     text: 'Историческое и современное фото одного фасада — с понятной плоскостью и опорными точками.',
   },
   {
     num: '02',
+    code: 'MRK',
     title: 'Разметить в Archiview',
     text: 'Overlay или side-by-side: зоны надстроек, утрат декора, вывесок и мемориальных слоёв.',
   },
   {
     num: '03',
+    code: 'RD',
     title: 'Читать на сайте',
     text: 'Карта, карточка здания, экскурсия и режим исследователя — с уровнями уверенности.',
   },
 ]
 
 const CAPABILITIES = [
-  'Карта пилотных объектов Москвы',
-  'Следы памяти с уровнем уверенности',
-  'Archiview: overlay и сравнения',
-  'Экспертная разметка и экспорт на сайт',
-  'Режим исследователя и AR-симуляция',
+  { code: 'MAP', title: 'Карта пилотных объектов', meta: '4 BUILDINGS' },
+  { code: 'TRC', title: 'Следы памяти с уровнем уверенности', meta: 'CONFIDENCE TIERS' },
+  { code: 'ARX', title: 'Archiview overlay и сравнения', meta: 'MULTI-LAYER' },
+  { code: 'EXP', title: 'Экспертная разметка и экспорт', meta: 'SITE SYNC' },
+  { code: 'SIM', title: 'Исследователь и AR-симуляция', meta: 'PREVIEW' },
 ]
 
 const FACADE_IMAGES: Record<string, string> = {
@@ -45,105 +50,111 @@ export function HomeV2() {
       <section className="v2-container py-16 sm:py-24">
         <div className="grid items-end gap-10 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
-            <p className="v2-kicker">MVP · пилот · 4 объекта</p>
+            <p className="v2-kicker">MVP · pilot · 4 objects</p>
             <h1 className="v2-hero-title mt-4 text-v2-ink">
               Читать невидимое
               <br />
-              <em>на фасаде</em>
+              на фасаде
             </h1>
-            <p className="mt-6 max-w-xl text-base leading-relaxed text-v2-muted sm:text-lg">
+            <p className="mt-6 max-w-xl text-sm leading-relaxed text-v2-muted normal-case sm:text-base">
               Платформа для чтения городской памяти: исторические слои, экспертная разметка и
-              интерактивные карточки зданий — от карты до режима исследователя.
+              интерактивные карточки зданий.
             </p>
-            <div className="mt-8 flex flex-wrap gap-3">
+            <div className="mt-8 flex flex-wrap gap-4">
               <Link to="/v2/map" className="v2-btn-primary">
                 Открыть карту
               </Link>
-              <a href="#method" className="v2-btn-outline">
-                Как устроен метод
+              <a href="#method" className="v2-btn-text">
+                Метод →
               </a>
             </div>
           </div>
 
-          <div className="v2-card overflow-hidden p-0">
+          <figure className="v2-panel overflow-hidden">
             <img
               src={facadeImage('MOSCOW_003')}
               alt="Размеченный фасад — дом со зверями"
               className="aspect-[4/3] w-full object-cover"
             />
-            <div className="border-t border-v2-line px-5 py-4">
-              <p className="v2-kicker">REF. MOSCOW_003</p>
-              <p className="mt-1 text-sm font-medium">Чистопрудный 14с3 · эталон пилота</p>
-            </div>
-          </div>
+            <figcaption className="border-t border-v2-line px-4 py-3 sm:px-5">
+              <p className="v2-kicker">FIG · MOSCOW_003</p>
+              <p className="v2-mono-xs mt-1 text-v2-muted normal-case">
+                Чистопрудный 14с3 · эталон пилота
+              </p>
+            </figcaption>
+          </figure>
         </div>
       </section>
 
       <section id="method" className="border-y border-v2-line bg-v2-surface py-16 sm:py-20">
         <div className="v2-container">
-          <p className="v2-kicker">Methodology</p>
-          <h2 className="v2-section-title mt-2">Метод</h2>
-          <div className="mt-10 grid gap-8 md:grid-cols-3">
-            {METHOD_STEPS.map((step) => (
-              <article key={step.num} className="border-t border-v2-line pt-6">
-                <p className="text-xs font-bold tracking-[0.2em] text-v2-muted">{step.num}</p>
-                <h3 className="mt-3 text-sm font-bold tracking-[0.12em] uppercase">{step.title}</h3>
-                <p className="mt-3 text-sm leading-relaxed text-v2-muted">{step.text}</p>
-              </article>
+          <V2Manifest kicker="Methodology" title="Метод" count="3 STEPS">
+            {METHOD_STEPS.map((step, index) => (
+              <V2Plate
+                key={step.num}
+                code={step.code}
+                title={step.title}
+                description={step.text}
+                meta={`STEP ${step.num}`}
+                active={index === 0}
+              />
             ))}
-          </div>
+          </V2Manifest>
         </div>
       </section>
 
       <section id="objects" className="v2-container py-16 sm:py-20">
-        <p className="v2-kicker">Archive</p>
-        <h2 className="v2-section-title mt-2">Пилотные объекты</h2>
-        <div className="mt-10 grid gap-6 sm:grid-cols-2">
-          {BUILDINGS.map((building) => {
+        <V2Manifest kicker="Archive" title="Пилотные объекты" count={`${BUILDINGS.length} CARDS`}>
+          {BUILDINGS.map((building, index) => {
             const img = building.cardId ? facadeImage(building.cardId) : undefined
             return (
-              <Link
-                key={building.id}
-                to={`/v2/building/${building.id}`}
-                className="v2-card group overflow-hidden transition hover:shadow-md"
-              >
-                {img ? (
-                  <img
-                    src={img}
-                    alt=""
-                    className="aspect-[16/10] w-full object-cover transition group-hover:scale-[1.01]"
-                  />
-                ) : (
-                  <div className="aspect-[16/10] bg-v2-surface-muted" />
-                )}
-                <div className="p-5">
-                  <p className="v2-kicker">{building.cardId}</p>
-                  <h3 className="mt-1 text-base font-semibold leading-snug">{building.name}</h3>
-                  <p className="mt-2 text-sm text-v2-muted">{building.address}</p>
-                </div>
-              </Link>
+              <div key={building.id} className="v2-plate-row">
+                <Link to={`/v2/building/${building.id}`} className="group block">
+                  <div className="flex gap-3">
+                    <div className="pt-0.5">
+                      <V2SquareMark active={index === 0} innerColor="#64748b" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <h3 className="v2-mono-sm font-semibold text-v2-ink group-hover:text-v2-red">
+                          {building.cardId ?? building.id}
+                        </h3>
+                        <span className="v2-btn-text opacity-0 transition group-hover:opacity-100">
+                          Открыть →
+                        </span>
+                      </div>
+                      <p className="v2-display mt-1 text-lg text-v2-ink normal-case">{building.name}</p>
+                      <p className="v2-mono-xs mt-1 text-v2-muted normal-case">{building.address}</p>
+                      {img ? (
+                        <img
+                          src={img}
+                          alt=""
+                          className="mt-3 aspect-[16/7] w-full border border-v2-line object-cover"
+                        />
+                      ) : null}
+                    </div>
+                  </div>
+                </Link>
+              </div>
             )
           })}
-        </div>
+        </V2Manifest>
       </section>
 
       <section className="border-y border-v2-line bg-v2-surface py-16 sm:py-20">
-        <div className="v2-container grid gap-10 lg:grid-cols-[0.9fr_1.1fr]">
-          <div>
-            <p className="v2-kicker">System capabilities</p>
-            <h2 className="v2-section-title mt-2">Возможности</h2>
-          </div>
-          <ul className="space-y-4">
-            {CAPABILITIES.map((item) => (
-              <li
-                key={item}
-                className="flex items-start gap-3 border-b border-v2-line pb-4 text-sm text-v2-muted last:border-0"
-              >
-                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-v2-red" aria-hidden />
-                {item}
-              </li>
+        <div className="v2-container">
+          <V2Manifest kicker="System" title="Возможности" count={`${CAPABILITIES.length} MODULES`}>
+            {CAPABILITIES.map((item, index) => (
+              <V2Plate
+                key={item.code}
+                code={item.code}
+                title={item.title}
+                meta={item.meta}
+                active={index === 0}
+                markColor={index === 0 ? '#d63f46' : '#9ca3af'}
+              />
             ))}
-          </ul>
+          </V2Manifest>
         </div>
       </section>
 
@@ -151,20 +162,20 @@ export function HomeV2() {
         <div className="v2-container flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="v2-kicker text-v2-red">Preview branch</p>
-            <p className="mt-3 max-w-lg text-2xl leading-snug font-medium sm:text-3xl">
-              Новый интерфейс — без изменения боевого сайта
+            <p className="v2-display mt-3 max-w-lg text-2xl leading-snug sm:text-3xl">
+              Новый интерфейс без изменения боевого сайта
             </p>
-            <p className="mt-4 max-w-md text-sm text-white/65">
-              Это версия <code className="text-white/90">/v2/</code> в отдельной ветке. Основной
-              сайт остаётся на <code className="text-white/90">/</code>, пока вы не решите слить PR.
+            <p className="mt-4 max-w-md text-sm text-white/65 normal-case">
+              Версия <code className="text-white/90">/v2/</code> в отдельной ветке. Основной сайт на{' '}
+              <code className="text-white/90">/</code> не меняется.
             </p>
           </div>
-          <div className="flex flex-wrap gap-3">
-            <Link to="/v2/map" className="v2-btn-primary">
+          <div className="flex flex-wrap gap-4">
+            <Link to="/v2/map" className="v2-btn-primary border-white bg-white text-v2-ink">
               Смотреть карту
             </Link>
-            <Link to="/" className="v2-btn-outline border-white/20 bg-transparent text-white hover:bg-white/10">
-              Сравнить со старым
+            <Link to="/" className="v2-btn-text text-white/80 hover:opacity-100">
+              Старый сайт →
             </Link>
           </div>
         </div>
