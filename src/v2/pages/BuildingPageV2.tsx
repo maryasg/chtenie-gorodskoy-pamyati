@@ -1,5 +1,6 @@
 import { Link, useParams } from 'react-router-dom'
 import { useEffect, useMemo, useState } from 'react'
+import { OrdynkaArkiPage } from './building/OrdynkaArkiPage'
 import { getBuildingById } from '../../data/buildings'
 import { ArchiviewFacadePanel } from '../../components/ArchiviewFacadePanel'
 import { FacadeTimeLayers } from '../../components/FacadeTimeLayers'
@@ -22,6 +23,17 @@ import { V2Plate, V2Manifest } from '../components/V2Plate'
 import { V2ConfidenceBadge } from '../components/V2ConfidenceBadge'
 import { V2SquareMark } from '../components/V2SquareMark'
 import { V2_CONFIDENCE_DOT } from '../lib/confidenceColors'
+
+const ORDYNKA_BUILDING_ID = 'MOSCOW_001_kumaninykh'
+
+export function BuildingPageV2() {
+  const { id } = useParams<{ id: string }>()
+  if (id === ORDYNKA_BUILDING_ID) {
+    return <OrdynkaArkiPage />
+  }
+
+  return <BuildingPageV2Default id={id} />
+}
 
 function timeLayersIntro(cardId?: string): string {
   if (cardId === 'MOSCOW_003') {
@@ -276,8 +288,7 @@ function MaterialsAndSources({ building }: { building: Building }) {
   )
 }
 
-export function BuildingPageV2() {
-  const { id } = useParams<{ id: string }>()
+function BuildingPageV2Default({ id }: { id?: string }) {
   const building = id ? getBuildingById(id) : undefined
   const archiview = building ? getArchiviewAssets(building.id) : undefined
   const [manifest, setManifest] = useState<ExplorerManifest | null>(null)

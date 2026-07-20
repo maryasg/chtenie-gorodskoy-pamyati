@@ -1,4 +1,4 @@
-﻿import { copyFileSync, mkdirSync } from "node:fs"
+﻿import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { defineConfig } from "vite"
 import react from "@vitejs/plugin-react"
@@ -25,6 +25,9 @@ export default defineConfig({
       closeBundle() {
         const out = join(__dirname, "dist")
         const index = join(out, "index.html")
+        if (!existsSync(index)) {
+          return
+        }
         copyFileSync(index, join(out, "404.html"))
         for (const route of SPA_FALLBACK_PATHS) {
           const dir = join(out, route)
