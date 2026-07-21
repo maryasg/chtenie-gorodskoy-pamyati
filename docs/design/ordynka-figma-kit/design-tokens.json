@@ -1,0 +1,36 @@
+{
+  "name": "Ordynka Arki card (v2)",
+  "source": "src/v2/arki-theme.css",
+  "colors": {
+    "ink": { "hex": "#111111", "usage": "текст, линии сетки" },
+    "muted": { "hex": "#6B6B6B", "usage": "вторичный текст" },
+    "red": { "hex": "#E31E24", "usage": "акцент, Verified, активные метки" },
+    "bg": { "hex": "#F7F7F5", "usage": "фон страницы" },
+    "white": { "hex": "#FFFFFF", "usage": "панели фасада, таблица" },
+    "overlayLost": { "hex": "#E31E24", "usage": "L·01 утраченные" },
+    "overlayKept": { "hex": "#059669", "usage": "K·02 сохранившиеся" },
+    "overlayAdded": { "hex": "#0284C7", "usage": "A·03 добавленные" }
+  },
+  "typography": {
+    "serif": {
+      "family": "Cormorant Garamond",
+      "weights": [400, 500],
+      "styles": ["regular", "italic"],
+      "usage": "заголовки, цитата в блоке D"
+    },
+    "mono": {
+      "family": "IBM Plex Mono",
+      "weights": [400, 500, 600],
+      "usage": "метки, таблица, UI-подписи",
+      "defaultSizePx": 10,
+      "letterSpacingEm": 0.12,
+      "textTransform": "uppercase"
+    }
+  },
+  "layout": {
+    "pageMaxWidthPx": 1280,
+    "frameWidthPx": 1440,
+    "borderWidthPx": 1,
+    "gridStroke": "#111111"
+  }
+}

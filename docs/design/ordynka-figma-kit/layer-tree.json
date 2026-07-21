@@ -1,0 +1,69 @@
+{
+  "fileName": "Ordynka · карточка v2 (Arki)",
+  "frame": {
+    "name": "ORDYNKA / MOSCOW_001 / Desktop 1440",
+    "width": 1440,
+    "background": "#F7F7F5"
+  },
+  "chromeNote": "CHROME — LayoutV2 (шапка сайта, навигация) вне этого фрейма; в макете только CARD.",
+  "layers": [
+    {
+      "id": "A",
+      "name": "A · CARD-HEADER",
+      "children": [
+        { "id": "A1", "name": "A1 · badge + Object ID", "type": "row", "content": "Verified + MOSCOW_001 · 77-04-A017" },
+        { "id": "A2", "name": "A2 · title + geo", "type": "text", "content": "Название здания, адрес, координаты" },
+        { "id": "A3", "name": "A3 · map link + dating", "type": "column", "content": "← Карта города; датировка; счётчик слоёв" }
+      ]
+    },
+    {
+      "id": "B",
+      "name": "B · HERO-GRID",
+      "layout": "3 columns: 240 | 1fr | 280",
+      "children": [
+        { "id": "B1", "name": "B1 · legend", "type": "text", "asset": null },
+        { "id": "B2", "name": "B2 · labeled facade (hero)", "type": "image", "asset": "assets/cmp_005/marked-facade-labeled.png" },
+        {
+          "id": "B3",
+          "name": "B3 · inspector",
+          "children": [
+            { "id": "B3a", "name": "B3a · layer checklist", "type": "list" },
+            { "id": "B3b", "name": "B3b · crossfade widget", "type": "component", "note": "см. time-layers/*.jpg" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "C",
+      "name": "C · FACADE-READING",
+      "layout": "2 columns: 1fr | 280",
+      "children": [
+        { "id": "C1a", "name": "C1a · section titles", "type": "text" },
+        { "id": "C1b", "name": "C1b · comparison picker", "type": "chips", "options": ["cmp_005", "cmp_008", "cmp_009"] },
+        { "id": "C1c", "name": "C1c · Archiview facade panel", "type": "image-stack", "asset": "assets/cmp_005/marked-facade.png" },
+        { "id": "C1d", "name": "C1d · photo density slider", "type": "control" },
+        { "id": "C1e", "name": "C1e · registration filter", "type": "text" },
+        { "id": "C2", "name": "C2 · overlay groups (L/K/A)", "type": "list" }
+      ]
+    },
+    {
+      "id": "D",
+      "name": "D · NARRATIVE",
+      "children": [
+        { "id": "D1", "name": "D1 · summary quote", "type": "text" },
+        { "id": "D2", "name": "D2 · assessment counters (4 tiles)", "type": "grid" }
+      ]
+    },
+    {
+      "id": "E",
+      "name": "E · DOSSIER",
+      "children": [
+        { "id": "E1", "name": "E1 · timeline table", "type": "table" },
+        { "id": "E2a", "name": "E2a · artifacts list", "type": "list" },
+        { "id": "E2b", "name": "E2b · sources list", "type": "list" },
+        { "id": "E3", "name": "E3 · tech footer", "type": "text", "content": "Project ARCHITECTOR · release 2.6.0" }
+      ]
+    }
+  ],
+  "assetsManifest": "assets/README.md"
+}

@@ -129,8 +129,8 @@ export function OrdynkaArkiPage() {
       className="arki-page pb-16"
       style={{ ['--arki-photo-opacity' as string]: String(photoOpacity / 100) }}
     >
-      {/* Header */}
-      <header className="arki-border border-t-0 border-x-0">
+      {/* Header — Figma block A · see docs/design/ordynka-figma-kit/ */}
+      <header className="arki-border border-t-0 border-x-0" data-figma-block="A-CARD-HEADER">
         <div className="v2-container grid gap-0 lg:grid-cols-[1fr_auto]">
           <div className="arki-border border-t-0 border-l-0 border-r-0 p-4 sm:p-6 lg:border-r">
             <div className="flex flex-wrap items-center gap-2">
@@ -161,8 +161,8 @@ export function OrdynkaArkiPage() {
         </div>
       </header>
 
-      {/* Hero grid */}
-      <section className="v2-container">
+      {/* Hero grid — Figma block B */}
+      <section className="v2-container" data-figma-block="B-HERO-GRID">
         <div className="grid border border-[var(--arki-line)] lg:grid-cols-[minmax(200px,240px)_1fr_minmax(220px,280px)]">
           <aside className="border-b border-[var(--arki-line)] p-4 lg:border-r lg:border-b-0">
             <p className="arki-mono text-[var(--arki-muted)]">Legend · фрагмент 01A</p>
@@ -218,8 +218,8 @@ export function OrdynkaArkiPage() {
         </div>
       </section>
 
-      {/* Facade reading */}
-      <section className="v2-container mt-8">
+      {/* Facade reading — Figma block C */}
+      <section className="v2-container mt-8" data-figma-block="C-FACADE-READING">
         <div className="grid gap-0 border border-[var(--arki-line)] lg:grid-cols-[1fr_280px]">
           <div className="border-b border-[var(--arki-line)] p-4 lg:border-r lg:border-b-0">
             <p className="arki-mono text-[var(--arki-muted)]">Facade Reading · Overlay Method</p>
@@ -297,8 +297,8 @@ export function OrdynkaArkiPage() {
         </div>
       </section>
 
-      {/* Reading */}
-      <section className="v2-container mt-8 border border-[var(--arki-line)] p-6 sm:p-8">
+      {/* Reading — Figma block D */}
+      <section className="v2-container mt-8 border border-[var(--arki-line)] p-6 sm:p-8" data-figma-block="D-NARRATIVE">
         <h2 className="arki-serif text-2xl">// Чтение фасада</h2>
         <p className="arki-serif-italic mt-4 max-w-3xl text-lg leading-relaxed text-[var(--arki-muted)]">
           {building.summary}
@@ -319,8 +319,8 @@ export function OrdynkaArkiPage() {
         </div>
       </section>
 
-      {/* Dossier */}
-      <section className="v2-container mt-8 mb-12">
+      {/* Dossier — Figma block E */}
+      <section className="v2-container mt-8 mb-12" data-figma-block="E-DOSSIER">
         <h2 className="arki-mono mb-4 text-[var(--arki-ink)]">Dossier // Исторические слои</h2>
         <div className="overflow-x-auto border border-[var(--arki-line)] bg-white">
           <table className="arki-table">
