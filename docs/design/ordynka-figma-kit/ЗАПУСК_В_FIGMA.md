@@ -11,6 +11,7 @@ Figma MCP подключён. Создай design-файл для проекта
 2. create_new_file: fileName «Память стен · схема + Ordynka карточка», editorType design.
 3. use_figma (fileKey из шага 2, skillNames figma-use,figma-generate-design) — выполни по очереди содержимое файлов из репозитория:
    - docs/design/ordynka-figma-kit/figma-scripts/01-create-pages.js
+   - docs/design/ordynka-figma-kit/figma-scripts/05-site-pages-map.js
    - docs/design/ordynka-figma-kit/figma-scripts/02-project-scheme.js
    - docs/design/ordynka-figma-kit/figma-scripts/03-design-tokens.js
    - docs/design/ordynka-figma-kit/figma-scripts/04-card-layers.js
@@ -25,6 +26,7 @@ Figma MCP подключён. Создай design-файл для проекта
 
 | Страница | Содержание |
 |----------|------------|
+| **00 · Карта сайта** | Все URL v1/v2 и пути к файлам в `src/` |
 | **01 · Схема проекта** | GitHub Pages, v1/v2, маршруты, Ordynka vs остальные здания, чипы A–E |
 | **02 · Design tokens** | Цвета Arki, шрифты, ссылка на `arki-theme.css` |
 | **03 · Карточка · слои** | Фрейм 1440 с вложенными **A–E** и подслоями (A1, B2, C1c…) |

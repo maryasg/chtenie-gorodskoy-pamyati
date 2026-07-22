@@ -2,6 +2,7 @@
 // Creates 4 pages in the target design file.
 
 const pageNames = [
+  '00 · Карта сайта',
   '01 · Схема проекта',
   '02 · Design tokens',
   '03 · Карточка · слои',
