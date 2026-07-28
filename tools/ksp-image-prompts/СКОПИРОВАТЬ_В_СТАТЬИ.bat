@@ -22,6 +22,7 @@ copy /Y "%SRC%СОБРАТЬ_ПЛОСКИЕ_ФАЙЛЫ.bat" "%DST%\"
 copy /Y "%SRC%generate.py" "%DST%\"
 copy /Y "%SRC%requirements.txt" "%DST%\"
 copy /Y "%SRC%ИНСТРУКЦИЯ.md" "%DST%\"
+copy /Y "%SRC%ИНСТРУКЦИЯ_ДЛЯ_ПЕЧАТИ.md" "%DST%\"
 copy /Y "%SRC%prompts\cover_template_title.txt" "%DST%\prompts\"
 
 echo.
@@ -37,6 +38,9 @@ call build_image_prompts.bat --force
 echo.
 echo Для плоских файлов за месяц запустите:
 echo   СОБРАТЬ_ПЛОСКИЕ_ФАЙЛЫ.bat июнь
+echo.
+echo Инструкция для печати:
+echo   %DST%\ИНСТРУКЦИЯ_ДЛЯ_ПЕЧАТИ.md
 echo.
 echo Промпты в папке: %DST%\image_prompts\
 pause
