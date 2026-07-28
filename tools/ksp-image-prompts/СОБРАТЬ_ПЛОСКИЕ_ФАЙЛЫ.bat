@@ -35,6 +35,8 @@ copy /Y "%SRC%\pack_month.py" "%ART%\" >nul
 copy /Y "%SRC%\pack_month.bat" "%ART%\" >nul
 copy /Y "%SRC%\generate.py" "%ART%\" >nul
 copy /Y "%SRC%\docx_export.py" "%ART%\" >nul
+copy /Y "%SRC%\export_docx.py" "%ART%\" >nul
+copy /Y "%SRC%\export_docx.bat" "%ART%\" >nul
 echo       OK
 
 cd /d "%ART%"
@@ -98,9 +100,18 @@ if errorlevel 1 (
 )
 
 echo.
+echo [5/5] Собираю Word-файлы в папку месяца...
+%PY% export_docx.py --filter-month %MONTH%
+if errorlevel 1 (
+    pause
+    exit /b 1
+)
+
+echo.
 echo ========================================
 echo   ГОТОВО: %ART%\output\%MONTH%
-echo   Ищите: *_телеграм.txt  *_вк.rtf
+echo   Ищите: статья01_%MONTH%_2026_ВК_....docx
+echo          статья01_%MONTH%_2026_ТГМАКС_....docx
 echo ========================================
 explorer "%ART%\output\%MONTH%"
 pause

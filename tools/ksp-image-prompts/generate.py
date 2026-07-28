@@ -488,6 +488,7 @@ def months_for_pack(args: argparse.Namespace, plan: list[dict]) -> list[str]:
 
 
 def pack_after_generate(args: argparse.Namespace, plan: list[dict]) -> None:
+    from export_docx import export_docx as run_export_docx
     from pack_month import pack_month as run_pack_month
 
     for month in months_for_pack(args, plan):
@@ -507,6 +508,8 @@ def pack_after_generate(args: argparse.Namespace, plan: list[dict]) -> None:
         print(f"Готово: {packed} из {total} в {args.output / month}")
         if packed:
             print("Примеры: месяц01_{0}_..._вк.rtf, ..._телеграм.txt".format(month))
+        print(f"\n=== Word-файлы в папке месяца: {month} ===")
+        run_export_docx(args.output, filter_month=month)
 
 
 def main() -> int:
