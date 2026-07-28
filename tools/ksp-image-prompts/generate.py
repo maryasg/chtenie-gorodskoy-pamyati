@@ -122,6 +122,19 @@ def normalize_text_model(model: str) -> str:
     return aliases.get(raw, raw)
 
 
+def candidate_text_models(primary: str) -> list[str]:
+    primary = normalize_text_model(primary)
+    fallback_raw = os.getenv("TEXT_MODEL_FALLBACK", "claude-sonnet,deepseek-chat,gpt-5.4-mini")
+    extras = [normalize_text_model(part.strip()) for part in fallback_raw.split(",") if part.strip()]
+    ordered = [primary, *extras]
+    # Keep unique order.
+    result: list[str] = []
+    for name in ordered:
+        if name and name not in result:
+            result.append(name)
+    return result
+
+
 def generate_article(
     client: OpenAI,
     model: str,
@@ -140,18 +153,13 @@ def generate_article(
             + vk_text
         )
 
-    model = normalize_text_model(model)
-    fallback = normalize_text_model(os.getenv("TEXT_MODEL_FALLBACK", "gpt-4o-mini").strip())
-    models_to_try = [model]
-    if fallback and fallback != model:
-        models_to_try.append(fallback)
-
+    models_to_try = candidate_text_models(model)
     last_error: Exception | None = None
+
     for current_model in models_to_try:
-        for attempt in range(1, 4):
+        for attempt in range(1, 3):
             try:
-                if current_model != model or attempt > 1:
-                    print(f"Повтор запроса: модель={current_model}, попытка {attempt}/3")
+                print(f"Запрос к KupiAPI: модель={current_model}, попытка {attempt}/2")
                 response = client.chat.completions.create(
                     model=current_model,
                     temperature=0.7,
@@ -163,19 +171,29 @@ def generate_article(
                 text = response.choices[0].message.content
                 if not text:
                     raise RuntimeError("Пустой ответ модели")
+                if current_model != normalize_text_model(model):
+                    print(f"Успех на запасной модели: {current_model}")
                 return text.strip()
             except (APIConnectionError, InternalServerError, RateLimitError) as exc:
                 last_error = exc
-                wait_s = attempt * 3
-                print(f"KupiAPI временно недоступна ({exc.__class__.__name__}). Жду {wait_s} сек...")
-                time.sleep(wait_s)
+                detail = getattr(exc, "message", None) or str(exc)
+                print(f"KupiAPI временно недоступна ({exc.__class__.__name__}): {detail}")
+                if attempt == 1:
+                    print("Жду 2 сек и повторяю...")
+                    time.sleep(2)
+                else:
+                    print(f"Переключаюсь на следующую модель...")
             except APIStatusError as exc:
                 last_error = exc
                 status = getattr(exc, "status_code", None)
+                detail = getattr(exc, "message", None) or str(exc)
                 if status in {502, 503, 504}:
-                    wait_s = attempt * 3
-                    print(f"KupiAPI ошибка {status}. Жду {wait_s} сек...")
-                    time.sleep(wait_s)
+                    print(f"KupiAPI ошибка {status}: {detail}")
+                    if attempt == 1:
+                        print("Жду 2 сек и повторяю...")
+                        time.sleep(2)
+                        continue
+                    print("Переключаюсь на следующую модель...")
                     continue
                 raise
 
@@ -185,8 +203,9 @@ def generate_article(
     print("  1) баланс в кабинете https://kupiapi.ru/cabinet")
     print("  2) в .env: OPENAI_BASE_URL=https://kupiapi.ru/v1")
     print("  3) в .env: OPENAI_API_KEY=rk_live_...")
-    print("  4) в .env: TEXT_MODEL=gpt-4o-mini")
-    print("     (или gpt-5.4-mini / claude-sonnet)")
+    print("  4) в .env поставьте:")
+    print("     TEXT_MODEL=claude-sonnet")
+    print("     TEXT_MODEL_FALLBACK=deepseek-chat,gpt-4o-mini")
     raise RuntimeError(str(last_error) if last_error else "KupiAPI request failed")
 
 
