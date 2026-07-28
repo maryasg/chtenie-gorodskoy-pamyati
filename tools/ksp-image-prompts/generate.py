@@ -107,17 +107,15 @@ def topic_dir(output_root: Path, month: str, number: str, title: str) -> Path:
     return output_root / month / f"{number}-{slugify(title)}"
 
 
-# Fallback chain for KupiAPI: try several providers when one returns 502.
+# Fallback chain for KupiAPI: GPT-only by default (KupiAPI support: GPT works).
 DEFAULT_TEXT_MODEL_FALLBACKS = (
-    "deepseek-chat",
-    "deepseek-reasoner",
-    "claude-sonnet",
-    "claude-haiku",
+    "gpt-5.4-mini",
     "gpt-4o-mini",
     "gpt-4o",
-    "gpt-5.4-mini",
     "gpt-5.4",
-    "claude-opus",
+    "chatgpt-4o-latest",
+    "gpt-4-turbo",
+    "gpt-5.4-nano",
 )
 
 MODEL_ALIASES = {
@@ -189,14 +187,17 @@ def generate_article(
         for attempt in range(1, 3):
             try:
                 print(f"Запрос к KupiAPI: модель={current_model}, попытка {attempt}/2")
-                response = client.chat.completions.create(
-                    model=current_model,
-                    temperature=0.7,
-                    messages=[
+                kwargs = {
+                    "model": current_model,
+                    "messages": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": "\n\n".join(user_parts)},
                     ],
-                )
+                }
+                # Some GPT-5.* models via proxies reject temperature.
+                if not current_model.startswith(("gpt-5.", "gpt-5.5")):
+                    kwargs["temperature"] = 0.7
+                response = client.chat.completions.create(**kwargs)
                 text = response.choices[0].message.content
                 if not text:
                     raise RuntimeError("Пустой ответ модели")
@@ -232,9 +233,10 @@ def generate_article(
     print("  1) баланс в кабинете https://kupiapi.ru/cabinet")
     print("  2) в .env: OPENAI_BASE_URL=https://kupiapi.ru/v1")
     print("  3) в .env: OPENAI_API_KEY=rk_live_...")
-    print("  4) в .env поставьте, например:")
-    print("     TEXT_MODEL=deepseek-chat")
-    print("     TEXT_MODEL_FALLBACK=deepseek-reasoner,claude-sonnet,claude-haiku,gpt-4o-mini")
+    print("  4) в .env поставьте:")
+    print("     TEXT_MODEL=gpt-5.4-mini")
+    print("     TEXT_MODEL_FALLBACK=gpt-4o-mini,gpt-4o,gpt-5.4,chatgpt-4o-latest")
+    print("  5) проверьте соединение: test_kupiapi.bat")
     raise RuntimeError(str(last_error) if last_error else "KupiAPI request failed")
 
 
@@ -632,7 +634,7 @@ def main() -> int:
 
     base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip()
     image_base = os.getenv("IMAGE_BASE_URL", base_url).strip()
-    text_model = normalize_text_model(os.getenv("TEXT_MODEL", "gpt-4o-mini").strip())
+    text_model = normalize_text_model(os.getenv("TEXT_MODEL", "gpt-5.4-mini").strip())
     image_model = os.getenv("IMAGE_MODEL", "dall-e-3").strip()
     image_size = os.getenv("IMAGE_SIZE", "1792x1024").strip()
 

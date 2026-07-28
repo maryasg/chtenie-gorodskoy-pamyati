@@ -20,6 +20,8 @@ copy /Y "%SRC%pack_month.py" "%DST%\"
 copy /Y "%SRC%pack_month.bat" "%DST%\"
 copy /Y "%SRC%СОБРАТЬ_ПЛОСКИЕ_ФАЙЛЫ.bat" "%DST%\"
 copy /Y "%SRC%generate.py" "%DST%\"
+copy /Y "%SRC%test_kupiapi.py" "%DST%\"
+copy /Y "%SRC%test_kupiapi.bat" "%DST%\"
 copy /Y "%SRC%requirements.txt" "%DST%\"
 copy /Y "%SRC%ИНСТРУКЦИЯ.md" "%DST%\"
 copy /Y "%SRC%ИНСТРУКЦИЯ_ДЛЯ_ПЕЧАТИ.md" "%DST%\"
@@ -35,6 +37,9 @@ echo Готово. Собираю 121 промпт...
 cd /d "%DST%"
 call build_image_prompts.bat --force
 
+echo.
+echo Для проверки KupiAPI:
+echo   test_kupiapi.bat
 echo.
 echo Для плоских файлов за месяц запустите:
 echo   СОБРАТЬ_ПЛОСКИЕ_ФАЙЛЫ.bat июнь
