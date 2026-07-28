@@ -66,9 +66,11 @@ if not exist content_plan\%MONTH%.json (
 
 set COUNT=0
 if exist output\%MONTH% (
-    for /d %%D in (output\%MONTH%\0*) do set /a COUNT+=1
+    for /d %%D in (output\%MONTH%\0*) do (
+        if exist "%%D\vk.md" if exist "%%D\telegram.md" set /a COUNT+=1
+    )
 )
-echo [3/4] Подпапок со статьями в output\%MONTH%: !COUNT!
+echo [3/4] Готовых статей ^(с vk.md и telegram.md^) в output\%MONTH%: !COUNT!
 
 if !COUNT!==0 (
     echo.
