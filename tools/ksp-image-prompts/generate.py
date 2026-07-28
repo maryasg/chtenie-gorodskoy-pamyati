@@ -107,6 +107,21 @@ def topic_dir(output_root: Path, month: str, number: str, title: str) -> Path:
     return output_root / month / f"{number}-{slugify(title)}"
 
 
+def normalize_text_model(model: str) -> str:
+    """Cursor BYOK uses kupi-* ids; Python SDK prefers plain model names."""
+    raw = model.strip()
+    aliases = {
+        "kupi-gpt54-mini": "gpt-5.4-mini",
+        "kupi-gpt54-mini-medium": "gpt-5.4-mini",
+        "kupi-gpt54-mini-standard": "gpt-5.4-mini",
+        "kupi-gpt4o-mini": "gpt-4o-mini",
+        "kupi-gpt4o": "gpt-4o",
+        "kupi-claude-sonnet": "claude-sonnet",
+        "kupi-deepseek-chat": "deepseek-chat",
+    }
+    return aliases.get(raw, raw)
+
+
 def generate_article(
     client: OpenAI,
     model: str,
@@ -114,24 +129,65 @@ def generate_article(
     title: str,
     vk_text: str | None = None,
 ) -> str:
+    import time
+
+    from openai import APIConnectionError, APIStatusError, InternalServerError, RateLimitError
+
     user_parts = [f"Тема статьи: {title}"]
     if vk_text:
         user_parts.append(
             "Ниже версия для ВКонтакте. Сделай сокращённую версию для Telegram в том же стиле:\n\n"
             + vk_text
         )
-    response = client.chat.completions.create(
-        model=model,
-        temperature=0.7,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": "\n\n".join(user_parts)},
-        ],
-    )
-    text = response.choices[0].message.content
-    if not text:
-        raise RuntimeError("Empty response from text model")
-    return text.strip()
+
+    model = normalize_text_model(model)
+    fallback = normalize_text_model(os.getenv("TEXT_MODEL_FALLBACK", "gpt-4o-mini").strip())
+    models_to_try = [model]
+    if fallback and fallback != model:
+        models_to_try.append(fallback)
+
+    last_error: Exception | None = None
+    for current_model in models_to_try:
+        for attempt in range(1, 4):
+            try:
+                if current_model != model or attempt > 1:
+                    print(f"Повтор запроса: модель={current_model}, попытка {attempt}/3")
+                response = client.chat.completions.create(
+                    model=current_model,
+                    temperature=0.7,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": "\n\n".join(user_parts)},
+                    ],
+                )
+                text = response.choices[0].message.content
+                if not text:
+                    raise RuntimeError("Пустой ответ модели")
+                return text.strip()
+            except (APIConnectionError, InternalServerError, RateLimitError) as exc:
+                last_error = exc
+                wait_s = attempt * 3
+                print(f"KupiAPI временно недоступна ({exc.__class__.__name__}). Жду {wait_s} сек...")
+                time.sleep(wait_s)
+            except APIStatusError as exc:
+                last_error = exc
+                status = getattr(exc, "status_code", None)
+                if status in {502, 503, 504}:
+                    wait_s = attempt * 3
+                    print(f"KupiAPI ошибка {status}. Жду {wait_s} сек...")
+                    time.sleep(wait_s)
+                    continue
+                raise
+
+    print()
+    print("Не удалось получить текст от KupiAPI.")
+    print("Проверьте:")
+    print("  1) баланс в кабинете https://kupiapi.ru/cabinet")
+    print("  2) в .env: OPENAI_BASE_URL=https://kupiapi.ru/v1")
+    print("  3) в .env: OPENAI_API_KEY=rk_live_...")
+    print("  4) в .env: TEXT_MODEL=gpt-4o-mini")
+    print("     (или gpt-5.4-mini / claude-sonnet)")
+    raise RuntimeError(str(last_error) if last_error else "KupiAPI request failed")
 
 
 def build_cover_prompt(telegram_text: str) -> str:
@@ -528,9 +584,12 @@ def main() -> int:
 
     base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip()
     image_base = os.getenv("IMAGE_BASE_URL", base_url).strip()
-    text_model = os.getenv("TEXT_MODEL", "gpt-4o-mini").strip()
+    text_model = normalize_text_model(os.getenv("TEXT_MODEL", "gpt-4o-mini").strip())
     image_model = os.getenv("IMAGE_MODEL", "dall-e-3").strip()
     image_size = os.getenv("IMAGE_SIZE", "1792x1024").strip()
+
+    if "kupiapi.ru" in os.getenv("OPENAI_BASE_URL", "").lower() and text_model.startswith("kupi-"):
+        print(f"Предупреждение: для generate.py лучше обычное имя модели, не Cursor-алиас: {text_model}")
 
     if args.images_only and args.skip_images:
         print("Ошибка: нельзя одновременно --images-only и --skip-images", file=sys.stderr)
