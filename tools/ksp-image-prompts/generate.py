@@ -107,15 +107,20 @@ def topic_dir(output_root: Path, month: str, number: str, title: str) -> Path:
     return output_root / month / f"{number}-{slugify(title)}"
 
 
-# Fallback chain for KupiAPI: GPT-only by default (KupiAPI support: GPT works).
+# Preferred order for Maria: DeepSeek -> GPT -> Claude Sonnet.
 DEFAULT_TEXT_MODEL_FALLBACKS = (
+    "deepseek-chat",
+    "deepseek-reasoner",
     "gpt-5.4-mini",
     "gpt-4o-mini",
     "gpt-4o",
     "gpt-5.4",
-    "chatgpt-4o-latest",
-    "gpt-4-turbo",
+    "gpt-5.5",
     "gpt-5.4-nano",
+    "claude-sonnet",
+    "claude-sonnet-4.6",
+    "claude-haiku",
+    "claude-haiku-4.5",
 )
 
 MODEL_ALIASES = {
@@ -234,8 +239,8 @@ def generate_article(
     print("  2) в .env: OPENAI_BASE_URL=https://kupiapi.ru/v1")
     print("  3) в .env: OPENAI_API_KEY=rk_live_...")
     print("  4) в .env поставьте:")
-    print("     TEXT_MODEL=gpt-5.4-mini")
-    print("     TEXT_MODEL_FALLBACK=gpt-4o-mini,gpt-4o,gpt-5.4,chatgpt-4o-latest")
+    print("     TEXT_MODEL=deepseek-chat")
+    print("     TEXT_MODEL_FALLBACK=deepseek-reasoner,gpt-5.4-mini,gpt-4o-mini,claude-sonnet")
     print("  5) проверьте соединение: test_kupiapi.bat")
     raise RuntimeError(str(last_error) if last_error else "KupiAPI request failed")
 
@@ -634,7 +639,7 @@ def main() -> int:
 
     base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip()
     image_base = os.getenv("IMAGE_BASE_URL", base_url).strip()
-    text_model = normalize_text_model(os.getenv("TEXT_MODEL", "gpt-5.4-mini").strip())
+    text_model = normalize_text_model(os.getenv("TEXT_MODEL", "deepseek-chat").strip())
     image_model = os.getenv("IMAGE_MODEL", "dall-e-3").strip()
     image_size = os.getenv("IMAGE_SIZE", "1792x1024").strip()
 

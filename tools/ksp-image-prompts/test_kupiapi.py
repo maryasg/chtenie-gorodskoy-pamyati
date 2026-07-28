@@ -12,15 +12,18 @@ from openai import OpenAI
 
 ROOT = Path(__file__).resolve().parent
 
-# GPT models for KupiAPI Python SDK (not Cursor kupi-* aliases).
+# GPT + DeepSeek + Claude models for KupiAPI Python SDK.
 TEST_MODELS = [
+    "deepseek-chat",
+    "deepseek-reasoner",
     "gpt-5.4-mini",
     "gpt-4o-mini",
     "gpt-4o",
     "gpt-5.4",
-    "chatgpt-4o-latest",
-    "gpt-4-turbo",
-    "gpt-5.4-nano",
+    "gpt-5.5",
+    "claude-sonnet",
+    "claude-sonnet-4.6",
+    "claude-haiku",
 ]
 
 
