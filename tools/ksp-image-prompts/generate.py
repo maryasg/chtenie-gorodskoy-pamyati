@@ -107,27 +107,56 @@ def topic_dir(output_root: Path, month: str, number: str, title: str) -> Path:
     return output_root / month / f"{number}-{slugify(title)}"
 
 
+# Fallback chain for KupiAPI: try several providers when one returns 502.
+DEFAULT_TEXT_MODEL_FALLBACKS = (
+    "deepseek-chat",
+    "deepseek-reasoner",
+    "claude-sonnet",
+    "claude-haiku",
+    "gpt-4o-mini",
+    "gpt-4o",
+    "gpt-5.4-mini",
+    "gpt-5.4",
+    "claude-opus",
+)
+
+MODEL_ALIASES = {
+    "kupi-gpt54-mini": "gpt-5.4-mini",
+    "kupi-gpt54-mini-medium": "gpt-5.4-mini",
+    "kupi-gpt54-mini-standard": "gpt-5.4-mini",
+    "kupi-gpt54": "gpt-5.4",
+    "kupi-gpt54-medium": "gpt-5.4",
+    "kupi-gpt54-standard": "gpt-5.4",
+    "kupi-gpt54-nano": "gpt-5.4-nano",
+    "kupi-gpt55": "gpt-5.5",
+    "kupi-gpt55-high": "gpt-5.5",
+    "kupi-gpt55-medium": "gpt-5.5",
+    "kupi-gpt55-low": "gpt-5.5",
+    "kupi-gpt55-codex": "gpt-5.5-codex",
+    "kupi-gpt4o-mini": "gpt-4o-mini",
+    "kupi-gpt4o": "gpt-4o",
+    "kupi-claude-sonnet": "claude-sonnet",
+    "kupi-claude-haiku": "claude-haiku",
+    "kupi-claude-opus": "claude-opus",
+    "kupi-deepseek-chat": "deepseek-chat",
+    "kupi-deepseek-reasoner": "deepseek-reasoner",
+}
+
+
 def normalize_text_model(model: str) -> str:
     """Cursor BYOK uses kupi-* ids; Python SDK prefers plain model names."""
     raw = model.strip()
-    aliases = {
-        "kupi-gpt54-mini": "gpt-5.4-mini",
-        "kupi-gpt54-mini-medium": "gpt-5.4-mini",
-        "kupi-gpt54-mini-standard": "gpt-5.4-mini",
-        "kupi-gpt4o-mini": "gpt-4o-mini",
-        "kupi-gpt4o": "gpt-4o",
-        "kupi-claude-sonnet": "claude-sonnet",
-        "kupi-deepseek-chat": "deepseek-chat",
-    }
-    return aliases.get(raw, raw)
+    return MODEL_ALIASES.get(raw, raw)
 
 
 def candidate_text_models(primary: str) -> list[str]:
     primary = normalize_text_model(primary)
-    fallback_raw = os.getenv("TEXT_MODEL_FALLBACK", "claude-sonnet,deepseek-chat,gpt-5.4-mini")
+    fallback_raw = os.getenv(
+        "TEXT_MODEL_FALLBACK",
+        ",".join(DEFAULT_TEXT_MODEL_FALLBACKS),
+    )
     extras = [normalize_text_model(part.strip()) for part in fallback_raw.split(",") if part.strip()]
-    ordered = [primary, *extras]
-    # Keep unique order.
+    ordered = [primary, *extras, *DEFAULT_TEXT_MODEL_FALLBACKS]
     result: list[str] = []
     for name in ordered:
         if name and name not in result:
@@ -203,9 +232,9 @@ def generate_article(
     print("  1) баланс в кабинете https://kupiapi.ru/cabinet")
     print("  2) в .env: OPENAI_BASE_URL=https://kupiapi.ru/v1")
     print("  3) в .env: OPENAI_API_KEY=rk_live_...")
-    print("  4) в .env поставьте:")
-    print("     TEXT_MODEL=claude-sonnet")
-    print("     TEXT_MODEL_FALLBACK=deepseek-chat,gpt-4o-mini")
+    print("  4) в .env поставьте, например:")
+    print("     TEXT_MODEL=deepseek-chat")
+    print("     TEXT_MODEL_FALLBACK=deepseek-reasoner,claude-sonnet,claude-haiku,gpt-4o-mini")
     raise RuntimeError(str(last_error) if last_error else "KupiAPI request failed")
 
 
@@ -627,6 +656,7 @@ def main() -> int:
     print(f"Тексты API: {base_url}")
     print(f"Картинки API: {image_base}")
     print(f"Тексты: {text_model} | Картинки: {image_model}")
+    print("Запасные модели:", ", ".join(candidate_text_models(text_model)[1:]))
 
     if args.title:
         number = (args.number or "99").strip().zfill(2)
