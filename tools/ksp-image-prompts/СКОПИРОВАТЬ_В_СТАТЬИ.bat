@@ -27,6 +27,7 @@ copy /Y "%SRC%check_kupiapi.bat" "%DST%\"
 copy /Y "%SRC%requirements.txt" "%DST%\"
 copy /Y "%SRC%ИНСТРУКЦИЯ.md" "%DST%\"
 copy /Y "%SRC%ИНСТРУКЦИЯ_ДЛЯ_ПЕЧАТИ.md" "%DST%\"
+copy /Y "%SRC%prompts\cover_template.txt" "%DST%\prompts\"
 copy /Y "%SRC%prompts\cover_template_title.txt" "%DST%\prompts\"
 
 echo.
