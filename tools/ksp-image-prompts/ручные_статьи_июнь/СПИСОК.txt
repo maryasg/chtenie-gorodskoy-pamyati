@@ -1,0 +1,49 @@
+# Статьи за июнь 2026 (ручная генерация)
+
+Папка: tools/ksp-image-prompts/ручные_статьи_июнь/
+
+- 01. Как остановить кровоточивость дёсен
+  - статья01_июнь_2026_ВК_kak-ostanovit-krovotochivost-desen.txt
+  - статья01_июнь_2026_ТГМАКС_kak-ostanovit-krovotochivost-desen.txt
+- 02. Как снизить чувствительность зубов в домашних условиях
+  - статья02_июнь_2026_ВК_kak-snizit-chuvstvitelnost-zubov.txt
+  - статья02_июнь_2026_ТГМАКС_kak-snizit-chuvstvitelnost-zubov.txt
+- 03. Как избавиться от неприятного запаха изо рта
+  - статья03_июнь_2026_ВК_kak-izbavitsya-ot-nepriyatnogo-zapaha.txt
+  - статья03_июнь_2026_ТГМАКС_kak-izbavitsya-ot-nepriyatnogo-zapaha.txt
+- 04. Как правильно очищать язык
+  - статья04_июнь_2026_ВК_kak-pravilno-ochischat-yazyk.txt
+  - статья04_июнь_2026_ТГМАКС_kak-pravilno-ochischat-yazyk.txt
+- 05. Можно ли вернуть естественный цвет зубов без отбеливания
+  - статья05_июнь_2026_ВК_mozhno-li-vernut-estestvennyy-tsvet.txt
+  - статья05_июнь_2026_ТГМАКС_mozhno-li-vernut-estestvennyy-tsvet.txt
+- 06. Что делать при трещинах на зубах
+  - статья06_июнь_2026_ВК_chto-delat-pri-treschinah-na-zubah.txt
+  - статья06_июнь_2026_ТГМАКС_chto-delat-pri-treschinah-na-zubah.txt
+- 07. Как организовать питание без вреда для зубов
+  - статья07_июнь_2026_ВК_kak-organizovat-pitanie-bez-vreda.txt
+  - статья07_июнь_2026_ТГМАКС_kak-organizovat-pitanie-bez-vreda.txt
+- 08. Как пить кофе и чай без вреда для эмали
+  - статья08_июнь_2026_ВК_kak-pit-kofe-i-chay-bez-vreda.txt
+  - статья08_июнь_2026_ТГМАКС_kak-pit-kofe-i-chay-bez-vreda.txt
+- 09. Как выбрать воду для здоровья зубов
+  - статья09_июнь_2026_ВК_kak-vybrat-vodu-dlya-zdorovya-zubov.txt
+  - статья09_июнь_2026_ТГМАКС_kak-vybrat-vodu-dlya-zdorovya-zubov.txt
+- 10. Что делать, если зуб болит после лечения
+  - статья10_июнь_2026_ВК_chto-delat-esli-zub-bolit-posle-lecheniya.txt
+  - статья10_июнь_2026_ТГМАКС_chto-delat-esli-zub-bolit-posle-lecheniya.txt
+- 11. Как сохранить пломбы как можно дольше
+  - статья11_июнь_2026_ВК_kak-sohranit-plomby-kak-mozhno-dolshe.txt
+  - статья11_июнь_2026_ТГМАКС_kak-sohranit-plomby-kak-mozhno-dolshe.txt
+- 12. Как правильно выбрать зубную пасту взрослому человеку
+  - статья12_июнь_2026_ВК_kak-pravilno-vybrat-zubnuyu-pastu.txt
+  - статья12_июнь_2026_ТГМАКС_kak-pravilno-vybrat-zubnuyu-pastu.txt
+- 13. Нужно ли использовать ополаскиватели для полости рта
+  - статья13_июнь_2026_ВК_nuzhno-li-ispolzovat-opolaskivateli.txt
+  - статья13_июнь_2026_ТГМАКС_nuzhno-li-ispolzovat-opolaskivateli.txt
+- 14. Как сохранить здоровье дёсен после 40 лет
+  - статья14_июнь_2026_ВК_kak-sohranit-zdorove-desen-posle-40.txt
+  - статья14_июнь_2026_ТГМАКС_kak-sohranit-zdorove-desen-posle-40.txt
+- 15. Почему профилактика дешевле лечения
+  - статья15_июнь_2026_ВК_pochemu-profilaktika-deshevle-lecheniya.txt
+  - статья15_июнь_2026_ТГМАКС_pochemu-profilaktika-deshevle-lecheniya.txt
