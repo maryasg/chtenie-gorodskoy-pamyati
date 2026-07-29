@@ -1,0 +1,34 @@
+# Статьи за сентябрь 2026
+
+На каждую статью 2 файла: `.docx` и `.txt` промпт для картинки.
+
+01. Почему десна болит в одном месте, хотя зуб вроде здоровый
+   статья01_сентябрь_2026_pochemu-desna-bolit-v-odnom-meste-hotya-zub-vrode-zdorovyy.docx
+   статья01_сентябрь_2026_pochemu-desna-bolit-v-odnom-meste-hotya-zub-vrode-zdorovyy.txt
+02. Можно ли спасти зуб, если он сильно разрушен
+   статья02_сентябрь_2026_mozhno-li-spasti-zub-esli-on-silno-razrushen.docx
+   статья02_сентябрь_2026_mozhno-li-spasti-zub-esli-on-silno-razrushen.txt
+03. Сладкое каждый день: как снизить вред для зубов без полного запрета
+   статья03_сентябрь_2026_sladkoe-kazhdyy-den-kak-snizit-vred-dlya-zubov-bez-polnogo.docx
+   статья03_сентябрь_2026_sladkoe-kazhdyy-den-kak-snizit-vred-dlya-zubov-bez-polnogo.txt
+04. Зубной камень: почему он появляется даже при регулярной чистке
+   статья04_сентябрь_2026_zubnoy-kamen-pochemu-on-poyavlyaetsya-dazhe-pri-regulyarno.docx
+   статья04_сентябрь_2026_zubnoy-kamen-pochemu-on-poyavlyaetsya-dazhe-pri-regulyarno.txt
+05. Когда нужна профессиональная чистка, а когда уже лечение
+   статья05_сентябрь_2026_kogda-nuzhna-professionalnaya-chistka-a-kogda-uzhe-lecheni.docx
+   статья05_сентябрь_2026_kogda-nuzhna-professionalnaya-chistka-a-kogda-uzhe-lecheni.txt
+06. Зуб потемнел: это кариес, налёт или старая пломба?
+   статья06_сентябрь_2026_zub-potemnel-eto-karies-nalet-ili-staraya-plomba.docx
+   статья06_сентябрь_2026_zub-potemnel-eto-karies-nalet-ili-staraya-plomba.txt
+07. Почему еда застревает между зубами и чем это опасно
+   статья07_сентябрь_2026_pochemu-eda-zastrevaet-mezhdu-zubami-i-chem-eto-opasno.docx
+   статья07_сентябрь_2026_pochemu-eda-zastrevaet-mezhdu-zubami-i-chem-eto-opasno.txt
+08. Щёлкает челюсть: когда это повод обратиться к стоматологу
+   статья08_сентябрь_2026_schelkaet-chelyust-kogda-eto-povod-obratitsya-k-stomatolog.docx
+   статья08_сентябрь_2026_schelkaet-chelyust-kogda-eto-povod-obratitsya-k-stomatolog.txt
+09. Неправильный прикус у взрослого: можно ли исправить без брекетов
+   статья09_сентябрь_2026_nepravilnyy-prikus-u-vzroslogo-mozhno-li-ispravit-bez-brek.docx
+   статья09_сентябрь_2026_nepravilnyy-prikus-u-vzroslogo-mozhno-li-ispravit-bez-brek.txt
+10. Почему зубы болят от сладкого и что это значит
+   статья10_сентябрь_2026_pochemu-zuby-bolyat-ot-sladkogo-i-chto-eto-znachit.docx
+   статья10_сентябрь_2026_pochemu-zuby-bolyat-ot-sladkogo-i-chto-eto-znachit.txt

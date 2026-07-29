@@ -2,33 +2,33 @@
 
 На каждую статью 2 файла: `.docx` и `.txt` промпт для картинки.
 
-01. Можно ли восстановить эмаль зубов
-   статья01_июль_2026_mozhno-li-vosstanovit-emal-zubov.docx
-   статья01_июль_2026_mozhno-li-vosstanovit-emal-zubov.txt
-02. Почему зубы реагируют на холодное летом
-   статья02_июль_2026_pochemu-zuby-reagiruyut-na-holodnoe-letom.docx
-   статья02_июль_2026_pochemu-zuby-reagiruyut-na-holodnoe-letom.txt
-03. Как жара влияет на здоровье полости рта
-   статья03_июль_2026_kak-zhara-vliyaet-na-zdorove-polosti-rta.docx
-   статья03_июль_2026_kak-zhara-vliyaet-na-zdorove-polosti-rta.txt
-04. Сухость во рту: причины и последствия
-   статья04_июль_2026_suhost-vo-rtu-prichiny-i-posledstviya.docx
-   статья04_июль_2026_suhost-vo-rtu-prichiny-i-posledstviya.txt
-05. Почему возникают клиновидные дефекты зубов
-   статья05_июль_2026_pochemu-voznikayut-klinovidnye-defekty-zubov.docx
-   статья05_июль_2026_pochemu-voznikayut-klinovidnye-defekty-zubov.txt
-06. Правда ли, что жевательная резинка защищает зубы
-   статья06_июль_2026_pravda-li-chto-zhevatelnaya-rezinka-zaschischaet-zuby.docx
-   статья06_июль_2026_pravda-li-chto-zhevatelnaya-rezinka-zaschischaet-zuby.txt
-07. Как влияют энергетические напитки на эмаль
-   статья07_июль_2026_kak-vliyayut-energeticheskie-napitki-na-emal.docx
-   статья07_июль_2026_kak-vliyayut-energeticheskie-napitki-na-emal.txt
-08. Детские привычки, которые вредят прикусу
-   статья08_июль_2026_detskie-privychki-kotorye-vredyat-prikusu.docx
-   статья08_июль_2026_detskie-privychki-kotorye-vredyat-prikusu.txt
-09. Нужно ли лечить зубы мудрости, если они не болят
-   статья09_июль_2026_nuzhno-li-lechit-zuby-mudrosti-esli-oni-ne-bolyat.docx
-   статья09_июль_2026_nuzhno-li-lechit-zuby-mudrosti-esli-oni-ne-bolyat.txt
-10. Почему возникает подвижность зубов
-   статья10_июль_2026_pochemu-voznikaet-podvizhnost-zubov.docx
-   статья10_июль_2026_pochemu-voznikaet-podvizhnost-zubov.txt
+01. Можно ли восстановить эмаль зубов — или это миф из рекламы?
+   статья01_июль_2026_mozhno-li-vosstanovit-emal-zubov-ili-eto-mif-iz-reklamy.docx
+   статья01_июль_2026_mozhno-li-vosstanovit-emal-zubov-ili-eto-mif-iz-reklamy.txt
+02. Почему летом зубы чаще реагируют на холодное
+   статья02_июль_2026_pochemu-letom-zuby-chasche-reagiruyut-na-holodnoe.docx
+   статья02_июль_2026_pochemu-letom-zuby-chasche-reagiruyut-na-holodnoe.txt
+03. Жара и зубы: какие летние привычки вредят полости рта
+   статья03_июль_2026_zhara-i-zuby-kakie-letnie-privychki-vredyat-polosti-rta.docx
+   статья03_июль_2026_zhara-i-zuby-kakie-letnie-privychki-vredyat-polosti-rta.txt
+04. Сухость во рту: почему это опаснее, чем кажется
+   статья04_июль_2026_suhost-vo-rtu-pochemu-eto-opasnee-chem-kazhetsya.docx
+   статья04_июль_2026_suhost-vo-rtu-pochemu-eto-opasnee-chem-kazhetsya.txt
+05. Клиновидный дефект: что это за «ступенька» у десны
+   статья05_июль_2026_klinovidnyy-defekt-chto-eto-za-stupenka-u-desny.docx
+   статья05_июль_2026_klinovidnyy-defekt-chto-eto-za-stupenka-u-desny.txt
+06. Жвачка защищает зубы или просто освежает дыхание?
+   статья06_июль_2026_zhvachka-zaschischaet-zuby-ili-prosto-osvezhaet-dyhanie.docx
+   статья06_июль_2026_zhvachka-zaschischaet-zuby-ili-prosto-osvezhaet-dyhanie.txt
+07. Энергетики и эмаль: что происходит с зубами после банки напитка
+   статья07_июль_2026_energetiki-i-emal-chto-proishodit-s-zubami-posle-banki-nap.docx
+   статья07_июль_2026_energetiki-i-emal-chto-proishodit-s-zubami-posle-banki-nap.txt
+08. Детские привычки, которые могут испортить прикус
+   статья08_июль_2026_detskie-privychki-kotorye-mogut-isportit-prikus.docx
+   статья08_июль_2026_detskie-privychki-kotorye-mogut-isportit-prikus.txt
+09. Зубы мудрости не болят: лечить, удалять или оставить?
+   статья09_июль_2026_zuby-mudrosti-ne-bolyat-lechit-udalyat-ili-ostavit.docx
+   статья09_июль_2026_zuby-mudrosti-ne-bolyat-lechit-udalyat-ili-ostavit.txt
+10. Зуб начал шататься: почему это происходит и что делать срочно
+   статья10_июль_2026_zub-nachal-shatatsya-pochemu-eto-proishodit-i-chto-delat-s.docx
+   статья10_июль_2026_zub-nachal-shatatsya-pochemu-eto-proishodit-i-chto-delat-s.txt
