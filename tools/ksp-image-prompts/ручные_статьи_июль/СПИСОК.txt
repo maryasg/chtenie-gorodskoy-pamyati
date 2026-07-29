@@ -1,0 +1,49 @@
+# Статьи за июль 2026
+
+На каждую статью 2 файла: `.docx` и `.txt` промпт для картинки.
+
+01. Можно ли восстановить эмаль зубов
+   статья01_июль_2026_mozhno-li-vosstanovit-emal-zubov.docx
+   статья01_июль_2026_mozhno-li-vosstanovit-emal-zubov.txt
+02. Почему зубы реагируют на холодное летом
+   статья02_июль_2026_pochemu-zuby-reagiruyut-na-holodnoe-letom.docx
+   статья02_июль_2026_pochemu-zuby-reagiruyut-na-holodnoe-letom.txt
+03. Как жара влияет на здоровье полости рта
+   статья03_июль_2026_kak-zhara-vliyaet-na-zdorove-polosti-rta.docx
+   статья03_июль_2026_kak-zhara-vliyaet-na-zdorove-polosti-rta.txt
+04. Сухость во рту: причины и последствия
+   статья04_июль_2026_suhost-vo-rtu-prichiny-i-posledstviya.docx
+   статья04_июль_2026_suhost-vo-rtu-prichiny-i-posledstviya.txt
+05. Почему возникают клиновидные дефекты зубов
+   статья05_июль_2026_pochemu-voznikayut-klinovidnye-defekty-zubov.docx
+   статья05_июль_2026_pochemu-voznikayut-klinovidnye-defekty-zubov.txt
+06. Правда ли, что жевательная резинка защищает зубы
+   статья06_июль_2026_pravda-li-chto-zhevatelnaya-rezinka-zaschischaet-zuby.docx
+   статья06_июль_2026_pravda-li-chto-zhevatelnaya-rezinka-zaschischaet-zuby.txt
+07. Как влияют энергетические напитки на эмаль
+   статья07_июль_2026_kak-vliyayut-energeticheskie-napitki-na-emal.docx
+   статья07_июль_2026_kak-vliyayut-energeticheskie-napitki-na-emal.txt
+08. Детские привычки, которые вредят прикусу
+   статья08_июль_2026_detskie-privychki-kotorye-vredyat-prikusu.docx
+   статья08_июль_2026_detskie-privychki-kotorye-vredyat-prikusu.txt
+09. Нужно ли лечить зубы мудрости, если они не болят
+   статья09_июль_2026_nuzhno-li-lechit-zuby-mudrosti-esli-oni-ne-bolyat.docx
+   статья09_июль_2026_nuzhno-li-lechit-zuby-mudrosti-esli-oni-ne-bolyat.txt
+10. Почему возникает подвижность зубов
+   статья10_июль_2026_pochemu-voznikaet-podvizhnost-zubov.docx
+   статья10_июль_2026_pochemu-voznikaet-podvizhnost-zubov.txt
+11. Что такое рецессия десны и можно ли её остановить
+   статья11_июль_2026_chto-takoe-retsessiya-desny-i-mozhno-li-ee-ostanovit.docx
+   статья11_июль_2026_chto-takoe-retsessiya-desny-i-mozhno-li-ee-ostanovit.txt
+12. Как меняется полость рта после 50 лет
+   статья12_июль_2026_kak-menyaetsya-polost-rta-posle-50-let.docx
+   статья12_июль_2026_kak-menyaetsya-polost-rta-posle-50-let.txt
+13. Может ли стресс вызывать заболевания дёсен
+   статья13_июль_2026_mozhet-li-stress-vyzyvat-zabolevaniya-desen.docx
+   статья13_июль_2026_mozhet-li-stress-vyzyvat-zabolevaniya-desen.txt
+14. Почему важно лечить кариес на ранней стадии
+   статья14_июль_2026_pochemu-vazhno-lechit-karies-na-rannej-stadii.docx
+   статья14_июль_2026_pochemu-vazhno-lechit-karies-na-rannej-stadii.txt
+15. Самые распространённые мифы о здоровье зубов
+   статья15_июль_2026_samye-rasprostranennye-mify-o-zdorove-zubov.docx
+   статья15_июль_2026_samye-rasprostranennye-mify-o-zdorove-zubov.txt
