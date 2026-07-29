@@ -13,6 +13,9 @@ def apply_docx_author(doc: Document) -> None:
     props = doc.core_properties
     props.author = DOCX_AUTHOR
     props.last_modified_by = DOCX_AUTHOR
+    props.comments = ""
+    props.subject = ""
+    props.keywords = ""
 
 
 def write_text_docx(text: str, path: Path) -> None:
