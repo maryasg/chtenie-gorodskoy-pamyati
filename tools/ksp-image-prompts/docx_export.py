@@ -6,7 +6,7 @@ from pathlib import Path
 
 from docx import Document
 
-DOCX_AUTHOR = "user"
+DOCX_AUTHOR = "Автор"
 
 
 def apply_docx_author(doc: Document) -> None:
