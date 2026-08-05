@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Панель работы — статьи КСП</title>
+  <style>
+    :root {
+      --bg: #f4efe6;
+      --ink: #1c2a24;
+      --green: #1f4b3a;
+      --green-soft: #d8ebe2;
+      --card: #fffdf8;
+      --line: #d9cfc0;
+      --muted: #5c6b63;
+      --accent: #b45309;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PT Sans", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 0%, #e8f2ec 0%, transparent 42%),
+        radial-gradient(circle at 90% 10%, #f3e7d4 0%, transparent 35%),
+        var(--bg);
+      line-height: 1.45;
+    }
+    header {
+      background: linear-gradient(135deg, #16382c, var(--green));
+      color: #f7f3ec;
+      padding: 28px 20px 22px;
+    }
+    header h1 {
+      margin: 0 0 6px;
+      font-size: clamp(1.35rem, 3vw, 1.85rem);
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+    header p { margin: 0; opacity: 0.9; max-width: 46rem; }
+    main {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 22px 16px 48px;
+    }
+    .note {
+      background: var(--green-soft);
+      border-left: 4px solid var(--green);
+      padding: 12px 14px;
+      margin-bottom: 18px;
+      border-radius: 0 10px 10px 0;
+    }
+    .note strong { color: var(--green); }
+    .step {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px 16px 14px;
+      margin: 14px 0;
+      box-shadow: 0 1px 0 rgba(28, 42, 36, 0.04);
+    }
+    .step-num {
+      display: inline-block;
+      min-width: 1.7rem;
+      height: 1.7rem;
+      line-height: 1.7rem;
+      text-align: center;
+      border-radius: 999px;
+      background: var(--green);
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.9rem;
+      margin-right: 8px;
+    }
+    .step h2 {
+      margin: 0 0 6px;
+      font-size: 1.12rem;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 4px 0;
+    }
+    .step p { margin: 0 0 10px; color: var(--muted); }
+    .file {
+      font-family: Consolas, "Courier New", monospace;
+      background: #efe8dc;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.92em;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    a.btn, button.btn {
+      display: inline-block;
+      text-decoration: none;
+      border: 1px solid var(--green);
+      background: var(--green);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    a.btn.secondary, button.btn.secondary {
+      background: #fff;
+      color: var(--green);
+    }
+    a.btn:hover, button.btn:hover { filter: brightness(1.05); }
+    ol.checklist { margin: 8px 0 0 1.1rem; padding: 0; color: var(--ink); }
+    ol.checklist li { margin: 6px 0; }
+    footer {
+      margin-top: 28px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .path-hint { color: var(--accent); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Панель работы: статьи КСП</h1>
+    <p>Куда кликать по порядку: темы → проверка API → генерация → промпты картинок → плоские Word-файлы.</p>
+  </header>
+  <main>
+    <div class="note">
+      <strong>Самый простой старт на Windows:</strong>
+      дважды кликните <span class="file">ЗАПУСК_ПАНЕЛИ.bat</span> —
+      откроется окно с кнопками. Эта HTML-страница — подсказка «что куда».
+      Рабочая папка проекта статей:
+      <span class="path-hint">C:\Users\Marusia\Projects\maryasg-articles_KorolevSP</span>
+    </div>
+
+    <section class="step" id="step1">
+      <h2><span class="step-num">1</span> Темы на новый месяц</h2>
+      <p>Сначала список заголовков, потом JSON для генератора.</p>
+      <ol class="checklist">
+        <li>Откройте <span class="file">ПЛАН_ТЕМ_ИЮНЬ_ИЮЛЬ_АВГУСТ_СЕНТЯБРЬ.md</span> — образец тем.</li>
+        <li>Или в панели: <strong>Создать / открыть JSON месяца</strong> → файл
+          <span class="file">content_plan\октябрь.json</span> (имя месяца своё).</li>
+        <li>Замените «Заголовок статьи N…» на реальные темы и сохраните.</li>
+      </ol>
+      <div class="actions">
+        <a class="btn" href="ПЛАН_ТЕМ_ИЮНЬ_ИЮЛЬ_АВГУСТ_СЕНТЯБРЬ.md">Открыть план тем</a>
+        <a class="btn secondary" href="ШАБЛОН_ТЕМ_МЕСЯЦА.json">Шаблон JSON</a>
+      </div>
+    </section>
+
+    <section class="step" id="step2">
+      <h2><span class="step-num">2</span> Проверить KupiAPI</h2>
+      <p>Без рабочего ключа генерация статей через ИИ не пойдёт.</p>
+      <ol class="checklist">
+        <li>Файл <span class="file">.env</span> в папке статей (ключ <span class="file">rk_live_…</span>).</li>
+        <li>Запуск: <span class="file">test_kupiapi.bat</span> или кнопка в панели.</li>
+      </ol>
+      <div class="actions">
+        <a class="btn secondary" href="test_kupiapi.bat">test_kupiapi.bat</a>
+        <a class="btn secondary" href="ИНСТРУКЦИЯ_ДЛЯ_ПЕЧАТИ.md">Инструкция</a>
+      </div>
+    </section>
+
+    <section class="step" id="step3">
+      <h2><span class="step-num">3</span> Сгенерировать статьи</h2>
+      <p>В панели выберите месяц → «Сгенерировать весь месяц». Или в cmd:</p>
+      <p><span class="file">python generate.py --plan content_plan\октябрь.json --skip-images</span></p>
+      <ol class="checklist">
+        <li>Готово в <span class="file">output\октябрь\</span> — папки статей, <span class="file">vk.md</span>, Telegram.</li>
+        <li>Одна статья: укажите номер, например <span class="file">03</span>.</li>
+      </ol>
+    </section>
+
+    <section class="step" id="step4">
+      <h2><span class="step-num">4</span> Промпты для картинок</h2>
+      <p>После текстов соберите TXT-промпты для обложек.</p>
+      <ol class="checklist">
+        <li>Кнопка «Собрать промпты» или <span class="file">build_image_prompts.bat</span>.</li>
+        <li>Результат: папка <span class="file">image_prompts\</span>.</li>
+        <li>Для уже готовых ручных месяцев смотрите <span class="file">.txt</span> рядом со статьёй
+          или <span class="file">ПРОМПТЫ_ДЛЯ_КАРТИНОК_ПО_ВК.txt</span>.</li>
+      </ol>
+      <div class="actions">
+        <a class="btn secondary" href="build_image_prompts.bat">build_image_prompts.bat</a>
+        <a class="btn secondary" href="prompts/cover_template.txt">Шаблон обложки</a>
+      </div>
+    </section>
+
+    <section class="step" id="step5">
+      <h2><span class="step-num">5</span> Плоские Word-файлы</h2>
+      <p>Чтобы все статьи месяца лежали «плоско», как в папке за май:</p>
+      <p><span class="file">СОБРАТЬ_ПЛОСКИЕ_ФАЙЛЫ.bat октябрь</span></p>
+      <p>Появятся <span class="file">статья01_…_ВК.docx</span>, <span class="file">…_ТГМАКС.docx</span> и картинки.</p>
+      <div class="actions">
+        <a class="btn secondary" href="СОБРАТЬ_ПЛОСКИЕ_ФАЙЛЫ.bat">СОБРАТЬ_ПЛОСКИЕ_ФАЙЛЫ.bat</a>
+      </div>
+    </section>
+
+    <section class="step" id="step6">
+      <h2><span class="step-num">6</span> Уже готовые ручные статьи</h2>
+      <p>Июнь–сентябрь: клик по заголовку → Word, «промпт» → текст для картинки.</p>
+      <div class="actions">
+        <a class="btn" href="ручные_статьи_июнь/СПИСОК_КЛИКАБЕЛЬНЫЙ.html">Июнь</a>
+        <a class="btn" href="ручные_статьи_июль/СПИСОК_КЛИКАБЕЛЬНЫЙ.html">Июль</a>
+        <a class="btn" href="ручные_статьи_август/СПИСОК_КЛИКАБЕЛЬНЫЙ.html">Август</a>
+        <a class="btn" href="ручные_статьи_сентябрь/СПИСОК_КЛИКАБЕЛЬНЫЙ.html">Сентябрь</a>
+      </div>
+    </section>
+
+    <footer>
+      <p>После обновления скриптов в репозитории сайта запустите
+        <span class="file">СКОПИРОВАТЬ_В_СТАТЬИ.bat</span> — файлы попадут в папку статей на ПК.</p>
+      <p>Запуск панели с кнопками: <span class="file">ЗАПУСК_ПАНЕЛИ.bat</span></p>
+    </footer>
+  </main>
+</body>
+</html>
