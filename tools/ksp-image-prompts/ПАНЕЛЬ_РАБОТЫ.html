@@ -136,15 +136,18 @@
 
     <section class="step" id="step1">
       <h2><span class="step-num">1</span> Темы на новый месяц</h2>
-      <p>Сначала список заголовков, потом JSON для генератора.</p>
+      <p><strong>Кнопки есть только в окне</strong> после <span class="file">ЗАПУСК_ПАНЕЛИ.bat</span> (не в этом HTML).</p>
       <ol class="checklist">
-        <li>Откройте <span class="file">ПЛАН_ТЕМ_ИЮНЬ_ИЮЛЬ_АВГУСТ_СЕНТЯБРЬ.md</span> — образец тем.</li>
-        <li>Или в панели: <strong>Создать / открыть JSON месяца</strong> → файл
-          <span class="file">content_plan\октябрь.json</span> (имя месяца своё).</li>
-        <li>Замените «Заголовок статьи N…» на реальные темы и сохраните.</li>
+        <li>Выберите месяц сверху в окне панели.</li>
+        <li>Нажмите зелёную кнопку <strong>«СОЗДАТЬ ТЕМЫ НА НОВЫЙ МЕСЯЦ»</strong>.</li>
+        <li>Откроется файл <span class="file">content_plan\темы_октябрь.txt</span> — пишите темы по одной на строку.</li>
+        <li><strong>Сохранить:</strong> <span class="file">Ctrl+S</span> (или Файл → Сохранить).</li>
+        <li>Вернитесь в панель → оранжевая кнопка <strong>«Готово: сохранить план для генерации»</strong>.</li>
+        <li>Появится план для генератора: <span class="file">content_plan\октябрь.json</span> — его читает шаг 3.</li>
       </ol>
       <div class="actions">
-        <a class="btn" href="ПЛАН_ТЕМ_ИЮНЬ_ИЮЛЬ_АВГУСТ_СЕНТЯБРЬ.md">Открыть план тем</a>
+        <a class="btn" href="ЗАПУСК_ПАНЕЛИ.bat">Открыть панель с кнопками</a>
+        <a class="btn secondary" href="ПЛАН_ТЕМ_ИЮНЬ_ИЮЛЬ_АВГУСТ_СЕНТЯБРЬ.md">Пример старых тем</a>
         <a class="btn secondary" href="ШАБЛОН_ТЕМ_МЕСЯЦА.json">Шаблон JSON</a>
       </div>
     </section>
