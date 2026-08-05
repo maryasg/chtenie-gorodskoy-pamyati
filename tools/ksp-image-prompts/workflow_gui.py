@@ -13,6 +13,15 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, scrolledtext, simpledialog, ttk
 
+from content_period import (
+    current_year,
+    period_slug,
+    plan_json_name,
+    plan_txt_name,
+    resolve_plan_json,
+    resolve_plan_txt,
+)
+
 ROOT = Path(__file__).resolve().parent
 ARTICLES_HINT = Path.home() / "Projects" / "maryasg-articles_KorolevSP"
 MONTHS = (
@@ -29,6 +38,7 @@ MONTHS = (
     "ноябрь",
     "декабрь",
 )
+YEARS = [str(y) for y in range(2025, 2036)]
 
 
 def resolve_work_root() -> Path:
@@ -71,17 +81,18 @@ def open_path(path: Path) -> None:
         messagebox.showerror("Ошибка", str(exc))
 
 
-def plan_json_path(month: str) -> Path:
-    return WORK / "content_plan" / f"{month}.json"
+def plan_json_path(month: str, year: int) -> Path:
+    return resolve_plan_json(WORK / "content_plan", month, year)
 
 
-def plan_txt_path(month: str) -> Path:
-    return WORK / "content_plan" / f"темы_{month}.txt"
+def plan_txt_path(month: str, year: int) -> Path:
+    return resolve_plan_txt(WORK / "content_plan", month, year)
 
 
-def topics_txt_template(month: str, count: int = 10) -> str:
+def topics_txt_template(month: str, year: int, count: int = 10) -> str:
+    period = period_slug(month, year)
     lines = [
-        f"# Темы статей на {month}",
+        f"# Темы статей на {month} {year}",
         "#",
         "# КАК РЕДАКТИРОВАТЬ:",
         "# 1. Ниже напишите темы — по одной на строку.",
@@ -90,7 +101,8 @@ def topics_txt_template(month: str, count: int = 10) -> str:
         '#    «Готово: сохранить план для генерации»',
         "#",
         f"# Файл плана для генератора после этого будет:",
-        f"#   content_plan\\{month}.json",
+        f"#   content_plan\\{period}.json",
+        f"# Внутри у каждой темы будут поля month={month} и year={year}.",
         "#",
         "# Строки, начинающиеся с #, не считаются темами.",
         "",
@@ -117,14 +129,19 @@ def parse_topics_txt(text: str) -> list[str]:
     return titles
 
 
-def write_plan_json(month: str, titles: list[str]) -> Path:
+def write_plan_json(month: str, year: int, titles: list[str]) -> Path:
     folder = WORK / "content_plan"
     folder.mkdir(parents=True, exist_ok=True)
     data = [
-        {"month": month, "number": f"{i:02d}", "title": title}
+        {
+            "month": month,
+            "year": year,
+            "number": f"{i:02d}",
+            "title": title,
+        }
         for i, title in enumerate(titles, start=1)
     ]
-    path = plan_json_path(month)
+    path = folder / plan_json_name(month, year)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return path
 
@@ -133,15 +150,25 @@ class WorkflowApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("Генератор статей КСП — панель шагов")
-        self.geometry("820x780")
-        self.minsize(680, 620)
+        self.geometry("840x800")
+        self.minsize(700, 640)
         self.configure(bg="#f7f3ec")
 
         self.month_var = tk.StringVar(value="октябрь")
+        self.year_var = tk.StringVar(value=str(current_year()))
         self.month_var.trace_add("write", lambda *_: self._refresh_plan_hint())
+        self.year_var.trace_add("write", lambda *_: self._refresh_plan_hint())
         self._build()
         self._refresh_plan_hint()
 
+    def _selected_year(self) -> int:
+        try:
+            return int(self.year_var.get().strip())
+        except ValueError:
+            return current_year()
+
+    def _period(self) -> str:
+        return period_slug(self.month_var.get().strip(), self._selected_year())
     def _build(self) -> None:
         pad = {"padx": 16, "pady": 6}
         header = tk.Frame(self, bg="#1f4b3a")
@@ -180,7 +207,7 @@ class WorkflowApp(tk.Tk):
         month_row.pack(fill="x", pady=(0, 6))
         tk.Label(
             month_row,
-            text="Месяц для работы:",
+            text="Месяц:",
             font=("Segoe UI", 10, "bold"),
             bg="#f7f3ec",
         ).pack(side="left")
@@ -188,9 +215,29 @@ class WorkflowApp(tk.Tk):
             month_row,
             textvariable=self.month_var,
             values=MONTHS,
-            width=14,
+            width=12,
             state="readonly",
-        ).pack(side="left", padx=8)
+        ).pack(side="left", padx=6)
+        tk.Label(
+            month_row,
+            text="Год:",
+            font=("Segoe UI", 10, "bold"),
+            bg="#f7f3ec",
+        ).pack(side="left", padx=(12, 0))
+        ttk.Combobox(
+            month_row,
+            textvariable=self.year_var,
+            values=YEARS,
+            width=6,
+            state="readonly",
+        ).pack(side="left", padx=6)
+        tk.Label(
+            month_row,
+            text="(можно выбрать другой год)",
+            font=("Segoe UI", 9),
+            fg="#666",
+            bg="#f7f3ec",
+        ).pack(side="left")
 
         self.plan_hint = tk.Label(
             body,
@@ -219,7 +266,7 @@ class WorkflowApp(tk.Tk):
         tk.Label(
             step1,
             text=(
-                "1) Выберите месяц сверху → 2) нажмите зелёную кнопку → "
+                "1) Выберите месяц и год сверху → 2) зелёная кнопка → "
                 "3) напишите темы → 4) Ctrl+S → 5) «Готово: сохранить план…»"
             ),
             font=("Segoe UI", 9),
@@ -288,7 +335,7 @@ class WorkflowApp(tk.Tk):
             body,
             "3",
             "Сгенерировать статьи",
-            "Берёт ТОЛЬКО файл content_plan\\месяц.json (после кнопки «Готово: сохранить план…»)",
+            "Берёт ТОЛЬКО файл content_plan\\месяц_год.json (после «Готово: сохранить план…»)",
             [
                 ("Сгенерировать весь месяц (без картинок)", self.generate_month),
                 ("Сгенерировать одну статью (номер…)", self.generate_one),
@@ -352,24 +399,29 @@ class WorkflowApp(tk.Tk):
 
     def _refresh_plan_hint(self) -> None:
         month = self.month_var.get().strip()
-        txt = plan_txt_path(month)
-        js = plan_json_path(month)
+        year = self._selected_year()
+        period = period_slug(month, year)
+        txt_name = plan_txt_name(month, year)
+        js_name = plan_json_name(month, year)
+        resolved_txt = plan_txt_path(month, year)
+        resolved_js = plan_json_path(month, year)
         parts = [
-            f"Месяц: {month}",
-            f"Список тем (редактируете его):  content_plan\\темы_{month}.txt",
-            f"План для генерации (его читает шаг 3):  content_plan\\{month}.json",
+            f"Период: {month} {year}  →  ключ {period}",
+            f"Список тем (редактируете):  content_plan\\{txt_name}",
+            f"План для генерации (читает шаг 3):  content_plan\\{js_name}",
+            f"Статьи будут в:  output\\{period}\\",
         ]
-        if txt.is_file():
-            parts.append("Список тем: есть")
+        if resolved_txt.is_file():
+            parts.append(f"Список тем: есть ({resolved_txt.name})")
         else:
             parts.append("Список тем: ещё нет — нажмите «СОЗДАТЬ ТЕМЫ НА НОВЫЙ МЕСЯЦ»")
-        if js.is_file():
+        if resolved_js.is_file():
             try:
-                data = json.loads(js.read_text(encoding="utf-8"))
+                data = json.loads(resolved_js.read_text(encoding="utf-8"))
                 n = len(data) if isinstance(data, list) else "?"
             except (OSError, json.JSONDecodeError):
                 n = "?"
-            parts.append(f"План для генерации: есть ({n} тем)")
+            parts.append(f"План для генерации: есть ({resolved_js.name}, {n} тем)")
         else:
             parts.append("План для генерации: ещё нет — после тем нажмите «Готово: сохранить план…»")
         if hasattr(self, "plan_hint"):
@@ -450,9 +502,11 @@ class WorkflowApp(tk.Tk):
 
     def create_new_month_topics(self) -> None:
         month = self.month_var.get().strip()
+        year = self._selected_year()
+        period = period_slug(month, year)
         count_raw = simpledialog.askstring(
             "Сколько статей?",
-            f"Месяц: {month}\n\nСколько тем создать? (обычно 10)",
+            f"Месяц: {month}\nГод: {year}\n\nСколько тем создать? (обычно 10)",
             initialvalue="10",
             parent=self,
         )
@@ -465,7 +519,7 @@ class WorkflowApp(tk.Tk):
 
         folder = WORK / "content_plan"
         folder.mkdir(parents=True, exist_ok=True)
-        txt = plan_txt_path(month)
+        txt = folder / plan_txt_name(month, year)
 
         if txt.is_file():
             overwrite = messagebox.askyesno(
@@ -479,7 +533,7 @@ class WorkflowApp(tk.Tk):
                 self._refresh_plan_hint()
                 return
 
-        txt.write_text(topics_txt_template(month, count), encoding="utf-8")
+        txt.write_text(topics_txt_template(month, year, count), encoding="utf-8")
         self._log(f"Создан список тем: {txt}")
         self._refresh_plan_hint()
         messagebox.showinfo(
@@ -495,14 +549,18 @@ class WorkflowApp(tk.Tk):
             "4. Нажмите оранжевую кнопку:\n"
             "   «Готово: сохранить план для генерации».\n\n"
             "После этого появится файл для генератора:\n"
-            f"{plan_json_path(month)}\n"
-            "Его читает шаг 3 «Сгенерировать статьи».",
+            f"{folder / plan_json_name(month, year)}\n"
+            f"(месяц={month}, год={year})\n"
+            "Его читает шаг 3 «Сгенерировать статьи».\n"
+            f"Статьи попадут в output\\{period}\\",
         )
         open_path(txt)
 
     def save_plan_for_generation(self) -> None:
         month = self.month_var.get().strip()
-        txt = plan_txt_path(month)
+        year = self._selected_year()
+        period = period_slug(month, year)
+        txt = plan_txt_path(month, year)
         if not txt.is_file():
             messagebox.showwarning(
                 "Сначала создайте темы",
@@ -524,13 +582,15 @@ class WorkflowApp(tk.Tk):
             )
             open_path(txt)
             return
-        path = write_plan_json(month, titles)
-        self._log(f"План для генерации ({len(titles)} тем): {path}")
+        path = write_plan_json(month, year, titles)
+        self._log(f"План для генерации ({len(titles)} тем, {period}): {path}")
         self._refresh_plan_hint()
         messagebox.showinfo(
             "План готов для генерации",
             f"Сохранено {len(titles)} тем.\n\n"
             f"КУДА СОХРАНИЛОСЬ (план для генератора):\n{path}\n\n"
+            f"В каждой теме: month={month}, year={year}\n"
+            f"Папка статей: output\\{period}\\\n\n"
             "ЧТО ДАЛЬШЕ:\n"
             "→ Шаг 2: проверить KupiAPI\n"
             "→ Шаг 3: «Сгенерировать весь месяц»\n\n"
@@ -540,7 +600,8 @@ class WorkflowApp(tk.Tk):
 
     def open_topics_txt(self) -> None:
         month = self.month_var.get().strip()
-        txt = plan_txt_path(month)
+        year = self._selected_year()
+        txt = plan_txt_path(month, year)
         if not txt.is_file():
             messagebox.showinfo(
                 "Файла ещё нет",
@@ -551,7 +612,8 @@ class WorkflowApp(tk.Tk):
 
     def open_plan_json(self) -> None:
         month = self.month_var.get().strip()
-        path = plan_json_path(month)
+        year = self._selected_year()
+        path = plan_json_path(month, year)
         if not path.is_file():
             messagebox.showinfo(
                 "Плана ещё нет",
@@ -609,16 +671,19 @@ class WorkflowApp(tk.Tk):
 
     def generate_month(self) -> None:
         month = self.month_var.get().strip()
-        plan = plan_json_path(month)
+        year = self._selected_year()
+        period = period_slug(month, year)
+        plan = plan_json_path(month, year)
         if not plan.is_file():
             messagebox.showwarning(
                 "Нет плана для генерации",
                 f"Нет файла:\n{plan}\n\n"
                 "Сделайте так:\n"
-                "1. Зелёная кнопка — создать темы\n"
-                "2. Написать темы, Ctrl+S\n"
-                "3. Оранжевая кнопка — сохранить план для генерации\n"
-                "4. Потом снова шаг 3",
+                "1. Выберите месяц и год\n"
+                "2. Зелёная кнопка — создать темы\n"
+                "3. Написать темы, Ctrl+S\n"
+                "4. Оранжевая кнопка — сохранить план для генерации\n"
+                "5. Потом снова шаг 3",
             )
             return
         gen = WORK / "generate.py"
@@ -628,14 +693,23 @@ class WorkflowApp(tk.Tk):
             messagebox.showerror("Нет generate.py", f"Скопируйте скрипты в\n{ARTICLES_HINT}")
             return
         self._run_async(
-            f"Генерация статей: {month}",
-            [python_bin(), str(gen), "--plan", str(plan), "--skip-images"],
+            f"Генерация статей: {period}",
+            [
+                python_bin(),
+                str(gen),
+                "--plan",
+                str(plan),
+                "--year",
+                str(year),
+                "--skip-images",
+            ],
             cwd=WORK,
         )
 
     def generate_one(self) -> None:
         month = self.month_var.get().strip()
-        plan = plan_json_path(month)
+        year = self._selected_year()
+        plan = plan_json_path(month, year)
         if not plan.is_file():
             messagebox.showwarning(
                 "Нет плана",
@@ -656,6 +730,8 @@ class WorkflowApp(tk.Tk):
                 str(gen),
                 "--plan",
                 str(plan),
+                "--year",
+                str(year),
                 "--number",
                 number,
                 "--skip-images",
@@ -664,11 +740,16 @@ class WorkflowApp(tk.Tk):
         )
 
     def open_output(self) -> None:
-        month = self.month_var.get().strip()
-        path = WORK / "output" / month
+        period = self._period()
+        path = WORK / "output" / period
         if path.is_dir():
             open_path(path)
         else:
+            # legacy month-only folder
+            legacy = WORK / "output" / self.month_var.get().strip()
+            if legacy.is_dir():
+                open_path(legacy)
+                return
             out = WORK / "output"
             out.mkdir(parents=True, exist_ok=True)
             open_path(out)
@@ -710,27 +791,28 @@ class WorkflowApp(tk.Tk):
         messagebox.showwarning("Шаблон", "Не найден prompts/cover_template.txt")
 
     def pack_month(self) -> None:
-        month = self.month_var.get().strip()
+        period = self._period()
+        year = self._selected_year()
         bat = WORK / "СОБРАТЬ_ПЛОСКИЕ_ФАЙЛЫ.bat"
         py = WORK / "pack_month.py"
         if bat.is_file() and sys.platform.startswith("win"):
             self._run_async(
-                f"Плоские файлы: {month}",
-                ["cmd", "/c", str(bat), month],
+                f"Плоские файлы: {period}",
+                ["cmd", "/c", str(bat), period],
                 cwd=WORK,
             )
         elif py.is_file():
             self._run_async(
-                f"Плоские файлы: {month}",
-                [python_bin(), str(py), month],
+                f"Плоские файлы: {period}",
+                [python_bin(), str(py), period],
                 cwd=WORK,
             )
         else:
             py2 = ROOT / "pack_month.py"
             if py2.is_file():
                 self._run_async(
-                    f"Плоские файлы: {month}",
-                    [python_bin(), str(py2), month],
+                    f"Плоские файлы: {period}",
+                    [python_bin(), str(py2), self.month_var.get().strip(), str(year)],
                     cwd=WORK,
                 )
             else:
