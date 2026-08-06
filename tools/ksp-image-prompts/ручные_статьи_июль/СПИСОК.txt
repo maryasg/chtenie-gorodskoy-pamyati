@@ -1,0 +1,34 @@
+# Статьи за июль 2026
+
+На каждую статью 2 файла: `.docx` и `.txt` промпт для картинки.
+
+01. Можно ли восстановить эмаль зубов — или это миф из рекламы?
+   статья01_июль_2026_mozhno-li-vosstanovit-emal-zubov-ili-eto-mif-iz-reklamy.docx
+   статья01_июль_2026_mozhno-li-vosstanovit-emal-zubov-ili-eto-mif-iz-reklamy.txt
+02. Почему летом зубы чаще реагируют на холодное
+   статья02_июль_2026_pochemu-letom-zuby-chasche-reagiruyut-na-holodnoe.docx
+   статья02_июль_2026_pochemu-letom-zuby-chasche-reagiruyut-na-holodnoe.txt
+03. Жара и зубы: какие летние привычки вредят полости рта
+   статья03_июль_2026_zhara-i-zuby-kakie-letnie-privychki-vredyat-polosti-rta.docx
+   статья03_июль_2026_zhara-i-zuby-kakie-letnie-privychki-vredyat-polosti-rta.txt
+04. Сухость во рту: почему это опаснее, чем кажется
+   статья04_июль_2026_suhost-vo-rtu-pochemu-eto-opasnee-chem-kazhetsya.docx
+   статья04_июль_2026_suhost-vo-rtu-pochemu-eto-opasnee-chem-kazhetsya.txt
+05. Клиновидный дефект: что это за «ступенька» у десны
+   статья05_июль_2026_klinovidnyy-defekt-chto-eto-za-stupenka-u-desny.docx
+   статья05_июль_2026_klinovidnyy-defekt-chto-eto-za-stupenka-u-desny.txt
+06. Жвачка защищает зубы или просто освежает дыхание?
+   статья06_июль_2026_zhvachka-zaschischaet-zuby-ili-prosto-osvezhaet-dyhanie.docx
+   статья06_июль_2026_zhvachka-zaschischaet-zuby-ili-prosto-osvezhaet-dyhanie.txt
+07. Энергетики и эмаль: что происходит с зубами после банки напитка
+   статья07_июль_2026_energetiki-i-emal-chto-proishodit-s-zubami-posle-banki-nap.docx
+   статья07_июль_2026_energetiki-i-emal-chto-proishodit-s-zubami-posle-banki-nap.txt
+08. Детские привычки, которые могут испортить прикус
+   статья08_июль_2026_detskie-privychki-kotorye-mogut-isportit-prikus.docx
+   статья08_июль_2026_detskie-privychki-kotorye-mogut-isportit-prikus.txt
+09. Зубы мудрости не болят: лечить, удалять или оставить?
+   статья09_июль_2026_zuby-mudrosti-ne-bolyat-lechit-udalyat-ili-ostavit.docx
+   статья09_июль_2026_zuby-mudrosti-ne-bolyat-lechit-udalyat-ili-ostavit.txt
+10. Зуб начал шататься: почему это происходит и что делать срочно
+   статья10_июль_2026_zub-nachal-shatatsya-pochemu-eto-proishodit-i-chto-delat-s.docx
+   статья10_июль_2026_zub-nachal-shatatsya-pochemu-eto-proishodit-i-chto-delat-s.txt

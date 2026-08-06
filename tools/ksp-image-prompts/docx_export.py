@@ -6,13 +6,16 @@ from pathlib import Path
 
 from docx import Document
 
-DOCX_AUTHOR = "user"
+DOCX_AUTHOR = "Автор"
 
 
 def apply_docx_author(doc: Document) -> None:
     props = doc.core_properties
     props.author = DOCX_AUTHOR
     props.last_modified_by = DOCX_AUTHOR
+    props.comments = ""
+    props.subject = ""
+    props.keywords = ""
 
 
 def write_text_docx(text: str, path: Path) -> None:

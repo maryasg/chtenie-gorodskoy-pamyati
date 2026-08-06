@@ -1,0 +1,49 @@
+# Статьи за июнь 2026
+
+На каждую статью 2 файла: `.docx` и `.txt` промпт для картинки.
+
+01. Как остановить кровоточивость дёсен
+   статья01_июнь_2026_kak-ostanovit-krovotochivost-desen.docx
+   статья01_июнь_2026_kak-ostanovit-krovotochivost-desen.txt
+02. Как снизить чувствительность зубов в домашних условиях
+   статья02_июнь_2026_kak-snizit-chuvstvitelnost-zubov.docx
+   статья02_июнь_2026_kak-snizit-chuvstvitelnost-zubov.txt
+03. Как избавиться от неприятного запаха изо рта
+   статья03_июнь_2026_kak-izbavitsya-ot-nepriyatnogo-zapaha.docx
+   статья03_июнь_2026_kak-izbavitsya-ot-nepriyatnogo-zapaha.txt
+04. Как правильно очищать язык
+   статья04_июнь_2026_kak-pravilno-ochischat-yazyk.docx
+   статья04_июнь_2026_kak-pravilno-ochischat-yazyk.txt
+05. Можно ли вернуть естественный цвет зубов без отбеливания
+   статья05_июнь_2026_mozhno-li-vernut-estestvennyy-tsvet.docx
+   статья05_июнь_2026_mozhno-li-vernut-estestvennyy-tsvet.txt
+06. Что делать при трещинах на зубах
+   статья06_июнь_2026_chto-delat-pri-treschinah-na-zubah.docx
+   статья06_июнь_2026_chto-delat-pri-treschinah-na-zubah.txt
+07. Как организовать питание без вреда для зубов
+   статья07_июнь_2026_kak-organizovat-pitanie-bez-vreda.docx
+   статья07_июнь_2026_kak-organizovat-pitanie-bez-vreda.txt
+08. Как пить кофе и чай без вреда для эмали
+   статья08_июнь_2026_kak-pit-kofe-i-chay-bez-vreda.docx
+   статья08_июнь_2026_kak-pit-kofe-i-chay-bez-vreda.txt
+09. Как выбрать воду для здоровья зубов
+   статья09_июнь_2026_kak-vybrat-vodu-dlya-zdorovya-zubov.docx
+   статья09_июнь_2026_kak-vybrat-vodu-dlya-zdorovya-zubov.txt
+10. Что делать, если зуб болит после лечения
+   статья10_июнь_2026_chto-delat-esli-zub-bolit-posle-lecheniya.docx
+   статья10_июнь_2026_chto-delat-esli-zub-bolit-posle-lecheniya.txt
+11. Как сохранить пломбы как можно дольше
+   статья11_июнь_2026_kak-sohranit-plomby-kak-mozhno-dolshe.docx
+   статья11_июнь_2026_kak-sohranit-plomby-kak-mozhno-dolshe.txt
+12. Как правильно выбрать зубную пасту взрослому человеку
+   статья12_июнь_2026_kak-pravilno-vybrat-zubnuyu-pastu.docx
+   статья12_июнь_2026_kak-pravilno-vybrat-zubnuyu-pastu.txt
+13. Нужно ли использовать ополаскиватели для полости рта
+   статья13_июнь_2026_nuzhno-li-ispolzovat-opolaskivateli.docx
+   статья13_июнь_2026_nuzhno-li-ispolzovat-opolaskivateli.txt
+14. Как сохранить здоровье дёсен после 40 лет
+   статья14_июнь_2026_kak-sohranit-zdorove-desen-posle-40.docx
+   статья14_июнь_2026_kak-sohranit-zdorove-desen-posle-40.txt
+15. Почему профилактика дешевле лечения
+   статья15_июнь_2026_pochemu-profilaktika-deshevle-lecheniya.docx
+   статья15_июнь_2026_pochemu-profilaktika-deshevle-lecheniya.txt

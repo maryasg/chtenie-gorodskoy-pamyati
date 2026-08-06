@@ -79,12 +79,12 @@ def topic_slug_path(month: str, number: str, title: str) -> str:
 def build_prompt(
     *,
     title: str,
-    telegram_text: str | None,
+    article_text: str | None,
     title_template: str,
     article_template: str,
 ) -> str:
-    if telegram_text and telegram_text.strip():
-        return article_template.replace("[ТЕКСТ СТАТЬИ]", telegram_text.strip())
+    if article_text and article_text.strip():
+        return article_template.replace("[ТЕКСТ СТАТЬИ]", article_text.strip())
     return title_template.replace("[ТЕМА СТАТЬИ]", title.strip())
 
 
@@ -101,7 +101,7 @@ def main() -> int:
         "--articles-output",
         type=Path,
         default=DEFAULT_ARTICLES_OUTPUT,
-        help="Generated articles folder (uses telegram.md when present)",
+        help="Generated articles folder (uses vk.md when present)",
     )
     parser.add_argument("--filter-month", metavar="МЕСЯЦ", help="Only one month, e.g. май")
     parser.add_argument("--force", action="store_true", help="Overwrite existing prompt files")
@@ -133,14 +133,14 @@ def main() -> int:
             skipped += 1
             continue
 
-        tg_path = args.articles_output / month / rel / "telegram.md"
-        telegram_text = tg_path.read_text(encoding="utf-8").strip() if tg_path.exists() else None
-        if telegram_text:
+        vk_path = args.articles_output / month / rel / "vk.md"
+        article_text = vk_path.read_text(encoding="utf-8").strip() if vk_path.exists() else None
+        if article_text:
             from_article += 1
 
         prompt = build_prompt(
             title=title,
-            telegram_text=telegram_text,
+            article_text=article_text,
             title_template=title_template,
             article_template=article_template,
         )
@@ -153,7 +153,7 @@ def main() -> int:
         f"Всего тем в плане: {len(plan)}",
         f"Создано файлов: {written}",
         f"Пропущено (уже есть): {skipped}",
-        f"С текстом из telegram.md: {from_article}",
+        f"С текстом из vk.md: {from_article}",
         "",
         "| Месяц | № | Файл | Тема |",
         "|-------|---|------|------|",

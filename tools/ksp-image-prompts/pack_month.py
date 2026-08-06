@@ -9,6 +9,15 @@ import re
 import shutil
 from pathlib import Path
 
+from content_period import (
+    item_year,
+    normalize_month,
+    normalize_year,
+    parse_period_arg,
+    period_slug,
+    resolve_plan_json,
+)
+
 ROOT = Path(__file__).resolve().parent
 DEFAULT_PLAN_DIR = ROOT / "content_plan"
 DEFAULT_OUTPUT = ROOT / "output"
@@ -53,11 +62,23 @@ def find_topic_folder(month_dir: Path, number: str) -> Path | None:
     return matches[0] if matches else None
 
 
-def load_plan_items(plan_path: Path, month: str) -> list[dict]:
+def load_plan_items(plan_path: Path, month: str, year: int | None = None) -> list[dict]:
     data = json.loads(plan_path.read_text(encoding="utf-8"))
     if not isinstance(data, list):
         raise ValueError(f"Ожидался список тем в {plan_path}")
-    items = [item for item in data if str(item.get("month", "")).strip() == month]
+    month = normalize_month(month)
+    year = normalize_year(year)
+    items = []
+    for item in data:
+        if normalize_month(item.get("month", "")) != month:
+            continue
+        item_y = item_year(item)
+        if year is not None and item_y is not None and item_y != year:
+            continue
+        if year is not None and item_y is None:
+            item = dict(item)
+            item["year"] = year
+        items.append(item)
     items.sort(key=lambda item: str(item.get("number", "")).zfill(2))
     return items
 
@@ -112,13 +133,15 @@ def cleanup_old_flat_files(flat_dir: Path, number: str, month: str) -> None:
             path.unlink()
 
 
-def write_article_list(items: list[dict], dest: Path, month: str) -> Path:
-    lines = [f"Список статей — {month}", ""]
+def write_article_list(items: list[dict], dest: Path, period: str) -> Path:
+    lines = [f"Список статей — {period}", ""]
     for item in items:
         number = str(item["number"]).strip().zfill(2)
         title = str(item["title"]).strip()
-        lines.append(f"{number}. {title}")
-    path = dest / f"список_статей_{month}.txt"
+        year = item_year(item)
+        suffix = f" ({year})" if year is not None else ""
+        lines.append(f"{number}. {title}{suffix}")
+    path = dest / f"список_статей_{period}.txt"
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
 
@@ -129,19 +152,27 @@ def pack_month(
     output_root: Path,
     dest_dir: Path | None = None,
     list_only: bool = False,
+    year: int | None = None,
 ) -> tuple[int, int, list[str]]:
-    items = load_plan_items(plan_path, month)
+    month = normalize_month(month)
+    year = normalize_year(year)
+    period = period_slug(month, year)
+    items = load_plan_items(plan_path, month, year=year)
     if not items:
-        raise SystemExit(f"В {plan_path} нет тем для месяца «{month}»")
+        label = period
+        raise SystemExit(f"В {plan_path} нет тем для «{label}»")
 
-    month_output = output_root / month
-    flat_dir = dest_dir or month_output
+    month_output = output_root / period
+    # Backward compatibility: old output/июнь without year
+    if year is not None and not month_output.is_dir() and (output_root / month).is_dir():
+        month_output = output_root / month
+    flat_dir = dest_dir or (output_root / period)
     flat_dir.mkdir(parents=True, exist_ok=True)
 
-    write_article_list(items, flat_dir, month)
+    write_article_list(items, flat_dir, period)
 
     if list_only:
-        print(f"Список: {flat_dir / f'список_статей_{month}.txt'}")
+        print(f"Список: {flat_dir / f'список_статей_{period}.txt'}")
         return 0, len(items), []
 
     packed = 0
@@ -157,7 +188,7 @@ def pack_month(
             continue
 
         title = resolve_title(topic_folder, plan_title)
-        base = flat_base(number, month, title)
+        base = flat_base(number, period, title)
 
         vk_md = topic_folder / "vk.md"
         tg_md = topic_folder / "telegram.md"
@@ -167,7 +198,7 @@ def pack_month(
             missing.append(f"{number}: нет vk.md/telegram.md в {topic_folder.name}")
             continue
 
-        cleanup_old_flat_files(flat_dir, number, month)
+        cleanup_old_flat_files(flat_dir, number, period)
 
         write_rtf(vk_md.read_text(encoding="utf-8"), flat_dir / f"{base}_вк.rtf")
         (flat_dir / f"{base}_телеграм.txt").write_text(
@@ -189,41 +220,54 @@ def pack_month(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Плоские файлы: месяц01_июнь_<слова>_вк.rtf, ..._телеграм.txt, картинка_....png",
+        description="Плоские файлы: месяц01_июнь_2026_<слова>_вк.rtf, ..._телеграм.txt, картинка_....png",
     )
-    parser.add_argument("month", help="Месяц, например: июнь")
+    parser.add_argument(
+        "month",
+        help="Месяц или месяц_год, например: июнь  или  июнь_2026",
+    )
+    parser.add_argument(
+        "year",
+        nargs="?",
+        default=None,
+        help="Год (если не указан в первом аргументе), например: 2026",
+    )
     parser.add_argument(
         "--plan",
         type=Path,
-        help="JSON с темами (по умолчанию content_plan/<месяц>.json)",
+        help="JSON с темами (по умолчанию content_plan/<месяц>_<год>.json)",
     )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="Корень output/")
     parser.add_argument(
         "--dest",
         type=Path,
-        help="Куда положить плоские файлы (по умолчанию output/<месяц>/)",
+        help="Куда положить плоские файлы (по умолчанию output/<месяц>_<год>/)",
     )
     parser.add_argument(
         "--list-only",
         action="store_true",
-        help="Только список_статей_<месяц>.txt из плана, без статей",
+        help="Только список_статей_<месяц>_<год>.txt из плана, без статей",
     )
     args = parser.parse_args()
 
-    month = args.month.strip()
-    plan_path = args.plan or (DEFAULT_PLAN_DIR / f"{month}.json")
+    month_name, year_from_arg = parse_period_arg(args.month)
+    year = normalize_year(args.year) if args.year is not None else year_from_arg
+    period = period_slug(month_name, year)
+    plan_path = args.plan or resolve_plan_json(DEFAULT_PLAN_DIR, month_name, year)
     if not plan_path.is_file():
         print(f"Нет плана: {plan_path}")
+        print("Подсказка: создайте темы в панели или файл content_plan\\октябрь_2026.json")
         return 1
 
-    flat_dir = args.dest or (args.output / month)
+    flat_dir = args.dest or (args.output / period)
 
     packed, total, missing = pack_month(
-        month=month,
+        month=month_name,
         plan_path=plan_path,
         output_root=args.output,
         dest_dir=args.dest,
         list_only=args.list_only,
+        year=year,
     )
 
     print()
@@ -236,9 +280,9 @@ def main() -> int:
         print()
         print(f"Папка: {flat_dir.resolve()}")
         print("Файлы:")
-        print(f"  месяц01_{month}_<слова>_вк.rtf")
-        print(f"  месяц01_{month}_<слова>_телеграм.txt")
-        print(f"  картинка_месяц01_{month}_<слова>.png")
+        print(f"  месяц01_{period}_<слова>_вк.rtf")
+        print(f"  месяц01_{period}_<слова>_телеграм.txt")
+        print(f"  картинка_месяц01_{period}_<слова>.png")
     if missing:
         print()
         print("Замечания:")
@@ -249,17 +293,15 @@ def main() -> int:
             print("=" * 50)
             print("ПЛОСКИХ ФАЙЛОВ НЕТ — сначала нужны статьи в подпапках.")
             print()
-            print("В output\\{0}\\ должны быть папки вида:".format(month))
-            print("  output\\{0}\\01-kak-...\\vk.md".format(month))
-            print("  output\\{0}\\01-kak-...\\telegram.md".format(month))
-            print()
-            print("Промпты в image_prompts\\{0}\\ — это НЕ статьи.".format(month))
+            print("В output\\{0}\\ должны быть папки вида:".format(period))
+            print("  output\\{0}\\01-kak-...\\vk.md".format(period))
+            print("  output\\{0}\\01-kak-...\\telegram.md".format(period))
             print()
             print("Сгенерируйте тексты:")
-            print(f"  python generate.py --plan content_plan\\{month}.json --skip-images")
+            print(f"  python generate.py --plan content_plan\\{period}.json --skip-images")
             print()
             print("Или одной командой (из папки статей):")
-            print(f"  СОБРАТЬ_ПЛОСКИЕ_ФАЙЛЫ.bat {month}")
+            print(f"  СОБРАТЬ_ПЛОСКИЕ_ФАЙЛЫ.bat {period}")
             print("=" * 50)
             return 1
     return 0

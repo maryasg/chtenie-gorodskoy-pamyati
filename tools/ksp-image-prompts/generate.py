@@ -13,6 +13,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
 
+from content_period import item_period, item_year, normalize_month, normalize_year, period_slug
 from docx_export import write_text_docx
 
 ROOT = Path(__file__).resolve().parent
@@ -103,8 +104,75 @@ def load_plan(path: Path) -> list[dict]:
     return data
 
 
-def topic_dir(output_root: Path, month: str, number: str, title: str) -> Path:
-    return output_root / month / f"{number}-{slugify(title)}"
+def topic_dir(
+    output_root: Path,
+    month: str,
+    number: str,
+    title: str,
+    year: int | None = None,
+) -> Path:
+    folder = period_slug(month, year)
+    return output_root / folder / f"{number}-{slugify(title)}"
+
+
+# Preferred order for Maria: DeepSeek -> GPT -> Claude Sonnet.
+DEFAULT_TEXT_MODEL_FALLBACKS = (
+    "deepseek-chat",
+    "deepseek-reasoner",
+    "gpt-5.4-mini",
+    "gpt-4o-mini",
+    "gpt-4o",
+    "gpt-5.4",
+    "gpt-5.5",
+    "gpt-5.4-nano",
+    "claude-sonnet",
+    "claude-sonnet-4.6",
+    "claude-haiku",
+    "claude-haiku-4.5",
+)
+
+MODEL_ALIASES = {
+    "kupi-gpt54-mini": "gpt-5.4-mini",
+    "kupi-gpt54-mini-medium": "gpt-5.4-mini",
+    "kupi-gpt54-mini-standard": "gpt-5.4-mini",
+    "kupi-gpt54": "gpt-5.4",
+    "kupi-gpt54-medium": "gpt-5.4",
+    "kupi-gpt54-standard": "gpt-5.4",
+    "kupi-gpt54-nano": "gpt-5.4-nano",
+    "kupi-gpt55": "gpt-5.5",
+    "kupi-gpt55-high": "gpt-5.5",
+    "kupi-gpt55-medium": "gpt-5.5",
+    "kupi-gpt55-low": "gpt-5.5",
+    "kupi-gpt55-codex": "gpt-5.5-codex",
+    "kupi-gpt4o-mini": "gpt-4o-mini",
+    "kupi-gpt4o": "gpt-4o",
+    "kupi-claude-sonnet": "claude-sonnet",
+    "kupi-claude-haiku": "claude-haiku",
+    "kupi-claude-opus": "claude-opus",
+    "kupi-deepseek-chat": "deepseek-chat",
+    "kupi-deepseek-reasoner": "deepseek-reasoner",
+}
+
+
+def normalize_text_model(model: str) -> str:
+    """Cursor BYOK uses kupi-* ids; Python SDK prefers plain model names."""
+    raw = model.strip()
+    return MODEL_ALIASES.get(raw, raw)
+
+
+def candidate_text_models(primary: str) -> list[str]:
+    primary = normalize_text_model(primary)
+    fallback_raw = os.getenv(
+        "TEXT_MODEL_FALLBACK",
+        ",".join(DEFAULT_TEXT_MODEL_FALLBACKS),
+    )
+    extras = [normalize_text_model(part.strip()) for part in fallback_raw.split(",") if part.strip()]
+    ordered = [primary, *extras, *DEFAULT_TEXT_MODEL_FALLBACKS]
+    result: list[str] = []
+    for name in ordered:
+        if name and name not in result:
+            result.append(name)
+    return result
 
 
 def generate_article(
@@ -114,24 +182,75 @@ def generate_article(
     title: str,
     vk_text: str | None = None,
 ) -> str:
+    import time
+
+    from openai import APIConnectionError, APIStatusError, InternalServerError, RateLimitError
+
     user_parts = [f"Тема статьи: {title}"]
     if vk_text:
         user_parts.append(
             "Ниже версия для ВКонтакте. Сделай сокращённую версию для Telegram в том же стиле:\n\n"
             + vk_text
         )
-    response = client.chat.completions.create(
-        model=model,
-        temperature=0.7,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": "\n\n".join(user_parts)},
-        ],
-    )
-    text = response.choices[0].message.content
-    if not text:
-        raise RuntimeError("Empty response from text model")
-    return text.strip()
+
+    models_to_try = candidate_text_models(model)
+    last_error: Exception | None = None
+
+    for current_model in models_to_try:
+        for attempt in range(1, 3):
+            try:
+                print(f"Запрос к KupiAPI: модель={current_model}, попытка {attempt}/2")
+                kwargs = {
+                    "model": current_model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": "\n\n".join(user_parts)},
+                    ],
+                }
+                # Some GPT-5.* models via proxies reject temperature.
+                if not current_model.startswith(("gpt-5.", "gpt-5.5")):
+                    kwargs["temperature"] = 0.7
+                response = client.chat.completions.create(**kwargs)
+                text = response.choices[0].message.content
+                if not text:
+                    raise RuntimeError("Пустой ответ модели")
+                if current_model != normalize_text_model(model):
+                    print(f"Успех на запасной модели: {current_model}")
+                return text.strip()
+            except (APIConnectionError, InternalServerError, RateLimitError) as exc:
+                last_error = exc
+                detail = getattr(exc, "message", None) or str(exc)
+                print(f"KupiAPI временно недоступна ({exc.__class__.__name__}): {detail}")
+                if attempt == 1:
+                    print("Жду 2 сек и повторяю...")
+                    time.sleep(2)
+                else:
+                    print(f"Переключаюсь на следующую модель...")
+            except APIStatusError as exc:
+                last_error = exc
+                status = getattr(exc, "status_code", None)
+                detail = getattr(exc, "message", None) or str(exc)
+                if status in {502, 503, 504}:
+                    print(f"KupiAPI ошибка {status}: {detail}")
+                    if attempt == 1:
+                        print("Жду 2 сек и повторяю...")
+                        time.sleep(2)
+                        continue
+                    print("Переключаюсь на следующую модель...")
+                    continue
+                raise
+
+    print()
+    print("Не удалось получить текст от KupiAPI.")
+    print("Проверьте:")
+    print("  1) баланс в кабинете https://kupiapi.ru/cabinet")
+    print("  2) в .env: OPENAI_BASE_URL=https://kupiapi.ru/v1")
+    print("  3) в .env: OPENAI_API_KEY=rk_live_...")
+    print("  4) в .env поставьте:")
+    print("     TEXT_MODEL=deepseek-chat")
+    print("     TEXT_MODEL_FALLBACK=deepseek-reasoner,gpt-5.4-mini,gpt-4o-mini,claude-sonnet")
+    print("  5) проверьте соединение: test_kupiapi.bat")
+    raise RuntimeError(str(last_error) if last_error else "KupiAPI request failed")
 
 
 def build_cover_prompt(telegram_text: str) -> str:
@@ -289,6 +408,7 @@ def save_meta(
     number: str,
     title: str,
     validation_issues: list[str],
+    year: int | None = None,
 ) -> None:
     payload = {
         "month": month,
@@ -297,6 +417,8 @@ def save_meta(
         "created_by": "user",
         "validation_issues": validation_issues,
     }
+    if year is not None:
+        payload["year"] = year
     dest.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
@@ -312,13 +434,15 @@ def process_topic(
     images_only: bool,
     force: bool,
 ) -> list[str]:
-    month = str(item["month"]).strip()
+    month = normalize_month(item["month"])
+    year = item_year(item)
     number = str(item["number"]).strip().zfill(2)
     title = str(item["title"]).strip()
-    dest = topic_dir(output_root, month, number, title)
+    dest = topic_dir(output_root, month, number, title, year=year)
     dest.mkdir(parents=True, exist_ok=True)
 
-    print(f"\n=== {month}/{number} — {title} ===")
+    period = item_period(item)
+    print(f"\n=== {period}/{number} — {title} ===")
     print(f"Папка: {dest}")
 
     vk_path = dest / "vk.md"
@@ -340,6 +464,7 @@ def process_topic(
                 number=number,
                 title=title,
                 validation_issues=issues,
+                year=year,
             )
             return issues
 
@@ -363,6 +488,7 @@ def process_topic(
             number=number,
             title=title,
             validation_issues=issues,
+            year=year,
         )
         if issues:
             print("Проверка качества: есть замечания")
@@ -382,6 +508,7 @@ def process_topic(
             number=number,
             title=title,
             validation_issues=issues,
+            year=year,
         )
         return issues
 
@@ -411,6 +538,7 @@ def process_topic(
         number=number,
         title=title,
         validation_issues=issues,
+        year=year,
     )
 
     if issues:
@@ -451,9 +579,15 @@ def parse_args() -> argparse.Namespace:
         help="Месяц для папки output при --title (по умолчанию: май)",
     )
     parser.add_argument(
+        "--year",
+        type=int,
+        default=None,
+        help="Год для папки output и плана (например 2026). Нужен, когда месяцы повторяются в разные годы.",
+    )
+    parser.add_argument(
         "--filter-month",
         metavar="МЕСЯЦ",
-        help="Только темы этого месяца из плана, например: май",
+        help="Только темы этого месяца из плана, например: май или май_2026",
     )
     parser.add_argument(
         "--skip-images",
@@ -477,36 +611,47 @@ def months_for_pack(args: argparse.Namespace, plan: list[dict]) -> list[str]:
     if args.images_only:
         return []
     if args.filter_month:
-        return [args.filter_month.strip()]
+        from content_period import parse_period_arg
+
+        month, year = parse_period_arg(args.filter_month)
+        year = year if year is not None else normalize_year(getattr(args, "year", None))
+        return [period_slug(month, year)]
     plan_path = args.plan
     if plan_path.name not in ("content_plan.json", "all.json") and plan_path.suffix == ".json":
         return [plan_path.stem]
     if args.title:
-        return [args.month.strip()]
-    months = sorted({str(item.get("month", "")).strip() for item in plan if item.get("month")})
-    return months if len(months) == 1 else []
+        return [period_slug(args.month.strip(), normalize_year(getattr(args, "year", None)))]
+    periods = sorted({item_period(item) for item in plan if item.get("month")})
+    return periods if len(periods) == 1 else []
 
 
 def pack_after_generate(args: argparse.Namespace, plan: list[dict]) -> None:
+    from content_period import parse_period_arg
+    from export_docx import export_docx as run_export_docx
     from pack_month import pack_month as run_pack_month
 
-    for month in months_for_pack(args, plan):
+    for period in months_for_pack(args, plan):
         plan_path = args.plan
-        month_plan = ROOT / "content_plan" / f"{month}.json"
+        month_plan = ROOT / "content_plan" / f"{period}.json"
         if month_plan.is_file():
             plan_path = month_plan
         if not plan_path.is_file():
-            print(f"\nПропуск плоских файлов: нет плана для «{month}»")
+            print(f"\nПропуск плоских файлов: нет плана для «{period}»")
             continue
-        print(f"\n=== Плоские файлы: {month} ===")
+        month_name, year = parse_period_arg(period)
+        print(f"\n=== Плоские файлы: {period} ===")
         packed, total, missing = run_pack_month(
-            month=month,
+            month=month_name,
             plan_path=plan_path,
             output_root=args.output,
+            year=year,
         )
-        print(f"Готово: {packed} из {total} в {args.output / month}")
+        print(f"Готово: {packed} из {total} в {args.output / period}")
         if packed:
-            print("Примеры: месяц01_{0}_..._вк.rtf, ..._телеграм.txt".format(month))
+            print("Примеры: месяц01_{0}_..._вк.rtf, ..._телеграм.txt".format(period))
+        print(f"\n=== Word-файлы в папке месяца: {period} ===")
+        export_year = year or normalize_year(getattr(args, "year", None))
+        run_export_docx(args.output, filter_month=period, year=export_year)
 
 
 def main() -> int:
@@ -525,9 +670,12 @@ def main() -> int:
 
     base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip()
     image_base = os.getenv("IMAGE_BASE_URL", base_url).strip()
-    text_model = os.getenv("TEXT_MODEL", "gpt-4o-mini").strip()
+    text_model = normalize_text_model(os.getenv("TEXT_MODEL", "deepseek-chat").strip())
     image_model = os.getenv("IMAGE_MODEL", "dall-e-3").strip()
     image_size = os.getenv("IMAGE_SIZE", "1792x1024").strip()
+
+    if "kupiapi.ru" in os.getenv("OPENAI_BASE_URL", "").lower() and text_model.startswith("kupi-"):
+        print(f"Предупреждение: для generate.py лучше обычное имя модели, не Cursor-алиас: {text_model}")
 
     if args.images_only and args.skip_images:
         print("Ошибка: нельзя одновременно --images-only и --skip-images", file=sys.stderr)
@@ -546,20 +694,53 @@ def main() -> int:
     print(f"Тексты API: {base_url}")
     print(f"Картинки API: {image_base}")
     print(f"Тексты: {text_model} | Картинки: {image_model}")
+    print("Запасные модели:", ", ".join(candidate_text_models(text_model)[1:]))
 
     if args.title:
         number = (args.number or "99").strip().zfill(2)
-        plan = [{"month": args.month.strip(), "number": number, "title": args.title.strip()}]
+        item = {
+            "month": normalize_month(args.month),
+            "number": number,
+            "title": args.title.strip(),
+        }
+        year = normalize_year(args.year)
+        if year is not None:
+            item["year"] = year
+        plan = [item]
         print(f"Режим одной темы: {args.title.strip()}")
     else:
         plan = load_plan(args.plan)
         if args.filter_month:
-            wanted_month = args.filter_month.strip().lower()
-            plan = [item for item in plan if str(item.get("month", "")).strip().lower() == wanted_month]
+            from content_period import parse_period_arg
+
+            wanted_month, wanted_year = parse_period_arg(args.filter_month)
+            wanted_year = wanted_year if wanted_year is not None else normalize_year(args.year)
+            filtered = []
+            for item in plan:
+                if normalize_month(item.get("month", "")) != wanted_month:
+                    continue
+                item_y = item_year(item)
+                if wanted_year is not None and item_y is not None and item_y != wanted_year:
+                    continue
+                if wanted_year is not None and item_y is None:
+                    item = dict(item)
+                    item["year"] = wanted_year
+                filtered.append(item)
+            plan = filtered
             if not plan:
-                print(f"Темы месяца «{wanted_month}» не найдены в {args.plan}", file=sys.stderr)
+                print(f"Темы «{args.filter_month}» не найдены в {args.plan}", file=sys.stderr)
                 return 1
-            print(f"Фильтр по месяцу: {wanted_month} ({len(plan)} тем)")
+            print(f"Фильтр: {period_slug(wanted_month, wanted_year)} ({len(plan)} тем)")
+        elif normalize_year(args.year) is not None:
+            # Stamp year onto items that lack it when --year is given
+            year = normalize_year(args.year)
+            stamped = []
+            for item in plan:
+                if item_year(item) is None:
+                    item = dict(item)
+                    item["year"] = year
+                stamped.append(item)
+            plan = stamped
         if args.number:
             wanted = args.number.strip().zfill(2)
             plan = [item for item in plan if str(item.get("number", "")).strip().zfill(2) == wanted]
