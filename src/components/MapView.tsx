@@ -48,11 +48,13 @@ function MapMarkerPreview({
   anchor,
   onKeepOpen,
   onScheduleClose,
+  buildingTo,
 }: {
   building: Building
   anchor: PopupAnchor
   onKeepOpen: () => void
   onScheduleClose: () => void
+  buildingTo: (id: string) => string
 }) {
   return createPortal(
     <div className="pointer-events-none fixed inset-0 z-[10000]" aria-hidden>
@@ -75,7 +77,7 @@ function MapMarkerPreview({
         <h3 className="arch-map-popup-title">{building.name}</h3>
         <span className="arch-map-popup-address">{building.address}</span>
         <p className="arch-map-popup-summary">{traceSummary(building)}</p>
-        <Link to={`/building/${building.id}`} className="arch-map-popup-link">
+        <Link to={buildingTo(building.id)} className="arch-map-popup-link">
           Открыть карточку →
         </Link>
       </div>
@@ -84,7 +86,7 @@ function MapMarkerPreview({
   )
 }
 
-export function MapView() {
+export function MapView({ buildingTo = (id: string) => `/building/${id}` }: { buildingTo?: (id: string) => string }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const markersRef = useRef<Map<string, L.Marker>>(new Map())
@@ -268,7 +270,7 @@ export function MapView() {
         {BUILDINGS.map((b) => (
           <li key={b.id} className="flex min-h-0">
             <Link
-              to={`/building/${b.id}`}
+              to={buildingTo(b.id)}
               onMouseEnter={() => {
                 cancelHoverClear()
                 setHoveredId(b.id)
@@ -298,6 +300,7 @@ export function MapView() {
           anchor={popupAnchor}
           onKeepOpen={cancelHoverClear}
           onScheduleClose={scheduleHoverClear}
+          buildingTo={buildingTo}
         />
       ) : null}
     </div>

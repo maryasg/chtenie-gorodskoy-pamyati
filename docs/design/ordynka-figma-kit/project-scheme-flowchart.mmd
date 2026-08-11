@@ -1,0 +1,22 @@
+flowchart TB
+  subgraph site ["Site GitHub Pages"]
+    v1["v1 production /"]
+    v2["v2 preview /v2/"]
+  end
+  subgraph v2routes ["v2 routes"]
+    home["HomeV2"]
+    mapNode["MapPageV2"]
+    bld["building/:id"]
+  end
+  v2 --> v2routes
+  bld --> ordynka["MOSCOW_001 OrdynkaArkiPage"]
+  bld --> defaultBld["other BuildingPageV2Default"]
+  subgraph cardBlocks ["Ordynka CARD"]
+    blockA["A CARD-HEADER"]
+    blockB["B HERO-GRID"]
+    blockC["C FACADE-READING"]
+    blockD["D NARRATIVE"]
+    blockE["E DOSSIER"]
+  end
+  ordynka --> cardBlocks
+  blockA --> blockB --> blockC --> blockD --> blockE
